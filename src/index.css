@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --mimir-bg: #050505;
+    --mimir-bg-depth: #080808;
+    --mimir-surface: #101010;
+    --mimir-surface-soft: #171717;
+    --mimir-surface-muted: #202020;
+    --mimir-text: #f4f1ea;
+    --mimir-text-muted: #8f8f8f;
+    --mimir-text-subtle: #5f5f5f;
+    --mimir-border: rgba(255, 255, 255, 0.1);
+    --mimir-border-strong: rgba(255, 255, 255, 0.16);
+    --mimir-status-red: #d95b58;
+    --mimir-status-amber: #c99a4a;
+    --mimir-status-green: #73a87c;
+  }
+
+  * {
+    @apply m-0 p-0 box-border;
+  }
+
+  html {
+    background: var(--mimir-bg);
+  }
+
+  body {
+    background: var(--mimir-bg);
+    color: var(--mimir-text);
+    @apply antialiased;
+    font-feature-settings: 'cv11' 1;
+  }
+
+  ::selection {
+    background: rgba(244, 241, 234, 0.18);
+    color: var(--mimir-text);
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+}
