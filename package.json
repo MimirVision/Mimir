@@ -1,0 +1,33 @@
+{
+  "name": "mimir-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "api": ".venv\\Scripts\\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8000",
+    "dev": "vite",
+    "sidecar:build": "powershell -ExecutionPolicy Bypass -File scripts\\build-sidecar.ps1",
+    "desktop:dev": "node ./node_modules/@tauri-apps/cli/tauri.js dev",
+    "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts\\build-sidecar.ps1 && node ./node_modules/@tauri-apps/cli/tauri.js build",
+    "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^1.5.1",
+    "@tauri-apps/cli": "^1.5.1",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^7.3.6"
+  }
+}

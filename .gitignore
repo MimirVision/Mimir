@@ -1,0 +1,26 @@
+# Node
+node_modules/
+dist/
+dist-backend/
+build-backend/
+.env
+.env.local
+.venv/
+.mimir-data/
+
+# Rust/Tauri
+src-tauri/target/
+src-tauri/binaries/*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build
+.next/
+*.egg-info/
+__pycache__/

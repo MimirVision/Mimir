@@ -1,0 +1,13 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+anyio==3.7.1
+pydantic==2.5.0
+numpy<2
+scipy<1.18
+opencv-python==4.8.1.78
+torch==2.5.1
+torchvision==0.20.1
+ultralytics==8.0.236
+lapx>=0.5.2
+pillow==10.1.0
+requests==2.31.0
