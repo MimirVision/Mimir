@@ -4,7 +4,9 @@ import cv2
 import shutil
 import time
 import base64
+import json
 import requests
+from datetime import datetime
 
 from ultralytics import YOLO
 from config import (
@@ -13,6 +15,7 @@ from config import (
     IMPORTANT,
     INCIDENTS_OUTPUT,
     INCOMING,
+    LATEST_SESSION_JSON,
     LLM_MODEL,
     MIMIR_OUTPUT,
     REVIEW,
@@ -300,12 +303,73 @@ def save_decision(decisions, path, priority):
         )
 
 # =========================================================
+# SESSION JSON
+# =========================================================
+
+def timestamp():
+
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def create_session():
+
+    return {
+        "status": "running",
+        "started_at": timestamp(),
+        "finished_at": None,
+        "clips_processed": 0,
+        "important": 0,
+        "review": 0,
+        "ignore": 0,
+        "incidents": []
+    }
+
+
+def add_incident(
+    session,
+    path,
+    event_id,
+    label,
+    ai,
+    event_score,
+    persons,
+    vehicles,
+    active_frames,
+    frame_path
+):
+
+    incident_number = len(session["incidents"]) + 1
+
+    session["incidents"].append(
+        {
+            "id": f"incident_{incident_number:04d}",
+            "source_video": os.path.basename(path),
+            "event_id": event_id,
+            "severity": label,
+            "ai_decision": ai,
+            "score": round(event_score, 1),
+            "persons": persons,
+            "vehicles": vehicles,
+            "active_frames": active_frames,
+            "thumbnail": frame_path,
+            "created_at": timestamp()
+        }
+    )
+
+
+def write_session_json(session):
+
+    with open(LATEST_SESSION_JSON, "w", encoding="utf-8") as f:
+        json.dump(session, f, indent=2)
+
+# =========================================================
 # FINALIZE EVENT
 # =========================================================
 
 def finalize_event(
     path,
     decisions,
+    session,
     event_id,
     best_frame,
     event_score,
@@ -380,6 +444,19 @@ def finalize_event(
         f"| FINAL={label}"
     )
 
+    add_incident(
+        session,
+        path,
+        event_id,
+        label,
+        ai,
+        event_score,
+        persons,
+        vehicles,
+        active_frames,
+        frame_path
+    )
+
     save_decision(
         decisions,
         path,
@@ -390,7 +467,7 @@ def finalize_event(
 # PROCESS VIDEO
 # =========================================================
 
-def process_video(path, decisions):
+def process_video(path, decisions, session):
 
     cap = cv2.VideoCapture(path)
 
@@ -511,6 +588,7 @@ def process_video(path, decisions):
                 finalize_event(
                     path,
                     decisions,
+                    session,
                     event_id,
                     best_frame,
                     event_score,
@@ -551,6 +629,7 @@ def process_video(path, decisions):
         finalize_event(
             path,
             decisions,
+            session,
             event_id,
             best_frame,
             event_score,
@@ -737,6 +816,8 @@ def generate_summary(decisions):
 
 def main():
 
+    session = create_session()
+
     videos = []
 
     decisions = {}
@@ -754,6 +835,12 @@ def main():
     total = len(videos)
 
     if total == 0:
+
+        session["status"] = "complete"
+        session["finished_at"] = timestamp()
+        session["clips_processed"] = 0
+
+        write_session_json(session)
 
         console.print(
             "[bold red]No videos found.[/bold red]"
@@ -795,7 +882,8 @@ def main():
 
             process_video(
                 video,
-                decisions
+                decisions,
+                session
             )
 
             progress.advance(task)
@@ -805,6 +893,30 @@ def main():
     clean_empty_dirs(INCOMING)
 
     generate_summary(decisions)
+
+    important = 0
+    review = 0
+    ignore = 0
+
+    for p in decisions.values():
+
+        if p == 2:
+            important += 1
+
+        elif p == 1:
+            review += 1
+
+        else:
+            ignore += 1
+
+    session["status"] = "complete"
+    session["finished_at"] = timestamp()
+    session["clips_processed"] = total
+    session["important"] = important
+    session["review"] = review
+    session["ignore"] = ignore
+
+    write_session_json(session)
 
     console.print(
         "\n[bold green]DONE.[/bold green]"
