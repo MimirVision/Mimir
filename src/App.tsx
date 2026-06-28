@@ -1,77 +1,72 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
+import { open } from '@tauri-apps/api/dialog'
+import { readTextFile } from '@tauri-apps/api/fs'
 import { AssessmentPanel } from './components/AssessmentPanel'
 import { ImportPanel } from './components/ImportPanel'
 import { IncidentTimeline } from './components/IncidentTimeline'
 import { IncidentViewer } from './components/IncidentViewer'
-import { ScanProgress } from './components/ScanProgress'
+import { LatestSessionResults } from './components/LatestSessionResults'
 import { SessionHeader } from './components/SessionHeader'
 import { Sidebar } from './components/Sidebar'
-import { mockIncidents, mockSession, scanSteps } from './mockData'
-import type { AppMode } from './types'
+import { mockIncidents, mockSession } from './mockData'
+import type { AppMode, MimirSession, SessionLoadState } from './types'
 
-const mockFolder = 'Tesla USB / TeslaCam / June 26'
-
-function PreviewSwitcher({
-  mode,
-  onModeChange,
-}: {
-  mode: AppMode
-  onModeChange: (mode: AppMode) => void
-}) {
-  return (
-    <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 rounded-full border border-[var(--mimir-border)] bg-[var(--mimir-surface)] p-1 shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
-      {[
-        ['empty', 'Empty'],
-        ['scanning', 'Scanning'],
-        ['review', 'Review'],
-      ].map(([value, label]) => (
-        <button
-          key={value}
-          onClick={() => onModeChange(value as AppMode)}
-          className={`h-8 rounded-full px-4 text-[12px] font-medium transition ${
-            mode === value ? 'bg-[var(--mimir-text)] text-black' : 'text-white/48 hover:text-white'
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-}
+const latestSessionPath = 'C:\\Mimir_Backend\\MimirOutput\\latest_session.json'
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('empty')
   const [selectedFolder, setSelectedFolder] = useState('')
   const [selectedIncidentId, setSelectedIncidentId] = useState(mockIncidents[0].id)
-  const [scanTick, setScanTick] = useState(0)
+  const [latestSession, setLatestSession] = useState<MimirSession | null>(null)
+  const [sessionLoadState, setSessionLoadState] = useState<SessionLoadState>('idle')
 
-  const selectedIncident = useMemo(
-    () => mockIncidents.find(incident => incident.id === selectedIncidentId) ?? mockIncidents[0],
-    [selectedIncidentId],
-  )
+  const selectedIncident =
+    mockIncidents.find(incident => incident.id === selectedIncidentId) ?? mockIncidents[0]
 
-  const activeStep = mode === 'scanning' ? Math.floor(scanTick / 20) % scanSteps.length : 0
-  const progress = mode === 'scanning' ? Math.min(96, 8 + scanTick) : 0
+  const chooseFolder = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: 'Choose TeslaCam Folder',
+    })
 
-  useEffect(() => {
-    if (mode !== 'scanning') return
-    setScanTick(0)
-    const timer = window.setInterval(() => {
-      setScanTick(current => (current >= 88 ? 12 : current + 4))
-    }, 700)
-    return () => window.clearInterval(timer)
-  }, [mode])
-
-  const chooseFolder = () => {
-    setSelectedFolder(mockFolder)
+    if (typeof selected === 'string') {
+      setSelectedFolder(selected)
+    }
   }
 
-  const startAnalysis = () => {
-    if (!selectedFolder) return
-    setMode('scanning')
+  const loadLatestSession = async () => {
+    setSessionLoadState('loading')
+    setLatestSession(null)
+
+    try {
+      const contents = await readTextFile(latestSessionPath)
+
+      try {
+        const parsed = JSON.parse(contents) as MimirSession
+
+        if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.incidents)) {
+          throw new Error('Invalid Mimir session shape')
+        }
+
+        setLatestSession(parsed)
+        setSessionLoadState('loaded')
+        setMode('results')
+      } catch {
+        setSessionLoadState('error')
+        setMode('empty')
+      }
+    } catch {
+      setSessionLoadState('missing')
+      setMode('empty')
+    }
   }
 
-  const engineLabel = mode === 'scanning' ? 'Engine analyzing' : 'Local engine ready'
+  const showSamplePreview = () => {
+    setMode('sample')
+  }
+
+  const engineLabel = 'Local engine ready'
 
   return (
     <div className="min-h-screen overflow-hidden bg-[var(--mimir-bg)] text-[var(--mimir-text)]">
@@ -85,22 +80,26 @@ export default function App() {
               <ImportPanel
                 selectedFolder={selectedFolder}
                 onChooseFolder={chooseFolder}
-                onAnalyze={startAnalysis}
+                onLoadLatestSession={loadLatestSession}
+                onPreviewSample={showSamplePreview}
+                loadState={sessionLoadState}
               />
             )}
 
-            {mode === 'scanning' && (
-              <ScanProgress
-                steps={scanSteps}
-                activeStep={activeStep}
-                progress={progress}
-                folderName={selectedFolder || mockFolder}
+            {mode === 'results' && (
+              <LatestSessionResults
+                loadState={sessionLoadState}
+                session={latestSession}
+                onLoad={loadLatestSession}
               />
             )}
 
-            {mode === 'review' && (
+            {mode === 'sample' && (
               <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_360px]">
                 <div className="min-w-0 overflow-y-auto">
+                  <div className="border-b border-[var(--mimir-border)] bg-amber-400/10 px-7 py-3 text-[13px] font-medium text-amber-100">
+                    Developer preview only. This screen uses sample data and is not a real scan result.
+                  </div>
                   <SessionHeader session={mockSession} />
                   <div className="px-7 pb-7">
                     <IncidentViewer incident={selectedIncident} />
@@ -117,8 +116,6 @@ export default function App() {
           </main>
         </div>
       </div>
-
-      <PreviewSwitcher mode={mode} onModeChange={setMode} />
     </div>
   )
 }

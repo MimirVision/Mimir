@@ -15,6 +15,18 @@
       "dialog": {
         "open": true
       },
+      "fs": {
+        "readFile": true,
+        "scope": [
+          "C:\\Mimir_Backend\\MimirOutput\\latest_session.json"
+        ]
+      },
+      "protocol": {
+        "asset": true,
+        "assetScope": [
+          "C:\\Mimir_Backend\\Frames\\*"
+        ]
+      },
       "shell": {
         "sidecar": true,
         "scope": [
