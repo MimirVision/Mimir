@@ -59,6 +59,11 @@ EVENT_TRIGGER = 14.0
 EVENT_END_TIMEOUT = 2.0
 MIN_EVENT_FRAMES = 4
 
+# motion signal
+MOTION_FRAME_SIZE = (320, 180)
+MOTION_SPIKE_THRESHOLD = 24.0
+AI_CLEAR_IGNORE_CONFIDENCE = 0.75
+
 # AI
 AI_ENABLED = True
 
@@ -94,44 +99,201 @@ console.print("[bold green]YOLO loaded.[/bold green]")
 # AI
 # =========================================================
 
+VALID_AI_SEVERITIES = {
+    "IMPORTANT",
+    "REVIEW",
+    "IGNORE"
+}
+
+
+def fallback_ai_review(reason, raw_response=""):
+
+    response = raw_response.strip().upper()
+
+    if response in VALID_AI_SEVERITIES:
+        severity = response
+        confidence = 0.5
+        summary = "AI returned a legacy one-word decision."
+        recommended_action = "Review according to the severity."
+
+    else:
+        severity = "IGNORE"
+        confidence = 0.25
+        summary = "AI review was unavailable or did not identify a clear interaction."
+        recommended_action = "No action needed unless the footage looks suspicious."
+
+    return {
+        "severity": severity,
+        "confidence": confidence,
+        "event_type": "ai_review_fallback",
+        "summary": summary,
+        "evidence": [reason],
+        "recommended_action": recommended_action
+    }
+
+
+def extract_json_response(response):
+
+    text = response.strip()
+
+    if text.startswith("```"):
+
+        text = text.strip("`")
+
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("AI response did not contain a JSON object")
+
+    return text[start:end + 1]
+
+
+def normalize_event_type(value):
+
+    text = str(value or "unknown_event").strip().lower()
+
+    cleaned = []
+
+    for char in text:
+
+        if char.isalnum():
+            cleaned.append(char)
+
+        else:
+            cleaned.append("_")
+
+    event_type = "_".join(
+        part
+        for part in "".join(cleaned).split("_")
+        if part
+    )
+
+    return event_type or "unknown_event"
+
+
+def clamp_confidence(value):
+
+    try:
+        confidence = float(value)
+
+    except:
+        confidence = 0.0
+
+    return max(
+        0.0,
+        min(
+            1.0,
+            confidence
+        )
+    )
+
+
+def normalize_ai_review(data):
+
+    severity = str(
+        data.get("severity", "IGNORE")
+    ).strip().upper()
+
+    if severity not in VALID_AI_SEVERITIES:
+        severity = "IGNORE"
+
+    evidence = data.get("evidence", [])
+
+    if not isinstance(evidence, list):
+        evidence = [str(evidence)]
+
+    evidence = [
+        str(item).strip()
+        for item in evidence
+        if str(item).strip()
+    ]
+
+    if not evidence:
+        evidence = ["No specific evidence was returned by the AI review."]
+
+    summary = str(
+        data.get("summary", "")
+    ).strip()
+
+    if not summary:
+        summary = "AI completed the review but did not provide a summary."
+
+    recommended_action = str(
+        data.get("recommended_action", "")
+    ).strip()
+
+    if not recommended_action:
+        recommended_action = "Review manually if needed."
+
+    return {
+        "severity": severity,
+        "confidence": clamp_confidence(
+            data.get("confidence", 0.0)
+        ),
+        "event_type": normalize_event_type(
+            data.get("event_type", "unknown_event")
+        ),
+        "summary": summary,
+        "evidence": evidence[:6],
+        "recommended_action": recommended_action
+    }
+
+
 def run_ai(image_path):
 
     if not AI_ENABLED:
-        return "IGNORE"
+        return fallback_ai_review(
+            "AI review is disabled."
+        )
 
     prompt = """
 You are analyzing Tesla sentry footage.
 
-Your task is to determine whether this event is important.
+The image may be a contact sheet with START, PEAK, and END frames from the same event.
+Review the full event sequence, not just one frame.
+Determine what likely happened over time.
+Do not overstate certainty.
+Use the word "possible" when the activity is uncertain.
 
-Return ONLY one word:
-IMPORTANT
-REVIEW
-IGNORE
+Return ONLY valid JSON with this exact shape:
+{
+  "severity": "REVIEW",
+  "confidence": 0.62,
+  "event_type": "person_near_vehicle",
+  "summary": "A person appears near the vehicle but no contact is clear.",
+  "evidence": ["Person visible near the vehicle", "No clear door contact shown"],
+  "recommended_action": "Review the footage briefly."
+}
+Do not include markdown, code fences, or extra commentary.
+
+Allowed severity values are IMPORTANT, REVIEW, and IGNORE.
 
 IMPORTANT:
-- someone touching Tesla
-- suspicious interaction near Tesla
-- lingering near Tesla
+- likely contact with vehicle
 - possible vandalism
-- someone inspecting windows/doors
-- person very close to Tesla
+- person clearly interacting with door/window/handle
+- possible impact/collision
+- person lingering very close to vehicle
 
 REVIEW:
-- nearby people
-- nearby vehicles
-- uncertain activity
-- something worth quickly checking
+- person near vehicle
+- vehicle stopped nearby
+- unclear movement
+- uncertain possible interaction
 
 IGNORE:
 - normal traffic
-- distant vehicles
+- distant pedestrians
 - harmless movement
-- empty parking lot
-- nothing interacting with Tesla
+- empty scene
 
 Be conservative.
 Most clips should be IGNORE.
+Use REVIEW when the event is ambiguous or worth quick human review.
 """.strip()
 
     try:
@@ -154,17 +316,29 @@ Most clips should be IGNORE.
             r.json()
             .get("response", "IGNORE")
             .strip()
-            .upper()
         )
 
-        if response not in [
-            "IMPORTANT",
-            "REVIEW",
-            "IGNORE"
-        ]:
-            return "IGNORE"
+        try:
 
-        return response
+            parsed = json.loads(
+                extract_json_response(response)
+            )
+
+            if not isinstance(parsed, dict):
+                raise ValueError("AI JSON was not an object")
+
+            return normalize_ai_review(parsed)
+
+        except Exception as e:
+
+            console.print(
+                f"[yellow]AI JSON FALLBACK:[/yellow] {e}"
+            )
+
+            return fallback_ai_review(
+                "AI output was not valid JSON.",
+                response
+            )
 
     except Exception as e:
 
@@ -172,7 +346,9 @@ Most clips should be IGNORE.
             f"[red]AI ERROR:[/red] {e}"
         )
 
-        return "IGNORE"
+        return fallback_ai_review(
+            "AI review failed."
+        )
 
 # =========================================================
 # PROXIMITY
@@ -286,6 +462,62 @@ def analyze(frame):
     return score, persons, vehicles
 
 # =========================================================
+# MOTION SIGNAL
+# =========================================================
+
+def frame_motion_score(previous_frame, current_frame):
+
+    if previous_frame is None:
+        return 0.0
+
+    previous = cv2.resize(
+        previous_frame,
+        MOTION_FRAME_SIZE
+    )
+
+    current = cv2.resize(
+        current_frame,
+        MOTION_FRAME_SIZE
+    )
+
+    previous = cv2.cvtColor(
+        previous,
+        cv2.COLOR_BGR2GRAY
+    )
+
+    current = cv2.cvtColor(
+        current,
+        cv2.COLOR_BGR2GRAY
+    )
+
+    previous = cv2.GaussianBlur(
+        previous,
+        (5, 5),
+        0
+    )
+
+    current = cv2.GaussianBlur(
+        current,
+        (5, 5),
+        0
+    )
+
+    diff = cv2.absdiff(
+        previous,
+        current
+    )
+
+    return float(diff.mean())
+
+
+def ai_clearly_ignored(ai_review):
+
+    return (
+        ai_review["severity"] == "IGNORE"
+        and ai_review["confidence"] >= AI_CLEAR_IGNORE_CONFIDENCE
+    )
+
+# =========================================================
 # SAVE DECISION
 # =========================================================
 
@@ -329,29 +561,45 @@ def add_incident(
     session,
     path,
     event_id,
+    incident_id,
     label,
-    ai,
+    ai_review,
     event_score,
     persons,
     vehicles,
     active_frames,
-    frame_path
+    max_motion_score,
+    possible_impact,
+    frame_path,
+    start_frame_image,
+    best_frame_image,
+    end_frame_image,
+    contact_sheet
 ):
-
-    incident_number = len(session["incidents"]) + 1
 
     session["incidents"].append(
         {
-            "id": f"incident_{incident_number:04d}",
+            "id": incident_id,
             "source_video": os.path.basename(path),
             "event_id": event_id,
             "severity": label,
-            "ai_decision": ai,
+            "ai_decision": ai_review["severity"],
+            "ai_confidence": ai_review["confidence"],
+            "event_type": ai_review["event_type"],
+            "summary": ai_review["summary"],
+            "evidence": ai_review["evidence"],
+            "recommended_action": ai_review["recommended_action"],
             "score": round(event_score, 1),
             "persons": persons,
             "vehicles": vehicles,
             "active_frames": active_frames,
-            "thumbnail": frame_path,
+            "max_motion_score": round(max_motion_score, 2),
+            "possible_impact": possible_impact,
+            "thumbnail": contact_sheet,
+            "start_frame_image": start_frame_image,
+            "best_frame_image": best_frame_image,
+            "end_frame_image": end_frame_image,
+            "contact_sheet": contact_sheet,
             "created_at": timestamp()
         }
     )
@@ -362,6 +610,115 @@ def write_session_json(session):
     with open(LATEST_SESSION_JSON, "w", encoding="utf-8") as f:
         json.dump(session, f, indent=2)
 
+
+def next_incident_id(session):
+
+    incident_number = len(session["incidents"]) + 1
+
+    return f"incident_{incident_number:04d}"
+
+
+def resize_to_height(frame, target_height):
+
+    h, w = frame.shape[:2]
+
+    if h == target_height:
+        return frame.copy()
+
+    scale = target_height / h
+
+    return cv2.resize(
+        frame,
+        (
+            max(1, int(w * scale)),
+            target_height
+        )
+    )
+
+
+def add_label(frame, label):
+
+    labelled = frame.copy()
+
+    cv2.rectangle(
+        labelled,
+        (0, 0),
+        (labelled.shape[1], 42),
+        (0, 0, 0),
+        -1
+    )
+
+    cv2.putText(
+        labelled,
+        label,
+        (14, 28),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.75,
+        (255, 255, 255),
+        2,
+        cv2.LINE_AA
+    )
+
+    return labelled
+
+
+def save_event_evidence(
+    incident_folder,
+    start_frame,
+    best_frame,
+    end_frame
+):
+
+    os.makedirs(incident_folder, exist_ok=True)
+
+    if start_frame is None:
+        start_frame = best_frame
+
+    if end_frame is None:
+        end_frame = best_frame
+
+    start_path = os.path.join(incident_folder, "start.jpg")
+    best_path = os.path.join(incident_folder, "best.jpg")
+    end_path = os.path.join(incident_folder, "end.jpg")
+    contact_path = os.path.join(incident_folder, "contact_sheet.jpg")
+
+    cv2.imwrite(start_path, start_frame)
+    cv2.imwrite(best_path, best_frame)
+    cv2.imwrite(end_path, end_frame)
+
+    target_height = min(
+        360,
+        start_frame.shape[0],
+        best_frame.shape[0],
+        end_frame.shape[0]
+    )
+
+    contact_sheet = cv2.hconcat(
+        [
+            add_label(
+                resize_to_height(start_frame, target_height),
+                "START"
+            ),
+            add_label(
+                resize_to_height(best_frame, target_height),
+                "PEAK"
+            ),
+            add_label(
+                resize_to_height(end_frame, target_height),
+                "END"
+            )
+        ]
+    )
+
+    cv2.imwrite(contact_path, contact_sheet)
+
+    return {
+        "start_frame_image": start_path,
+        "best_frame_image": best_path,
+        "end_frame_image": end_path,
+        "contact_sheet": contact_path
+    }
+
 # =========================================================
 # FINALIZE EVENT
 # =========================================================
@@ -371,15 +728,33 @@ def finalize_event(
     decisions,
     session,
     event_id,
+    start_frame,
     best_frame,
+    end_frame,
     event_score,
     persons,
     vehicles,
-    active_frames
+    active_frames,
+    max_motion_score,
+    possible_impact
 ):
 
     if best_frame is None:
         return
+
+    incident_id = next_incident_id(session)
+
+    incident_folder = os.path.join(
+        INCIDENTS_OUTPUT,
+        incident_id
+    )
+
+    evidence = save_event_evidence(
+        incident_folder,
+        start_frame,
+        best_frame,
+        end_frame
+    )
 
     frame_name = (
         f"{os.path.basename(path)}"
@@ -397,7 +772,25 @@ def finalize_event(
     # AI FINAL DECISION
     # =====================================================
 
-    ai = run_ai(frame_path)
+    ai_image_path = frame_path
+
+    if os.path.exists(
+        evidence["contact_sheet"]
+    ):
+        ai_image_path = evidence["contact_sheet"]
+
+    ai_review = run_ai(ai_image_path)
+
+    if possible_impact:
+
+        ai_review["evidence"] = (
+            ai_review["evidence"]
+            + [
+                "possible sudden movement detected by frame motion analysis"
+            ]
+        )[:6]
+
+    ai = ai_review["severity"]
 
     if ai == "IMPORTANT":
 
@@ -410,6 +803,14 @@ def finalize_event(
     else:
 
         priority = 0
+
+    if (
+        possible_impact
+        and priority == 0
+        and not ai_clearly_ignored(ai_review)
+    ):
+
+        priority = 1
 
     # =====================================================
     # LABEL/COLOR
@@ -440,6 +841,8 @@ def finalize_event(
         f"| frames={active_frames} "
         f"| persons={persons} "
         f"| vehicles={vehicles} "
+        f"| motion={max_motion_score:.2f} "
+        f"| possible_impact={possible_impact} "
         f"| AI={ai} "
         f"| FINAL={label}"
     )
@@ -448,13 +851,20 @@ def finalize_event(
         session,
         path,
         event_id,
+        incident_id,
         label,
-        ai,
+        ai_review,
         event_score,
         persons,
         vehicles,
         active_frames,
-        frame_path
+        max_motion_score,
+        possible_impact,
+        frame_path,
+        evidence["start_frame_image"],
+        evidence["best_frame_image"],
+        evidence["end_frame_image"],
+        evidence["contact_sheet"]
     )
 
     save_decision(
@@ -505,6 +915,12 @@ def process_video(path, decisions, session):
 
     best_frame = None
     best_score = 0
+    start_frame = None
+    end_frame = None
+    max_motion_score = 0.0
+    possible_impact = False
+
+    previous_sampled_frame = None
 
     last_activity = 0
 
@@ -526,6 +942,13 @@ def process_video(path, decisions, session):
 
             frame_i += 1
             continue
+
+        motion_score = frame_motion_score(
+            previous_sampled_frame,
+            frame
+        )
+
+        previous_sampled_frame = frame.copy()
 
         score, p, v = analyze(frame)
 
@@ -549,6 +972,10 @@ def process_video(path, decisions, session):
 
             best_frame = None
             best_score = 0
+            start_frame = None
+            end_frame = None
+            max_motion_score = 0.0
+            possible_impact = False
 
             console.print(
                 f"  [cyan]event {event_id} started[/cyan]"
@@ -566,6 +993,17 @@ def process_video(path, decisions, session):
 
             persons += p
             vehicles += v
+
+            if motion_score > max_motion_score:
+                max_motion_score = motion_score
+
+            if motion_score >= MOTION_SPIKE_THRESHOLD:
+                possible_impact = True
+
+            if start_frame is None:
+                start_frame = frame.copy()
+
+            end_frame = frame.copy()
 
             if score > best_score:
 
@@ -590,11 +1028,15 @@ def process_video(path, decisions, session):
                     decisions,
                     session,
                     event_id,
+                    start_frame,
                     best_frame,
+                    end_frame,
                     event_score,
                     persons,
                     vehicles,
-                    active_frames
+                    active_frames,
+                    max_motion_score,
+                    possible_impact
                 )
 
                 active = False
@@ -609,6 +1051,10 @@ def process_video(path, decisions, session):
 
                 best_frame = None
                 best_score = 0
+                start_frame = None
+                end_frame = None
+                max_motion_score = 0.0
+                possible_impact = False
 
                 last_activity = 0
 
@@ -631,11 +1077,15 @@ def process_video(path, decisions, session):
             decisions,
             session,
             event_id,
+            start_frame,
             best_frame,
+            end_frame,
             event_score,
             persons,
             vehicles,
-            active_frames
+            active_frames,
+            max_motion_score,
+            possible_impact
         )
 
     # =====================================================
