@@ -3,12 +3,18 @@ import mimirLockup from '../assets/mimir-lockup.png'
 interface ImportPanelProps {
   selectedFolder: string
   onChooseFolder: () => void
-  onAnalyze: () => void
+  onLoadLatestSession: () => void
+  onPreviewSample: () => void
+  loadState: 'idle' | 'loading' | 'loaded' | 'missing' | 'error'
 }
 
-export function ImportPanel({ selectedFolder, onChooseFolder, onAnalyze }: ImportPanelProps) {
-  const canAnalyze = Boolean(selectedFolder)
-
+export function ImportPanel({
+  selectedFolder,
+  onChooseFolder,
+  onLoadLatestSession,
+  onPreviewSample,
+  loadState,
+}: ImportPanelProps) {
   return (
     <div className="flex h-full min-h-[620px] items-center justify-center px-8 py-8">
       <section className="w-full max-w-[760px]">
@@ -49,18 +55,34 @@ export function ImportPanel({ selectedFolder, onChooseFolder, onAnalyze }: Impor
             <div className="text-[13px] text-[var(--mimir-text-subtle)]">
               Footage stays on this computer.
             </div>
-            <button
-              onClick={onAnalyze}
-              disabled={!canAnalyze}
-              className={`h-11 rounded-lg px-6 text-[14px] font-semibold transition ${
-                canAnalyze
-                  ? 'bg-[var(--mimir-text)] text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)] hover:bg-white'
-                  : 'cursor-not-allowed border border-[var(--mimir-border)] bg-white/[0.045] text-white/28 shadow-none'
-              }`}
-            >
-              Analyze
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={onPreviewSample}
+                className="h-11 rounded-lg border border-[var(--mimir-border)] bg-white/[0.025] px-4 text-[13px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] hover:text-[var(--mimir-text)]"
+              >
+                Preview UI with sample data
+              </button>
+              <button
+                onClick={onLoadLatestSession}
+                disabled={loadState === 'loading'}
+                className="h-11 rounded-lg bg-[var(--mimir-text)] px-6 text-[14px] font-semibold text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)] transition hover:bg-white disabled:cursor-wait disabled:opacity-70"
+              >
+                {loadState === 'loading' ? 'Loading...' : 'Load Latest Session'}
+              </button>
+            </div>
           </div>
+
+          {loadState === 'missing' && (
+            <div className="mt-3 rounded-lg border border-[var(--mimir-border)] bg-white/[0.025] p-4 text-[13px] text-[var(--mimir-text-muted)]">
+              No scan results found yet.
+            </div>
+          )}
+
+          {loadState === 'error' && (
+            <div className="mt-3 rounded-lg border border-red-400/20 bg-red-500/10 p-4 text-[13px] text-red-100">
+              Could not read Mimir session output.
+            </div>
+          )}
         </div>
       </section>
     </div>
