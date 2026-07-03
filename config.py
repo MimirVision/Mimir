@@ -4,7 +4,7 @@ import os
 # BASE PATH
 # =========================================================
 
-BASE = r"C:\Mimir_Backend"
+BASE = os.environ.get("MIMIR_BACKEND_ROOT", r"C:\Mimir_Backend")
 
 # =========================================================
 # MAIN FOLDERS

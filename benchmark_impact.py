@@ -4,19 +4,29 @@ import os
 
 
 BASE = r"C:\Mimir_Backend"
-LABELS_CSV = os.path.join(BASE, "benchmark_labels.csv")
+LABELS_CSV = os.path.join(BASE, "impact_labels.csv")
 LATEST_SESSION_JSON = os.path.join(BASE, "MimirOutput", "latest_session.json")
-VALID_LABELS = {"IMPORTANT", "REVIEW", "IGNORE"}
+VALID_IMPACT_LEVELS = {"NONE", "LOW", "MEDIUM", "HIGH"}
+IMPACT_PRIORITY = {
+    "NONE": 0,
+    "LOW": 1,
+    "MEDIUM": 2,
+    "HIGH": 3,
+}
 
 
 def create_label_template(path):
     with open(path, "w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=["filename", "expected", "notes"])
+        writer = csv.DictWriter(
+            file,
+            fieldnames=["filename", "expected_impact", "expected_severity", "notes"],
+        )
         writer.writeheader()
         writer.writerow(
             {
                 "filename": "example_clip.mp4",
-                "expected": "REVIEW",
+                "expected_impact": "NONE",
+                "expected_severity": "IGNORE",
                 "notes": "Replace this row with a real labeled clip.",
             }
         )
@@ -27,8 +37,8 @@ def ensure_labels_csv(path):
         return True
 
     create_label_template(path)
-    print("\nCreated starter benchmark_labels.csv")
-    print("Fill it with real filenames and expected labels, then run this script again.")
+    print("\nCreated starter impact_labels.csv")
+    print("Fill it with real filenames and expected impact levels, then run this script again.")
     print(f"Path: {path}")
     return False
 
@@ -66,11 +76,11 @@ def contains_filename(filenames, filename):
     )
 
 
-def normalize_label(value):
-    label = str(value or "").strip().upper()
+def normalize_impact_level(value):
+    level = str(value or "").strip().upper()
 
-    if label in VALID_LABELS:
-        return label
+    if level in VALID_IMPACT_LEVELS:
+        return level
 
     return ""
 
@@ -83,7 +93,8 @@ def read_labels(path):
 
         for row_number, row in enumerate(reader, start=2):
             filename = normalize_filename(row.get("filename"))
-            expected = normalize_label(row.get("expected"))
+            expected = normalize_impact_level(row.get("expected_impact"))
+            expected_severity = str(row.get("expected_severity", "")).strip().upper()
             notes = str(row.get("notes", "")).strip()
 
             if not filename:
@@ -91,13 +102,14 @@ def read_labels(path):
 
             if not expected:
                 raise ValueError(
-                    f"Invalid expected label on row {row_number}: {row.get('expected')}"
+                    f"Invalid expected_impact on row {row_number}: {row.get('expected_impact')}"
                 )
 
             labels.append(
                 {
                     "filename": filename,
-                    "expected": expected,
+                    "expected_impact": expected,
+                    "expected_severity": expected_severity,
                     "notes": notes,
                 }
             )
@@ -172,7 +184,14 @@ def extract_processed_sources(session):
     return processed
 
 
-def build_actual_map(incidents):
+def stronger_impact(left, right):
+    if IMPACT_PRIORITY[right] > IMPACT_PRIORITY[left]:
+        return right
+
+    return left
+
+
+def build_actual_impact_map(incidents):
     actual = {}
 
     for incident in incidents:
@@ -180,33 +199,27 @@ def build_actual_map(incidents):
             continue
 
         source_video = normalize_filename(incident.get("source_video"))
-        severity = normalize_label(incident.get("severity"))
+        impact_level = normalize_impact_level(incident.get("impact_level"))
 
-        if not source_video or not severity:
+        if not impact_level:
+            impact_level = "MEDIUM" if incident.get("possible_impact") is True else "NONE"
+
+        if not source_video:
             continue
 
         current = actual.get(source_video)
 
         if current is None:
-            actual[source_video] = severity
+            actual[source_video] = impact_level
             continue
 
-        actual[source_video] = stronger_label(current, severity)
+        actual[source_video] = stronger_impact(current, impact_level)
 
     return actual
 
 
-def stronger_label(left, right):
-    priority = {
-        "IGNORE": 0,
-        "REVIEW": 1,
-        "IMPORTANT": 2,
-    }
-
-    if priority[right] > priority[left]:
-        return right
-
-    return left
+def is_medium_or_high(level):
+    return level in {"MEDIUM", "HIGH"}
 
 
 def print_row(columns, widths):
@@ -236,49 +249,84 @@ def main():
 
     labels = read_labels(LABELS_CSV)
     session = read_session(LATEST_SESSION_JSON)
-    incidents = session["incidents"]
-    actual_by_video = build_actual_map(incidents)
+    actual_by_video = build_actual_impact_map(session["incidents"])
     processed_sources = extract_processed_sources(session)
 
     mismatches = []
-    matched = 0
+    exact_matches = 0
+    false_negatives = []
+    false_positives = []
+    expected_positive_count = 0
+    recalled_positive_count = 0
 
     for label in labels:
         filename = label["filename"]
-        expected = label["expected"]
+        expected = label["expected_impact"]
         actual = lookup_by_filename(actual_by_video, filename)
 
         if actual is None and contains_filename(processed_sources, filename):
-            actual = "IGNORE"
+            actual = "NONE"
 
         if actual is None:
             actual = "MISSING"
 
         if actual == expected:
-            matched += 1
+            exact_matches += 1
         else:
             mismatches.append(
                 {
                     "filename": filename,
-                    "expected": expected,
-                    "actual": actual,
+                    "expected_impact": expected,
+                    "actual_impact": actual,
+                    "notes": label["notes"],
+                }
+            )
+
+        expected_positive = is_medium_or_high(expected)
+        actual_positive = is_medium_or_high(actual)
+
+        if expected_positive:
+            expected_positive_count += 1
+
+            if actual_positive:
+                recalled_positive_count += 1
+            else:
+                false_negatives.append(
+                    {
+                        "filename": filename,
+                        "expected_impact": expected,
+                        "actual_impact": actual,
+                        "notes": label["notes"],
+                    }
+                )
+
+        if actual_positive and not expected_positive:
+            false_positives.append(
+                {
+                    "filename": filename,
+                    "expected_impact": expected,
+                    "actual_impact": actual,
                     "notes": label["notes"],
                 }
             )
 
     total = len(labels)
-    mismatch_count = len(mismatches)
-    accuracy = (matched / total * 100) if total else 0.0
+    recall = (
+        recalled_positive_count / expected_positive_count * 100
+        if expected_positive_count
+        else 0.0
+    )
 
-    print("\nMimir Benchmark Summary")
-    print("=======================")
-    summary_widths = [22, 12]
+    print("\nMimir Impact Benchmark Summary")
+    print("==============================")
+    summary_widths = [32, 14]
     print_row(["Metric", "Value"], summary_widths)
     print_rule(summary_widths)
-    print_row(["Total labeled clips", total], summary_widths)
-    print_row(["Matched count", matched], summary_widths)
-    print_row(["Mismatch count", mismatch_count], summary_widths)
-    print_row(["Accuracy", f"{accuracy:.1f}%"], summary_widths)
+    print_row(["Total clips", total], summary_widths)
+    print_row(["Exact matches", exact_matches], summary_widths)
+    print_row(["Impact recall MEDIUM/HIGH", f"{recall:.1f}%"], summary_widths)
+    print_row(["False negatives", len(false_negatives)], summary_widths)
+    print_row(["False positives", len(false_positives)], summary_widths)
 
     print("\nMismatches")
     print("==========")
@@ -287,16 +335,16 @@ def main():
         print("No mismatches.")
         return
 
-    widths = [32, 10, 10, 40]
-    print_row(["filename", "expected", "actual", "notes"], widths)
+    widths = [32, 16, 14, 40]
+    print_row(["filename", "expected_impact", "actual_impact", "notes"], widths)
     print_rule(widths)
 
     for mismatch in mismatches:
         print_row(
             [
                 mismatch["filename"],
-                mismatch["expected"],
-                mismatch["actual"],
+                mismatch["expected_impact"],
+                mismatch["actual_impact"],
                 mismatch["notes"],
             ],
             widths,
