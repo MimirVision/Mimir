@@ -1,103 +1,150 @@
 import csv
 import json
 import os
+import sys
+from pathlib import Path
 
 
-BASE = r"C:\Mimir_Backend"
-LABELS_CSV = os.path.join(BASE, "benchmark_labels.csv")
-LATEST_SESSION_JSON = os.path.join(BASE, "MimirOutput", "latest_session.json")
-VALID_LABELS = {"IMPORTANT", "REVIEW", "IGNORE"}
+BASE = Path(r"C:\Mimir_Backend")
+LABELS_CSV = BASE / "benchmark_labels.csv"
+LATEST_SESSION_JSON = BASE / "MimirOutput" / "latest_session.json"
+
+VALID_SEVERITIES = {"IMPORTANT", "REVIEW", "IGNORE"}
+VALID_CATEGORIES = {
+    "rear_impact",
+    "door_ding",
+    "side_contact",
+    "person_near",
+    "person_touching",
+    "normal_traffic",
+    "distant_pedestrian",
+    "weird_unclear",
+}
+SEVERITY_PRIORITY = {
+    "IGNORE": 0,
+    "REVIEW": 1,
+    "IMPORTANT": 2,
+}
 
 
-def create_label_template(path):
-    with open(path, "w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=["filename", "expected", "notes"])
-        writer.writeheader()
-        writer.writerow(
-            {
-                "filename": "example_clip.mp4",
-                "expected": "REVIEW",
-                "notes": "Replace this row with a real labeled clip.",
-            }
-        )
+def normalize_text(value):
+    return str(value or "").strip()
 
 
-def ensure_labels_csv(path):
-    if os.path.exists(path):
-        return True
-
-    create_label_template(path)
-    print("\nCreated starter benchmark_labels.csv")
-    print("Fill it with real filenames and expected labels, then run this script again.")
-    print(f"Path: {path}")
-    return False
+def normalize_key(value):
+    return normalize_text(value).lower().replace("\\", "/")
 
 
 def normalize_filename(value):
-    return os.path.basename(str(value or "").strip())
+    text = normalize_text(value)
+
+    if not text:
+        return ""
+
+    return os.path.basename(text.replace("\\", "/"))
 
 
-def filename_matches(label_filename, actual_filename):
-    label = normalize_filename(label_filename).lower()
-    actual = normalize_filename(actual_filename).lower()
-
-    return (
-        label == actual
-        or actual.startswith(f"{label},")
-        or actual.startswith(f"{label} ")
-    )
+def normalize_severity(value):
+    severity = normalize_text(value).upper()
+    return severity if severity in VALID_SEVERITIES else ""
 
 
-def lookup_by_filename(mapping, filename):
-    if filename in mapping:
-        return mapping[filename]
+def stronger_severity(left, right):
+    left = normalize_severity(left) or "IGNORE"
+    right = normalize_severity(right) or "IGNORE"
 
-    for actual_filename, value in mapping.items():
-        if filename_matches(filename, actual_filename):
-            return value
-
-    return None
+    return right if SEVERITY_PRIORITY[right] > SEVERITY_PRIORITY[left] else left
 
 
-def contains_filename(filenames, filename):
-    return any(
-        filename_matches(filename, actual_filename)
-        for actual_filename in filenames
-    )
+def create_label_template(path):
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=[
+                "filename_or_group",
+                "expected_severity",
+                "category",
+                "notes",
+            ],
+        )
+        writer.writeheader()
 
 
-def normalize_label(value):
-    label = str(value or "").strip().upper()
+def ensure_labels_csv(path):
+    if path.exists():
+        return
 
-    if label in VALID_LABELS:
-        return label
+    create_label_template(path)
 
-    return ""
+
+def label_instructions():
+    categories = ", ".join(sorted(VALID_CATEGORIES))
+    print("No benchmark labels found.")
+    print(f"Add rows to: {LABELS_CSV}")
+    print("Columns:")
+    print("  filename_or_group,expected_severity,category,notes")
+    print("Example:")
+    print("  2026-03-03_14-31-54,IMPORTANT,rear_impact,rear crash should never be ignored")
+    print(f"Categories: {categories}")
 
 
 def read_labels(path):
+    ensure_labels_csv(path)
     labels = []
 
-    with open(path, "r", encoding="utf-8-sig", newline="") as file:
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
         reader = csv.DictReader(file)
+        fieldnames = reader.fieldnames or []
+
+        if not fieldnames:
+            return labels
+
+        missing = [
+            field
+            for field in [
+                "filename_or_group",
+                "expected_severity",
+                "category",
+                "notes",
+            ]
+            if field not in fieldnames
+        ]
+
+        if missing:
+            raise ValueError(
+                "benchmark_labels.csv is missing required columns: "
+                + ", ".join(missing)
+            )
 
         for row_number, row in enumerate(reader, start=2):
-            filename = normalize_filename(row.get("filename"))
-            expected = normalize_label(row.get("expected"))
-            notes = str(row.get("notes", "")).strip()
+            label_key = normalize_text(row.get("filename_or_group"))
+            expected = normalize_severity(row.get("expected_severity"))
+            category = normalize_text(row.get("category")).lower()
+            notes = normalize_text(row.get("notes"))
 
-            if not filename:
+            if not label_key and not expected and not category and not notes:
                 continue
+
+            if not label_key:
+                raise ValueError(f"Missing filename_or_group on row {row_number}")
 
             if not expected:
                 raise ValueError(
-                    f"Invalid expected label on row {row_number}: {row.get('expected')}"
+                    f"Invalid expected_severity on row {row_number}: "
+                    f"{row.get('expected_severity')}"
+                )
+
+            if category and category not in VALID_CATEGORIES:
+                raise ValueError(
+                    f"Invalid category on row {row_number}: {category}. "
+                    f"Use one of: {', '.join(sorted(VALID_CATEGORIES))}"
                 )
 
             labels.append(
                 {
-                    "filename": filename,
-                    "expected": expected,
+                    "filename_or_group": label_key,
+                    "expected_severity": expected,
+                    "category": category,
                     "notes": notes,
                 }
             )
@@ -106,7 +153,10 @@ def read_labels(path):
 
 
 def read_session(path):
-    with open(path, "r", encoding="utf-8") as file:
+    if not path.exists():
+        raise FileNotFoundError(f"latest_session.json not found: {path}")
+
+    with path.open("r", encoding="utf-8") as file:
         session = json.load(file)
 
     if not isinstance(session, dict):
@@ -115,193 +165,257 @@ def read_session(path):
     incidents = session.get("incidents", [])
 
     if not isinstance(incidents, list):
-        raise ValueError("latest_session.json incidents must be a list")
+        raise ValueError("latest_session.json field 'incidents' must be a list")
 
     return session
 
 
-def find_video_sources(folder):
-    sources = set()
+def camera_clip_values(incident):
+    raw = incident.get("camera_clips")
 
-    if not folder or not os.path.isdir(folder):
-        return sources
+    if isinstance(raw, list):
+        return [
+            clip
+            for clip in raw
+            if isinstance(clip, dict)
+        ]
 
-    for root, _dirs, files in os.walk(folder):
-        for filename in files:
-            if filename.lower().endswith(".mp4"):
-                sources.add(normalize_filename(filename))
+    if isinstance(raw, dict):
+        clips = []
 
-    return sources
-
-
-def extract_processed_sources(session):
-    processed = set()
-    candidate_keys = [
-        "processed_clips",
-        "processed_files",
-        "source_videos",
-        "videos",
-        "clips",
-    ]
-
-    for key in candidate_keys:
-        values = session.get(key, [])
-
-        if not isinstance(values, list):
-            continue
-
-        for value in values:
-            if isinstance(value, dict):
-                filename = (
-                    value.get("source_video")
-                    or value.get("filename")
-                    or value.get("path")
-                    or value.get("name")
+        for camera, value in raw.items():
+            if isinstance(value, str):
+                clips.append(
+                    {
+                        "camera": camera,
+                        "path": value,
+                        "filename": normalize_filename(value),
+                    }
                 )
-            else:
-                filename = value
+            elif isinstance(value, dict):
+                clip = dict(value)
+                clip.setdefault("camera", camera)
+                clips.append(clip)
 
-            filename = normalize_filename(filename)
+        return clips
+
+    return []
+
+
+def incident_match_values(incident):
+    values = set()
+
+    for key in [
+        "id",
+        "source_video",
+        "source_clip",
+        "video_path",
+        "original_source_video",
+        "library_video_path",
+        "event_group_id",
+        "event_timestamp",
+        "source_event_timestamp",
+        "tesla_event_timestamp",
+    ]:
+        value = normalize_text(incident.get(key))
+
+        if value:
+            values.add(value)
+            filename = normalize_filename(value)
 
             if filename:
-                processed.add(filename)
+                values.add(filename)
 
-    if session.get("safe_input_mode") is True:
-        processed.update(find_video_sources(session.get("input_folder")))
+    for clip in camera_clip_values(incident):
+        for key in [
+            "filename",
+            "path",
+            "video_path",
+            "source_video",
+            "source_clip",
+            "original_source_video",
+            "library_path",
+            "trash_path",
+        ]:
+            value = normalize_text(clip.get(key))
 
-    return processed
+            if value:
+                values.add(value)
+                filename = normalize_filename(value)
+
+                if filename:
+                    values.add(filename)
+
+    return values
 
 
-def build_actual_map(incidents):
-    actual = {}
+def value_matches_label(value, label):
+    value_key = normalize_key(value)
+    label_key = normalize_key(label)
+    value_filename = normalize_key(normalize_filename(value))
+    label_filename = normalize_key(normalize_filename(label))
+
+    if not value_key or not label_key:
+        return False
+
+    if value_key == label_key or value_filename == label_key or value_filename == label_filename:
+        return True
+
+    if value_key.startswith(label_key) or value_filename.startswith(label_key):
+        return True
+
+    if label_key in value_key or label_filename and label_filename in value_key:
+        return True
+
+    return False
+
+
+def match_incident(label_key, incidents):
+    best = None
+    best_score = -1
 
     for incident in incidents:
         if not isinstance(incident, dict):
             continue
 
-        source_video = normalize_filename(incident.get("source_video"))
-        severity = normalize_label(incident.get("severity"))
+        values = incident_match_values(incident)
+        score = -1
 
-        if not source_video or not severity:
-            continue
+        for value in values:
+            if not value_matches_label(value, label_key):
+                continue
 
-        current = actual.get(source_video)
+            if normalize_key(value) == normalize_key(label_key):
+                score = max(score, 4)
+            elif normalize_key(normalize_filename(value)) == normalize_key(normalize_filename(label_key)):
+                score = max(score, 3)
+            else:
+                score = max(score, 1)
 
-        if current is None:
-            actual[source_video] = severity
-            continue
+        if score > best_score:
+            best = incident
+            best_score = score
 
-        actual[source_video] = stronger_label(current, severity)
-
-    return actual
+    return best if best_score >= 0 else None
 
 
-def stronger_label(left, right):
-    priority = {
-        "IGNORE": 0,
-        "REVIEW": 1,
-        "IMPORTANT": 2,
+def actual_severity(incident):
+    if not incident:
+        return "MISSING"
+
+    severity = (
+        normalize_severity(incident.get("final_severity"))
+        or normalize_severity(incident.get("severity"))
+        or normalize_severity(incident.get("user_status"))
+    )
+
+    return severity or "MISSING"
+
+
+def notes_allow_review_at_most(notes):
+    text = normalize_text(notes).lower()
+    return "review at most" in text or "at most review" in text
+
+
+def is_person_near_never_important_case(label):
+    return (
+        normalize_text(label.get("category")).lower() == "person_near"
+        and "never important" in normalize_text(label.get("notes")).lower()
+    )
+
+
+def compare_label(label, incidents):
+    incident = match_incident(label["filename_or_group"], incidents)
+    expected = label["expected_severity"]
+    actual = actual_severity(incident)
+    person_near_never_important = is_person_near_never_important_case(label)
+    review_at_most_allowed = notes_allow_review_at_most(label.get("notes"))
+    passed = expected == actual
+
+    if (
+        person_near_never_important
+        and review_at_most_allowed
+        and actual in {"REVIEW", "IGNORE"}
+    ):
+        passed = True
+
+    false_ignore = expected == "IMPORTANT" and actual == "IGNORE"
+    false_important = expected != "IMPORTANT" and actual == "IMPORTANT"
+    person_near_false_important = person_near_never_important and actual == "IMPORTANT"
+
+    return {
+        "passed": passed,
+        "critical": false_ignore or person_near_false_important,
+        "false_ignore": false_ignore,
+        "false_important": false_important,
+        "person_near_false_important": person_near_false_important,
+        "expected": expected,
+        "actual": actual,
+        "matched_incident_id": incident.get("id", "") if isinstance(incident, dict) else "",
+        "filename_or_group": label["filename_or_group"],
+        "category": label["category"],
+        "notes": label["notes"],
     }
 
-    if priority[right] > priority[left]:
-        return right
 
-    return left
+def print_result(result):
+    status = "PASS" if result["passed"] else "FAIL"
 
+    if result["critical"]:
+        status = "FAIL CRITICAL"
 
-def print_row(columns, widths):
-    print(
-        " | ".join(
-            str(value).ljust(width)
-            for value, width in zip(columns, widths)
-        )
-    )
-
-
-def print_rule(widths):
-    print(
-        "-+-".join(
-            "-" * width
-            for width in widths
-        )
-    )
+    print(status)
+    print(f"  label: {result['filename_or_group']}")
+    print(f"  expected: {result['expected']}")
+    print(f"  actual: {result['actual']}")
+    print(f"  matched incident id: {result['matched_incident_id'] or 'not matched'}")
+    print(f"  category: {result['category'] or 'not set'}")
+    print(f"  notes: {result['notes']}")
 
 
 def main():
-    if not ensure_labels_csv(LABELS_CSV):
-        return
-
-    if not os.path.exists(LATEST_SESSION_JSON):
-        raise FileNotFoundError(f"Latest session JSON not found: {LATEST_SESSION_JSON}")
-
     labels = read_labels(LABELS_CSV)
+
+    if not labels:
+        label_instructions()
+        return 0
+
     session = read_session(LATEST_SESSION_JSON)
-    incidents = session["incidents"]
-    actual_by_video = build_actual_map(incidents)
-    processed_sources = extract_processed_sources(session)
+    incidents = session.get("incidents", [])
+    results = [
+        compare_label(label, incidents)
+        for label in labels
+    ]
+    passed = sum(1 for result in results if result["passed"])
+    failed = len(results) - passed
+    false_ignores = sum(1 for result in results if result["false_ignore"])
+    false_importants = sum(1 for result in results if result["false_important"])
+    person_near_false_importants = sum(
+        1 for result in results if result["person_near_false_important"]
+    )
+    critical_failures = sum(1 for result in results if result["critical"])
 
-    mismatches = []
-    matched = 0
+    print("Mimir Detection Benchmark")
+    print("=========================")
 
-    for label in labels:
-        filename = label["filename"]
-        expected = label["expected"]
-        actual = lookup_by_filename(actual_by_video, filename)
+    for result in results:
+        print_result(result)
 
-        if actual is None and contains_filename(processed_sources, filename):
-            actual = "IGNORE"
+    print("Summary")
+    print("=======")
+    print(f"total labels: {len(results)}")
+    print(f"passed: {passed}")
+    print(f"failed: {failed}")
+    print(f"false_ignores: {false_ignores}")
+    print(f"false_importants: {false_importants}")
+    print(f"person_near_false_importants: {person_near_false_importants}")
 
-        if actual is None:
-            actual = "MISSING"
+    if critical_failures:
+        print(f"critical failures: {critical_failures}")
+        return 2
 
-        if actual == expected:
-            matched += 1
-        else:
-            mismatches.append(
-                {
-                    "filename": filename,
-                    "expected": expected,
-                    "actual": actual,
-                    "notes": label["notes"],
-                }
-            )
-
-    total = len(labels)
-    mismatch_count = len(mismatches)
-    accuracy = (matched / total * 100) if total else 0.0
-
-    print("\nMimir Benchmark Summary")
-    print("=======================")
-    summary_widths = [22, 12]
-    print_row(["Metric", "Value"], summary_widths)
-    print_rule(summary_widths)
-    print_row(["Total labeled clips", total], summary_widths)
-    print_row(["Matched count", matched], summary_widths)
-    print_row(["Mismatch count", mismatch_count], summary_widths)
-    print_row(["Accuracy", f"{accuracy:.1f}%"], summary_widths)
-
-    print("\nMismatches")
-    print("==========")
-
-    if not mismatches:
-        print("No mismatches.")
-        return
-
-    widths = [32, 10, 10, 40]
-    print_row(["filename", "expected", "actual", "notes"], widths)
-    print_rule(widths)
-
-    for mismatch in mismatches:
-        print_row(
-            [
-                mismatch["filename"],
-                mismatch["expected"],
-                mismatch["actual"],
-                mismatch["notes"],
-            ],
-            widths,
-        )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
