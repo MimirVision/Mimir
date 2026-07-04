@@ -1,10 +1,2586 @@
 {
   "status": "complete",
-  "started_at": "2026-06-28T21:20:48",
-  "finished_at": "2026-06-28T21:20:48",
-  "clips_processed": 0,
-  "important": 0,
+  "started_at": "2026-07-04T18:47:58",
+  "finished_at": "2026-07-04T18:48:29",
+  "input_folder": "C:\\mimir\\test",
+  "selected_input": "C:\\Mimir\\Test",
+  "detected_source_type": "generic_folder",
+  "drive_root": null,
+  "teslacam_root": null,
+  "scan_roots": [
+    "C:\\Mimir\\Test"
+  ],
+  "event_groups": [
+    {
+      "event_id": "2026-06-04-21-33-05",
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "timestamp": null,
+      "cameras_available": {},
+      "camera_count": 1,
+      "missing_common_cameras": [
+        "front",
+        "back",
+        "left_repeater",
+        "right_repeater",
+        "left_pillar",
+        "right_pillar"
+      ],
+      "files": [
+        "C:\\Mimir\\Test\\2026-06-04-21-33-05.MP4"
+      ],
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\2026-06-04-21-33-05.MP4",
+          "filename": "2026-06-04-21-33-05.MP4",
+          "duration_sec": 29.88,
+          "exists": true
+        }
+      ],
+      "event_group_id": "2026-06-04-21-33-05",
+      "event_timestamp": null,
+      "prepass_motion_score": 3.02,
+      "prepass_scene_change_score": 2.46,
+      "prepass_candidate_reason": "no strong local prepass signal",
+      "prepass_severity_hint": "IGNORE",
+      "candidate_windows": [
+        {
+          "start_sec": 7.0,
+          "peak_sec": 10.0,
+          "end_sec": 13.0,
+          "reason": "best_prepass_motion"
+        }
+      ],
+      "primary_camera_candidate": "unknown",
+      "prepass_object_persistence": {
+        "object_tracks": [],
+        "object_persistence_summary": {
+          "persons": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          },
+          "vehicles": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          }
+        },
+        "brief_vehicle_only": false,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": false,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": false,
+        "normal_passing_traffic_evidence": false
+      },
+      "deep_analysis_performed": false,
+      "skipped_reason": "low-interest mostly static group"
+    },
+    {
+      "event_id": "2026-06-05-00-33-32",
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "timestamp": null,
+      "cameras_available": {},
+      "camera_count": 1,
+      "missing_common_cameras": [
+        "front",
+        "back",
+        "left_repeater",
+        "right_repeater",
+        "left_pillar",
+        "right_pillar"
+      ],
+      "files": [
+        "C:\\Mimir\\Test\\2026-06-05-00-33-32.MP4"
+      ],
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\2026-06-05-00-33-32.MP4",
+          "filename": "2026-06-05-00-33-32.MP4",
+          "duration_sec": 17.54,
+          "exists": true
+        }
+      ],
+      "event_group_id": "2026-06-05-00-33-32",
+      "event_timestamp": null,
+      "prepass_motion_score": 9.86,
+      "prepass_scene_change_score": 7.33,
+      "prepass_candidate_reason": "prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IGNORE",
+      "candidate_windows": [
+        {
+          "start_sec": 7.0,
+          "peak_sec": 10.0,
+          "end_sec": 13.0,
+          "reason": "best_prepass_motion"
+        }
+      ],
+      "primary_camera_candidate": "unknown",
+      "prepass_object_persistence": {
+        "object_tracks": [],
+        "object_persistence_summary": {
+          "persons": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          },
+          "vehicles": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          }
+        },
+        "brief_vehicle_only": false,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": false,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": false,
+        "normal_passing_traffic_evidence": false
+      },
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    },
+    {
+      "event_id": "2026-06-05-04-59-11 (1)",
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "timestamp": null,
+      "cameras_available": {},
+      "camera_count": 1,
+      "missing_common_cameras": [
+        "front",
+        "back",
+        "left_repeater",
+        "right_repeater",
+        "left_pillar",
+        "right_pillar"
+      ],
+      "files": [
+        "C:\\Mimir\\Test\\2026-06-05-04-59-11 (1).MP4"
+      ],
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\2026-06-05-04-59-11 (1).MP4",
+          "filename": "2026-06-05-04-59-11 (1).MP4",
+          "duration_sec": 29.83,
+          "exists": true
+        }
+      ],
+      "event_group_id": "2026-06-05-04-59-11 (1)",
+      "event_timestamp": null,
+      "prepass_motion_score": 10.25,
+      "prepass_scene_change_score": 8.74,
+      "prepass_candidate_reason": "prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IGNORE",
+      "candidate_windows": [
+        {
+          "start_sec": 3.0,
+          "peak_sec": 6.0,
+          "end_sec": 9.0,
+          "reason": "best_prepass_motion"
+        }
+      ],
+      "primary_camera_candidate": "unknown",
+      "prepass_object_persistence": {
+        "object_tracks": [],
+        "object_persistence_summary": {
+          "persons": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          },
+          "vehicles": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          }
+        },
+        "brief_vehicle_only": false,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": false,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": false,
+        "normal_passing_traffic_evidence": false
+      },
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    },
+    {
+      "event_id": "Reddit 1.mp4,Important,door ding",
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "timestamp": null,
+      "cameras_available": {},
+      "camera_count": 1,
+      "missing_common_cameras": [
+        "front",
+        "back",
+        "left_repeater",
+        "right_repeater",
+        "left_pillar",
+        "right_pillar"
+      ],
+      "files": [
+        "C:\\Mimir\\Test\\Reddit 1.mp4,Important,door ding.mp4"
+      ],
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\Reddit 1.mp4,Important,door ding.mp4",
+          "filename": "Reddit 1.mp4,Important,door ding.mp4",
+          "duration_sec": 28.8,
+          "exists": true
+        }
+      ],
+      "event_group_id": "Reddit 1.mp4,Important,door ding",
+      "event_timestamp": null,
+      "prepass_motion_score": 18.47,
+      "prepass_scene_change_score": 12.63,
+      "prepass_candidate_reason": "strong motion or scene-change spike; useful Sentry/Saved event metadata; source metadata or filename suggests crash/contact importance; prepass found brief object presence; prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IMPORTANT",
+      "candidate_windows": [
+        {
+          "start_sec": 0.0,
+          "peak_sec": 14.4,
+          "end_sec": 28.8,
+          "reason": "metadata_important_full_clip_window"
+        }
+      ],
+      "primary_camera_candidate": "unknown",
+      "prepass_object_persistence": {
+        "object_tracks": [
+          {
+            "track_id": 1,
+            "class_name": "vehicle",
+            "class_id": 7,
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 2.0,
+            "dwell_time_sec": 2.0,
+            "frame_count": 2,
+            "consecutive_frame_count_max": 2,
+            "max_consecutive_frames": 2,
+            "confidence_avg": 0.543,
+            "confidence_max": 0.557,
+            "bbox_first": [
+              4.73,
+              0.38,
+              425.76,
+              260.25
+            ],
+            "bbox_last": [
+              2.59,
+              0.38,
+              426.09,
+              262.79
+            ],
+            "bbox_largest": [
+              2.59,
+              0.38,
+              426.09,
+              262.79
+            ],
+            "closest_bbox_to_vehicle_zone": [
+              2.59,
+              0.38,
+              426.09,
+              262.79
+            ],
+            "approximate_motion_direction": "mostly_static",
+            "movement_direction": "mostly_static",
+            "entered_and_exited_quickly": true,
+            "proximity_score": 0.844,
+            "close_to_vehicle_zone": true,
+            "camera": "unknown",
+            "group_track_id": "unknown-1"
+          },
+          {
+            "track_id": 2,
+            "class_name": "vehicle",
+            "class_id": 2,
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 2.0,
+            "dwell_time_sec": 2.0,
+            "frame_count": 2,
+            "consecutive_frame_count_max": 2,
+            "max_consecutive_frames": 2,
+            "confidence_avg": 0.48,
+            "confidence_max": 0.539,
+            "bbox_first": [
+              441.89,
+              102.09,
+              519.26,
+              132.61
+            ],
+            "bbox_last": [
+              446.03,
+              102.01,
+              519.39,
+              132.6
+            ],
+            "bbox_largest": [
+              441.89,
+              102.09,
+              519.26,
+              132.61
+            ],
+            "closest_bbox_to_vehicle_zone": [
+              441.89,
+              102.09,
+              519.26,
+              132.61
+            ],
+            "approximate_motion_direction": "mostly_static",
+            "movement_direction": "mostly_static",
+            "entered_and_exited_quickly": true,
+            "proximity_score": 0.54,
+            "close_to_vehicle_zone": true,
+            "camera": "unknown",
+            "group_track_id": "unknown-2"
+          }
+        ],
+        "object_persistence_summary": {
+          "persons": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          },
+          "vehicles": {
+            "track_count": 2,
+            "max_dwell_time_sec": 2.0,
+            "max_consecutive_frames": 2,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": true,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": false
+          }
+        },
+        "brief_vehicle_only": true,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": false,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": true,
+        "vehicle_lingering_detected": false,
+        "normal_passing_traffic_evidence": true
+      },
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    },
+    {
+      "event_id": "reddit 3",
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "timestamp": null,
+      "cameras_available": {},
+      "camera_count": 1,
+      "missing_common_cameras": [
+        "front",
+        "back",
+        "left_repeater",
+        "right_repeater",
+        "left_pillar",
+        "right_pillar"
+      ],
+      "files": [
+        "C:\\Mimir\\Test\\reddit 3.mp4"
+      ],
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\reddit 3.mp4",
+          "filename": "reddit 3.mp4",
+          "duration_sec": 29.1,
+          "exists": true
+        }
+      ],
+      "event_group_id": "reddit 3",
+      "event_timestamp": null,
+      "prepass_motion_score": 40.89,
+      "prepass_scene_change_score": 24.53,
+      "prepass_candidate_reason": "strong motion or scene-change spike; prepass found lingering vehicle; prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IGNORE",
+      "candidate_windows": [
+        {
+          "start_sec": 0.0,
+          "peak_sec": 2.0,
+          "end_sec": 5.0,
+          "reason": "motion_or_scene_change_spike"
+        },
+        {
+          "start_sec": 7.0,
+          "peak_sec": 10.0,
+          "end_sec": 13.0,
+          "reason": "motion_or_scene_change_spike"
+        },
+        {
+          "start_sec": 9.0,
+          "peak_sec": 12.0,
+          "end_sec": 15.0,
+          "reason": "motion_or_scene_change_spike"
+        }
+      ],
+      "primary_camera_candidate": "unknown",
+      "prepass_object_persistence": {
+        "object_tracks": [
+          {
+            "track_id": 1,
+            "class_name": "vehicle",
+            "class_id": 2,
+            "first_seen_time_sec": 2.0,
+            "last_seen_time_sec": 10.0,
+            "dwell_time_sec": 8.0,
+            "frame_count": 2,
+            "consecutive_frame_count_max": 2,
+            "max_consecutive_frames": 2,
+            "confidence_avg": 0.727,
+            "confidence_max": 0.795,
+            "bbox_first": [
+              57.38,
+              0.24,
+              553.03,
+              284.31
+            ],
+            "bbox_last": [
+              32.8,
+              1.09,
+              553.63,
+              284.9
+            ],
+            "bbox_largest": [
+              32.8,
+              1.09,
+              553.63,
+              284.9
+            ],
+            "closest_bbox_to_vehicle_zone": [
+              32.8,
+              1.09,
+              553.63,
+              284.9
+            ],
+            "approximate_motion_direction": "left",
+            "movement_direction": "left",
+            "entered_and_exited_quickly": true,
+            "proximity_score": 0.967,
+            "close_to_vehicle_zone": true,
+            "camera": "unknown",
+            "group_track_id": "unknown-1"
+          }
+        ],
+        "object_persistence_summary": {
+          "persons": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          },
+          "vehicles": {
+            "track_count": 1,
+            "max_dwell_time_sec": 8.0,
+            "max_consecutive_frames": 2,
+            "long_linger_detected": true,
+            "brief_only": true,
+            "passby_detected": true,
+            "lingering_detected": true,
+            "approaching_detected": false,
+            "irrelevant_distant": false
+          }
+        },
+        "brief_vehicle_only": true,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": true,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": true,
+        "vehicle_lingering_detected": true,
+        "normal_passing_traffic_evidence": false
+      },
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    },
+    {
+      "event_id": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended",
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "timestamp": null,
+      "cameras_available": {},
+      "camera_count": 1,
+      "missing_common_cameras": [
+        "front",
+        "back",
+        "left_repeater",
+        "right_repeater",
+        "left_pillar",
+        "right_pillar"
+      ],
+      "files": [
+        "C:\\Mimir\\Test\\reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4"
+      ],
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+          "filename": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+          "duration_sec": 29.93,
+          "exists": true
+        }
+      ],
+      "event_group_id": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended",
+      "event_timestamp": null,
+      "prepass_motion_score": 15.3,
+      "prepass_scene_change_score": 9.07,
+      "prepass_candidate_reason": "useful Sentry/Saved event metadata; source metadata or filename suggests crash/contact importance; prepass found brief object presence; prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IMPORTANT",
+      "candidate_windows": [
+        {
+          "start_sec": 0.0,
+          "peak_sec": 14.96,
+          "end_sec": 29.93,
+          "reason": "metadata_important_full_clip_window"
+        }
+      ],
+      "primary_camera_candidate": "unknown",
+      "prepass_object_persistence": {
+        "object_tracks": [
+          {
+            "track_id": 1,
+            "class_name": "vehicle",
+            "class_id": 2,
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 2.0,
+            "dwell_time_sec": 2.0,
+            "frame_count": 2,
+            "consecutive_frame_count_max": 2,
+            "max_consecutive_frames": 2,
+            "confidence_avg": 0.658,
+            "confidence_max": 0.731,
+            "bbox_first": [
+              330.28,
+              0.0,
+              409.61,
+              37.89
+            ],
+            "bbox_last": [
+              330.87,
+              0.0,
+              409.74,
+              38.19
+            ],
+            "bbox_largest": [
+              330.87,
+              0.0,
+              409.74,
+              38.19
+            ],
+            "closest_bbox_to_vehicle_zone": [
+              330.87,
+              0.0,
+              409.74,
+              38.19
+            ],
+            "approximate_motion_direction": "mostly_static",
+            "movement_direction": "mostly_static",
+            "entered_and_exited_quickly": true,
+            "proximity_score": 0.398,
+            "close_to_vehicle_zone": false,
+            "camera": "unknown",
+            "group_track_id": "unknown-1"
+          }
+        ],
+        "object_persistence_summary": {
+          "persons": {
+            "track_count": 0,
+            "max_dwell_time_sec": 0.0,
+            "max_consecutive_frames": 0,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": false,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          },
+          "vehicles": {
+            "track_count": 1,
+            "max_dwell_time_sec": 2.0,
+            "max_consecutive_frames": 2,
+            "long_linger_detected": false,
+            "brief_only": true,
+            "passby_detected": true,
+            "lingering_detected": false,
+            "approaching_detected": false,
+            "irrelevant_distant": true
+          }
+        },
+        "brief_vehicle_only": true,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": false,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": true,
+        "vehicle_lingering_detected": false,
+        "normal_passing_traffic_evidence": true
+      },
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    }
+  ],
+  "scan_pipeline": "grouped_candidate_pipeline_v1",
+  "prepass_groups_processed": 6,
+  "prepass_candidates_found": 5,
+  "deep_analysis_groups": 5,
+  "skipped_low_interest_groups": 1,
+  "prepass_runtime_sec": 1.867,
+  "deep_analysis_runtime_sec": 28.719,
+  "source_categories_found": [
+    "Generic"
+  ],
+  "event_groups_found": 6,
+  "multi_camera_groups": 0,
+  "single_camera_groups": 6,
+  "camera_suffixes_found": [],
+  "grouping_version": "grouped_incidents_v1",
+  "source_discovery_warnings": [
+    "No TeslaCam folder was found."
+  ],
+  "source_report": {
+    "selected_input": "C:\\Mimir\\Test",
+    "detected_source_type": "generic_folder",
+    "is_supported": true,
+    "teslacam_root_found": false,
+    "categories_found": [],
+    "mp4_files_found": 6,
+    "event_groups_found": 6,
+    "camera_suffixes_found": [],
+    "event_json_files_found": 0,
+    "warnings": [
+      "No TeslaCam folder was found."
+    ],
+    "user_message": "Mimir did not find TeslaCam folders, but found video files and will scan them as generic footage."
+  },
+  "safe_input_mode": true,
+  "scan_mode": "balanced",
+  "scan_engine": "enhanced_ai",
+  "ai_review_available": true,
+  "ai_review_model": "qwen2.5vl:7b",
+  "ai_review_error": null,
+  "ai_review_required": true,
+  "ai_review_budget": 50,
+  "ai_review_candidates": 6,
+  "ai_reviewed_groups": 3,
+  "ai_skipped_groups": 0,
+  "ai_review_runtime_sec": 15.63,
+  "grouped_camera_review": true,
+  "ai_audit_enabled": true,
+  "ai_audit_folder": "C:\\Mimir_Backend\\MimirOutput\\AIAudit",
+  "enhanced_ai_available": true,
+  "enhanced_ai_model": "qwen2.5vl:7b",
+  "enhanced_ai_error": null,
+  "standard_scanner_available": true,
+  "progress_supported": true,
+  "library_root": "C:\\Users\\andre\\Videos\\Mimir Library",
+  "library_scan_folder": null,
+  "source_action": "analyze_only",
+  "files_copied": 0,
+  "files_moved": 0,
+  "files_failed": 0,
+  "usb_cleanup_performed": false,
+  "source_files_removed": 0,
+  "storage_warnings": [],
+  "safety_rules_version": "crash_safety_v1",
+  "clips_processed": 6,
+  "important": 3,
   "review": 0,
-  "ignore": 0,
-  "incidents": []
+  "ignore": 3,
+  "tesla_events_found": 0,
+  "source_events_found": 0,
+  "event_json_files_found": 0,
+  "performance": {
+    "total_runtime_sec": 30.666,
+    "total_video_duration_sec": 135.2,
+    "total_ai_calls": 3,
+    "total_sampled_frames": 172,
+    "total_event_groups": 6,
+    "stage_timings": {
+      "source_discovery": 0.06,
+      "metadata_reading": 0.0,
+      "camera_grouping": 0.0,
+      "group_prepass": 1.868,
+      "video_opening": 0.022,
+      "prepass": 0.0,
+      "frame_sampling": 1.005,
+      "yolo_detection": 10.094,
+      "motion_analysis": 2.052,
+      "impact_analysis": 0.0,
+      "contact_analysis": 0.001,
+      "enhanced_ai_review": 15.601,
+      "thumbnail_generation": 0.031,
+      "timeline_generation": 0.0,
+      "json_writing": 0.012
+    },
+    "slowest_groups": [
+      {
+        "group_id": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended",
+        "source_folder": "C:\\Mimir\\Test",
+        "camera_count": 1,
+        "cameras_found": [
+          "unknown"
+        ],
+        "total_duration_sec": 29.93,
+        "sampled_frames": 60,
+        "yolo_frames": 60,
+        "ai_calls": 1,
+        "runtime_sec": 9.913,
+        "incident_created": true,
+        "final_severity": "IMPORTANT",
+        "error": null
+      },
+      {
+        "group_id": "Reddit 1.mp4,Important,door ding",
+        "source_folder": "C:\\Mimir\\Test",
+        "camera_count": 1,
+        "cameras_found": [
+          "unknown"
+        ],
+        "total_duration_sec": 28.8,
+        "sampled_frames": 58,
+        "yolo_frames": 58,
+        "ai_calls": 1,
+        "runtime_sec": 9.235,
+        "incident_created": true,
+        "final_severity": "IMPORTANT",
+        "error": null
+      },
+      {
+        "group_id": "reddit 3",
+        "source_folder": "C:\\Mimir\\Test",
+        "camera_count": 1,
+        "cameras_found": [
+          "unknown"
+        ],
+        "total_duration_sec": 29.1,
+        "sampled_frames": 28,
+        "yolo_frames": 28,
+        "ai_calls": 1,
+        "runtime_sec": 7.084,
+        "incident_created": true,
+        "final_severity": "IMPORTANT",
+        "error": null
+      },
+      {
+        "group_id": "2026-06-05-00-33-32",
+        "source_folder": "C:\\Mimir\\Test",
+        "camera_count": 1,
+        "cameras_found": [
+          "unknown"
+        ],
+        "total_duration_sec": 17.54,
+        "sampled_frames": 13,
+        "yolo_frames": 13,
+        "ai_calls": 0,
+        "runtime_sec": 1.279,
+        "incident_created": false,
+        "final_severity": null,
+        "error": null
+      },
+      {
+        "group_id": "2026-06-05-04-59-11 (1)",
+        "source_folder": "C:\\Mimir\\Test",
+        "camera_count": 1,
+        "cameras_found": [
+          "unknown"
+        ],
+        "total_duration_sec": 29.83,
+        "sampled_frames": 13,
+        "yolo_frames": 13,
+        "ai_calls": 0,
+        "runtime_sec": 1.19,
+        "incident_created": false,
+        "final_severity": null,
+        "error": null
+      }
+    ],
+    "videos_processed": 5,
+    "avg_sec_per_video": 6.133,
+    "yolo_runtime_sec": 10.099,
+    "ai_runtime_sec": 15.601,
+    "ai_review_runtime_sec": 15.63,
+    "avg_ai_call_sec": 5.21,
+    "groups_reviewed_by_ai": 3,
+    "groups_skipped_by_ai": 0,
+    "prepass_runtime_sec": 1.867,
+    "deep_analysis_runtime_sec": 28.719,
+    "prepass_groups_processed": 6,
+    "prepass_candidates_found": 5,
+    "deep_analysis_groups": 5,
+    "skipped_low_interest_groups": 1,
+    "frames_sampled": 172,
+    "ai_calls": 3,
+    "incidents_created": 3
+  },
+  "incidents": [
+    {
+      "id": "incident_0001",
+      "original_source_video": "C:\\Mimir\\Test\\Reddit 1.mp4,Important,door ding.mp4",
+      "source_video": "C:\\Mimir\\Test\\Reddit 1.mp4,Important,door ding.mp4",
+      "video_path": "C:\\Mimir\\Test\\Reddit 1.mp4,Important,door ding.mp4",
+      "video_exists": true,
+      "storage_action_applied": "analyze_only",
+      "event_id": 0,
+      "severity": "IMPORTANT",
+      "pre_escalation_severity": "IMPORTANT",
+      "final_severity": "IMPORTANT",
+      "severity_reasons": [
+        "contact_level=HIGH",
+        "possible_contact with high contact_score",
+        "AI visible_person=true",
+        "lingering vehicle detected",
+        "timeline marker indicates IMPORTANT possible contact or impact",
+        "AI did not override contact safety signals"
+      ],
+      "escalation_applied": false,
+      "local_evidence_summary": {
+        "motion_score": 13.02,
+        "impact_score": 0.37,
+        "impact_level": "LOW",
+        "contact_score": 0.79,
+        "contact_level": "HIGH",
+        "person_passby_detected": true,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": true,
+        "person_proximity": {
+          "persons_detected": 5,
+          "proximity_score": 25.5
+        },
+        "vehicle_proximity": {
+          "vehicles_detected": 42,
+          "proximity_score": 25.5
+        },
+        "camera_shake": 13.02,
+        "scene_change": 11.89,
+        "event_metadata": {
+          "event_score": 236.88,
+          "active_frames": 49,
+          "crash_safety_triggered": false,
+          "motion_triggered": false,
+          "possible_impact": false,
+          "possible_contact": true,
+          "trigger_reasons": [],
+          "impact_reasons": [
+            "nearby or large object activity suggests possible contact event"
+          ],
+          "contact_reasons": [
+            "object detected very close to the parked vehicle",
+            "local edge motion suggests possible side contact",
+            "person close to vehicle during contact-like movement",
+            "vehicle close to POV vehicle during contact-like movement"
+          ]
+        },
+        "object_persistence": {
+          "summary": {
+            "persons": {
+              "track_count": 1,
+              "max_dwell_time_sec": 2.0,
+              "max_consecutive_frames": 5,
+              "long_linger_detected": false,
+              "brief_only": true,
+              "passby_detected": true,
+              "lingering_detected": false,
+              "approaching_detected": true,
+              "irrelevant_distant": false
+            },
+            "vehicles": {
+              "track_count": 3,
+              "max_dwell_time_sec": 8.5,
+              "max_consecutive_frames": 18,
+              "long_linger_detected": true,
+              "brief_only": false,
+              "passby_detected": false,
+              "lingering_detected": true,
+              "approaching_detected": false,
+              "irrelevant_distant": false
+            }
+          },
+          "brief_vehicle_only": false,
+          "brief_person_only": false,
+          "lingering_person_detected": false,
+          "lingering_vehicle_detected": true,
+          "person_passby_detected": true,
+          "person_lingering_detected": false,
+          "vehicle_passby_detected": false,
+          "vehicle_lingering_detected": true,
+          "normal_passing_traffic_evidence": false
+        },
+        "camera_angle_evidence": {
+          "camera": "unknown",
+          "event_group_id": "Reddit 1.mp4,Important,door ding",
+          "available_cameras": {}
+        },
+        "severity_policy": {
+          "person_near_only": false,
+          "person_passby_evidence": true,
+          "person_interaction_evidence": false,
+          "person_passby_detected": true,
+          "person_lingering_detected": false,
+          "vehicle_passby_detected": false,
+          "vehicle_lingering_detected": true,
+          "contact_evidence_level": "HIGH",
+          "impact_evidence_level": "LOW",
+          "important_requires_hard_evidence": true,
+          "important_evidence_found": true,
+          "severity_cap_applied": false,
+          "severity_cap_reason": ""
+        }
+      },
+      "final_decision_source": "local_rules",
+      "ai_evidence_review": {
+        "scene_type": "person_near_vehicle",
+        "visible_person": true,
+        "visible_vehicle_close": false,
+        "visible_contact": false,
+        "visible_impact": false,
+        "normal_passing_traffic": false,
+        "evidence": [
+          "Person visible near the vehicle",
+          "No clear door contact shown",
+          "possible close contact detected by proximity and local motion analysis"
+        ],
+        "concerns": [
+          "Interaction is partly occluded"
+        ],
+        "recommended_severity": "REVIEW",
+        "confidence": 0.62,
+        "raw_response": "{\n  \"scene_type\": \"person_near_vehicle\",\n  \"visible_person\": true,\n  \"visible_vehicle_close\": false,\n  \"visible_contact\": false,\n  \"visible_impact\": false,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Person visible near the vehicle\", \"No clear door contact shown\"],\n  \"concerns\": [\"Interaction is partly occluded\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.62\n}",
+        "ai_prompt": "You are analyzing Tesla Sentry footage.\n\nThe image may be a contact sheet showing START, PEAK, and END frames from the same event.\nReview the full event sequence, not just one frame.\nDetermine what likely happened over time.\nDo not overstate certainty.\nUse the word \"possible\" when the activity is uncertain.\n\nReturn ONLY valid JSON with this exact shape:\n{\n  \"scene_type\": \"person_near_vehicle\",\n  \"visible_person\": true,\n  \"visible_vehicle_close\": false,\n  \"visible_contact\": false,\n  \"visible_impact\": false,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Person visible near the vehicle\", \"No clear door contact shown\"],\n  \"concerns\": [\"Interaction is partly occluded\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.62\n}\nDo not include markdown, code fences, or extra commentary.\n\nAllowed scene_type values are normal_traffic, person_near_vehicle, possible_contact, possible_impact, unclear.\nAllowed recommended_severity values are IMPORTANT, REVIEW, and IGNORE.\n\nIMPORTANT:\n- likely contact with vehicle\n- possible vandalism\n- person clearly interacting with door/window/handle\n- possible impact/collision\n- person lingering very close to vehicle\n\nREVIEW:\n- person near vehicle\n- vehicle stopped nearby\n- unclear movement\n- uncertain possible interaction\n\nIGNORE:\n- normal traffic\n- distant pedestrians\n- harmless movement\n- empty scene\n\nBe conservative.\nMost clips should be IGNORE.\nUse REVIEW when the event is ambiguous or worth quick human review.\nYou are not the final classifier. Return structured visual evidence only.\n\nContact safety note:\n- This contact sheet may show a door ding or close side contact.\n- Look for subtle local movement near the side, mirror, bumper, door, handle, or nearby vehicle.\n- Do not mark as IGNORE if there is possible door ding, contact, hit, scratch, damage, or vehicle touch.\n- Use IMPORTANT for likely door ding, vehicle contact, side impact, vandalism, or damage.\n- Return valid JSON only.",
+        "ai_parse_error": false,
+        "ai_review_skipped_reason": "",
+        "severity": "REVIEW",
+        "event_type": "person_near_vehicle",
+        "summary": "AI evidence review scene_type=person_near_vehicle, recommended_severity=REVIEW.",
+        "recommended_action": "Review manually if needed."
+      },
+      "ai_raw_response": "{\n  \"scene_type\": \"person_near_vehicle\",\n  \"visible_person\": true,\n  \"visible_vehicle_close\": false,\n  \"visible_contact\": false,\n  \"visible_impact\": false,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Person visible near the vehicle\", \"No clear door contact shown\"],\n  \"concerns\": [\"Interaction is partly occluded\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.62\n}",
+      "ai_parse_error": false,
+      "ai_review_skipped_reason": "",
+      "ai_decision": "REVIEW",
+      "ai_confidence": 0.62,
+      "event_type": "person_near_vehicle",
+      "summary": "AI evidence review scene_type=person_near_vehicle, recommended_severity=REVIEW.",
+      "evidence": [
+        "Person visible near the vehicle",
+        "No clear door contact shown",
+        "possible close contact detected by proximity and local motion analysis"
+      ],
+      "recommended_action": "Review manually if needed.",
+      "score": 236.9,
+      "persons": 5,
+      "vehicles": 42,
+      "active_frames": 49,
+      "video_duration_sec": 28.8,
+      "fps": 30.0,
+      "max_motion_score": 13.02,
+      "motion_spike_time_sec": 14.5,
+      "camera_shake_score": 13.02,
+      "optical_flow_score": 2.36,
+      "scene_change_score": 11.89,
+      "proximity_score": 25.5,
+      "local_motion_score": 17.61,
+      "contact_time_sec": 10.5,
+      "contact_score": 0.79,
+      "contact_level": "HIGH",
+      "possible_contact": true,
+      "contact_reasons": [
+        "object detected very close to the parked vehicle",
+        "local edge motion suggests possible side contact",
+        "person close to vehicle during contact-like movement",
+        "vehicle close to POV vehicle during contact-like movement"
+      ],
+      "impact_score": 0.37,
+      "impact_level": "LOW",
+      "possible_impact": false,
+      "crash_safety_triggered": false,
+      "motion_triggered": false,
+      "trigger_reasons": [],
+      "impact_reasons": [
+        "nearby or large object activity suggests possible contact event"
+      ],
+      "object_tracks": [
+        {
+          "track_id": 1,
+          "class_name": "vehicle",
+          "class_id": 7,
+          "first_seen_time_sec": 1.0,
+          "last_seen_time_sec": 9.5,
+          "dwell_time_sec": 8.5,
+          "frame_count": 15,
+          "consecutive_frame_count_max": 15,
+          "max_consecutive_frames": 15,
+          "confidence_avg": 0.555,
+          "confidence_max": 0.648,
+          "bbox_first": [
+            5.23,
+            0.29,
+            425.69,
+            261.88
+          ],
+          "bbox_last": [
+            2.97,
+            0.11,
+            426.78,
+            269.64
+          ],
+          "bbox_largest": [
+            3.56,
+            0.61,
+            425.87,
+            274.7
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            4.91,
+            0.32,
+            425.81,
+            275.19
+          ],
+          "approximate_motion_direction": "mostly_static",
+          "movement_direction": "mostly_static",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.867,
+          "close_to_vehicle_zone": true,
+          "camera": "unknown",
+          "source_incident_id": "incident_0001",
+          "group_track_id": "unknown-1"
+        },
+        {
+          "track_id": 2,
+          "class_name": "vehicle",
+          "class_id": 2,
+          "first_seen_time_sec": 1.0,
+          "last_seen_time_sec": 9.5,
+          "dwell_time_sec": 8.5,
+          "frame_count": 18,
+          "consecutive_frame_count_max": 18,
+          "max_consecutive_frames": 18,
+          "confidence_avg": 0.479,
+          "confidence_max": 0.539,
+          "bbox_first": [
+            440.48,
+            101.65,
+            518.77,
+            132.61
+          ],
+          "bbox_last": [
+            451.86,
+            100.67,
+            516.77,
+            132.4
+          ],
+          "bbox_largest": [
+            438.05,
+            101.87,
+            518.05,
+            132.55
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            438.05,
+            101.87,
+            518.05,
+            132.55
+          ],
+          "approximate_motion_direction": "mostly_static",
+          "movement_direction": "mostly_static",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.544,
+          "close_to_vehicle_zone": true,
+          "camera": "unknown",
+          "source_incident_id": "incident_0001",
+          "group_track_id": "unknown-2"
+        },
+        {
+          "track_id": 3,
+          "class_name": "vehicle",
+          "class_id": 2,
+          "first_seen_time_sec": 2.5,
+          "last_seen_time_sec": 10.5,
+          "dwell_time_sec": 8.0,
+          "frame_count": 9,
+          "consecutive_frame_count_max": 5,
+          "max_consecutive_frames": 5,
+          "confidence_avg": 0.534,
+          "confidence_max": 0.592,
+          "bbox_first": [
+            2.75,
+            1.13,
+            426.12,
+            265.57
+          ],
+          "bbox_last": [
+            276.6,
+            1.75,
+            427.91,
+            240.55
+          ],
+          "bbox_largest": [
+            3.29,
+            1.07,
+            426.12,
+            273.29
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            3.29,
+            1.07,
+            426.12,
+            273.29
+          ],
+          "approximate_motion_direction": "right",
+          "movement_direction": "right",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.864,
+          "close_to_vehicle_zone": true,
+          "camera": "unknown",
+          "source_incident_id": "incident_0001",
+          "group_track_id": "unknown-3"
+        },
+        {
+          "track_id": 4,
+          "class_name": "person",
+          "class_id": 0,
+          "first_seen_time_sec": 9.5,
+          "last_seen_time_sec": 11.5,
+          "dwell_time_sec": 2.0,
+          "frame_count": 5,
+          "consecutive_frame_count_max": 5,
+          "max_consecutive_frames": 5,
+          "confidence_avg": 0.837,
+          "confidence_max": 0.906,
+          "bbox_first": [
+            398.84,
+            25.18,
+            469.38,
+            208.55
+          ],
+          "bbox_last": [
+            397.56,
+            0.63,
+            532.31,
+            276.2
+          ],
+          "bbox_largest": [
+            397.56,
+            0.63,
+            532.31,
+            276.2
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            391.14,
+            1.09,
+            518.18,
+            270.78
+          ],
+          "approximate_motion_direction": "down_right",
+          "movement_direction": "down_right",
+          "entered_and_exited_quickly": true,
+          "proximity_score": 0.651,
+          "close_to_vehicle_zone": true,
+          "camera": "unknown",
+          "source_incident_id": "incident_0001",
+          "group_track_id": "unknown-4"
+        }
+      ],
+      "object_persistence_summary": {
+        "persons": {
+          "track_count": 1,
+          "max_dwell_time_sec": 2.0,
+          "max_consecutive_frames": 5,
+          "long_linger_detected": false,
+          "brief_only": true,
+          "passby_detected": true,
+          "lingering_detected": false,
+          "approaching_detected": true,
+          "irrelevant_distant": false
+        },
+        "vehicles": {
+          "track_count": 3,
+          "max_dwell_time_sec": 8.5,
+          "max_consecutive_frames": 18,
+          "long_linger_detected": true,
+          "brief_only": false,
+          "passby_detected": false,
+          "lingering_detected": true,
+          "approaching_detected": false,
+          "irrelevant_distant": false
+        }
+      },
+      "brief_vehicle_only": false,
+      "brief_person_only": false,
+      "lingering_person_detected": false,
+      "lingering_vehicle_detected": true,
+      "person_passby_detected": true,
+      "person_lingering_detected": false,
+      "vehicle_passby_detected": false,
+      "vehicle_lingering_detected": true,
+      "normal_passing_traffic_evidence": false,
+      "person_near_only": false,
+      "person_passby_evidence": true,
+      "person_interaction_evidence": false,
+      "contact_evidence_level": "HIGH",
+      "impact_evidence_level": "LOW",
+      "important_requires_hard_evidence": true,
+      "important_evidence_found": true,
+      "severity_cap_applied": false,
+      "severity_cap_reason": "",
+      "timeline_markers": [
+        {
+          "time_sec": 1.0,
+          "frame_index": 30,
+          "type": "event_started",
+          "severity": "NEUTRAL",
+          "label": "Event started",
+          "description": "Mimir detected activity worth reviewing."
+        },
+        {
+          "time_sec": 9.5,
+          "frame_index": 285,
+          "type": "person_detected",
+          "severity": "REVIEW",
+          "label": "Person entered view",
+          "description": "A person was detected during the event."
+        },
+        {
+          "time_sec": 10.5,
+          "frame_index": 315,
+          "type": "possible_contact",
+          "severity": "IMPORTANT",
+          "label": "Possible contact",
+          "description": "Close object movement suggests possible contact with the parked vehicle."
+        },
+        {
+          "time_sec": 10.5,
+          "frame_index": 315,
+          "type": "event_peak",
+          "severity": "REVIEW",
+          "label": "Highest activity",
+          "description": "This was the most active moment in the event."
+        },
+        {
+          "time_sec": 25.0,
+          "frame_index": 750,
+          "type": "event_ended",
+          "severity": "NEUTRAL",
+          "label": "Event ended",
+          "description": "The reviewable activity ended."
+        }
+      ],
+      "timeline_quality": {
+        "markers_before_cleanup": 6,
+        "markers_after_cleanup": 5,
+        "cleanup_applied": true
+      },
+      "hero_thumbnail": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0001\\hero_thumbnail.jpg",
+      "thumbnail": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0001\\hero_thumbnail.jpg",
+      "start_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0001\\start.jpg",
+      "best_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0001\\best.jpg",
+      "end_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0001\\end.jpg",
+      "contact_sheet": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0001\\contact_sheet.jpg",
+      "classification_debug": {
+        "ai_decision": "REVIEW",
+        "local_rule_severity": "IMPORTANT",
+        "ai_recommended_severity": "REVIEW",
+        "ai_confidence": 0.62,
+        "final_decision_source": "local_rules",
+        "ai_allowed_to_change": false,
+        "ai_blocked_reason": "AI downgrade blocked by protected local crash/contact/motion evidence",
+        "ai_review_skipped_reason": "",
+        "event_type": "person_near_vehicle",
+        "pre_escalation_severity": "IMPORTANT",
+        "final_severity": "IMPORTANT",
+        "impact_level": "LOW",
+        "impact_score": 0.37,
+        "possible_impact": false,
+        "crash_safety_triggered": false,
+        "motion_triggered": false,
+        "trigger_reasons": [],
+        "contact_level": "HIGH",
+        "contact_score": 0.79,
+        "possible_contact": true,
+        "contact_reasons": [
+          "object detected very close to the parked vehicle",
+          "local edge motion suggests possible side contact",
+          "person close to vehicle during contact-like movement",
+          "vehicle close to POV vehicle during contact-like movement"
+        ],
+        "impact_reasons": [
+          "nearby or large object activity suggests possible contact event"
+        ],
+        "severity_reasons": [
+          "contact_level=HIGH",
+          "possible_contact with high contact_score",
+          "AI visible_person=true",
+          "lingering vehicle detected",
+          "timeline marker indicates IMPORTANT possible contact or impact",
+          "AI did not override contact safety signals"
+        ],
+        "brief_vehicle_only": false,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": true,
+        "normal_passing_traffic_evidence": false,
+        "person_passby_detected": true,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": true,
+        "person_near_only": false,
+        "person_passby_evidence": true,
+        "person_interaction_evidence": false,
+        "contact_evidence_level": "HIGH",
+        "impact_evidence_level": "LOW",
+        "important_requires_hard_evidence": true,
+        "important_evidence_found": true,
+        "severity_cap_applied": false,
+        "severity_cap_reason": "",
+        "passby_logic_applied": false,
+        "passby_logic_reason": "",
+        "escalation_applied": false,
+        "grouping_version": "grouped_incidents_v1",
+        "group_severity": "IMPORTANT",
+        "grouped_camera_incident_count": 1,
+        "prepass_motion_score": 18.47,
+        "prepass_candidate_reason": "strong motion or scene-change spike; useful Sentry/Saved event metadata; source metadata or filename suggests crash/contact importance; prepass found brief object presence; prepass score above deep-analysis threshold",
+        "prepass_severity_hint": "IMPORTANT",
+        "deep_analysis_performed": true,
+        "skipped_reason": ""
+      },
+      "created_at": "2026-07-04T18:48:11",
+      "tesla_event_raw": {},
+      "tesla_event_timestamp": null,
+      "tesla_event_reason": null,
+      "tesla_event_city": null,
+      "tesla_event_est_lat": null,
+      "tesla_event_est_lon": null,
+      "tesla_event_group_id": null,
+      "tesla_camera": null,
+      "tesla_event_cameras": {},
+      "tesla_event_camera_count": 0,
+      "tesla_event_missing_cameras": [],
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "camera": "unknown",
+      "camera_group_id": "Reddit 1.mp4,Important,door ding",
+      "raw_camera_suffix": null,
+      "cameras_available": {},
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "source_clip": "C:\\Mimir\\Test\\Reddit 1.mp4,Important,door ding.mp4",
+      "event_group_id": "Reddit 1.mp4,Important,door ding",
+      "event_timestamp": null,
+      "available_cameras": [
+        "unknown"
+      ],
+      "primary_camera": "unknown",
+      "camera_clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\Reddit 1.mp4,Important,door ding.mp4",
+          "filename": "Reddit 1.mp4,Important,door ding.mp4",
+          "duration_sec": 28.8,
+          "exists": true
+        }
+      ],
+      "camera_count": 1,
+      "grouped_camera_incident_count": 1,
+      "grouping_version": "grouped_incidents_v1",
+      "prepass_motion_score": 18.47,
+      "prepass_candidate_reason": "strong motion or scene-change spike; useful Sentry/Saved event metadata; source metadata or filename suggests crash/contact importance; prepass found brief object presence; prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IMPORTANT",
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    },
+    {
+      "id": "incident_0002",
+      "original_source_video": "C:\\Mimir\\Test\\reddit 3.mp4",
+      "source_video": "C:\\Mimir\\Test\\reddit 3.mp4",
+      "video_path": "C:\\Mimir\\Test\\reddit 3.mp4",
+      "video_exists": true,
+      "storage_action_applied": "analyze_only",
+      "event_id": 0,
+      "severity": "IMPORTANT",
+      "pre_escalation_severity": "IMPORTANT",
+      "final_severity": "IMPORTANT",
+      "severity_reasons": [
+        "impact_level=HIGH",
+        "crash_safety_triggered prevents IGNORE",
+        "motion trigger found impact-like frame change",
+        "contact_level=HIGH",
+        "possible_contact with high contact_score",
+        "possible_impact with high impact_score",
+        "AI scene_type suggests contact, impact, entry, or vandalism",
+        "AI visible_impact=true",
+        "AI visible_vehicle_close=true",
+        "lingering vehicle detected",
+        "timeline marker indicates IMPORTANT possible contact or impact",
+        "AI REVIEW plus impact reasons",
+        "AI did not override contact safety signals",
+        "AI REVIEW with high-risk interaction language"
+      ],
+      "escalation_applied": false,
+      "local_evidence_summary": {
+        "motion_score": 22.36,
+        "impact_score": 0.72,
+        "impact_level": "HIGH",
+        "contact_score": 0.77,
+        "contact_level": "HIGH",
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": true,
+        "person_proximity": {
+          "persons_detected": 0,
+          "proximity_score": 14.53
+        },
+        "vehicle_proximity": {
+          "vehicles_detected": 33,
+          "proximity_score": 14.53
+        },
+        "camera_shake": 22.36,
+        "scene_change": 12.04,
+        "event_metadata": {
+          "event_score": 229.6,
+          "active_frames": 27,
+          "crash_safety_triggered": true,
+          "motion_triggered": true,
+          "possible_impact": true,
+          "possible_contact": true,
+          "trigger_reasons": [
+            "impact-like motion spike detected",
+            "vehicle-only sudden motion suggests possible front or rear impact"
+          ],
+          "impact_reasons": [
+            "impact-like motion spike detected",
+            "vehicle-only sudden motion suggests possible front or rear impact",
+            "camera shake suggests possible contact event",
+            "optical flow indicates possible sudden movement",
+            "nearby or large object activity suggests possible contact event",
+            "vehicle-only sudden motion suggests possible front or rear impact"
+          ],
+          "contact_reasons": [
+            "local edge motion suggests possible side contact",
+            "proximity plus motion spike suggests possible contact"
+          ]
+        },
+        "object_persistence": {
+          "summary": {
+            "persons": {
+              "track_count": 0,
+              "max_dwell_time_sec": 0.0,
+              "max_consecutive_frames": 0,
+              "long_linger_detected": false,
+              "brief_only": true,
+              "passby_detected": false,
+              "lingering_detected": false,
+              "approaching_detected": false,
+              "irrelevant_distant": true
+            },
+            "vehicles": {
+              "track_count": 2,
+              "max_dwell_time_sec": 14.5,
+              "max_consecutive_frames": 23,
+              "long_linger_detected": true,
+              "brief_only": false,
+              "passby_detected": false,
+              "lingering_detected": true,
+              "approaching_detected": false,
+              "irrelevant_distant": false
+            }
+          },
+          "brief_vehicle_only": false,
+          "brief_person_only": false,
+          "lingering_person_detected": false,
+          "lingering_vehicle_detected": true,
+          "person_passby_detected": false,
+          "person_lingering_detected": false,
+          "vehicle_passby_detected": false,
+          "vehicle_lingering_detected": true,
+          "normal_passing_traffic_evidence": false
+        },
+        "camera_angle_evidence": {
+          "camera": "unknown",
+          "event_group_id": "reddit 3",
+          "available_cameras": {}
+        },
+        "severity_policy": {
+          "person_near_only": false,
+          "person_passby_evidence": false,
+          "person_interaction_evidence": false,
+          "person_passby_detected": false,
+          "person_lingering_detected": false,
+          "vehicle_passby_detected": false,
+          "vehicle_lingering_detected": true,
+          "contact_evidence_level": "HIGH",
+          "impact_evidence_level": "HIGH",
+          "important_requires_hard_evidence": true,
+          "important_evidence_found": true,
+          "severity_cap_applied": false,
+          "severity_cap_reason": ""
+        }
+      },
+      "final_decision_source": "local_rules",
+      "ai_evidence_review": {
+        "scene_type": "possible_contact",
+        "visible_person": false,
+        "visible_vehicle_close": true,
+        "visible_contact": false,
+        "visible_impact": true,
+        "normal_passing_traffic": false,
+        "evidence": [
+          "Vehicle shows signs of impact",
+          "No clear contact with another vehicle shown",
+          "possible sudden movement detected by frame motion analysis",
+          "possible close contact detected by proximity and local motion analysis"
+        ],
+        "concerns": [
+          "Impact is not directly visible but possible based on damage"
+        ],
+        "recommended_severity": "REVIEW",
+        "confidence": 0.75,
+        "raw_response": "{\n  \"scene_type\": \"possible_contact\",\n  \"visible_person\": false,\n  \"visible_vehicle_close\": true,\n  \"visible_contact\": false,\n  \"visible_impact\": true,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Vehicle shows signs of impact\", \"No clear contact with another vehicle shown\"],\n  \"concerns\": [\"Impact is not directly visible but possible based on damage\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.75\n}",
+        "ai_prompt": "You are analyzing Tesla Sentry footage.\n\nThe image may be a contact sheet showing START, PEAK, and END frames from the same event.\nReview the full event sequence, not just one frame.\nDetermine what likely happened over time.\nDo not overstate certainty.\nUse the word \"possible\" when the activity is uncertain.\n\nReturn ONLY valid JSON with this exact shape:\n{\n  \"scene_type\": \"person_near_vehicle\",\n  \"visible_person\": true,\n  \"visible_vehicle_close\": false,\n  \"visible_contact\": false,\n  \"visible_impact\": false,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Person visible near the vehicle\", \"No clear door contact shown\"],\n  \"concerns\": [\"Interaction is partly occluded\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.62\n}\nDo not include markdown, code fences, or extra commentary.\n\nAllowed scene_type values are normal_traffic, person_near_vehicle, possible_contact, possible_impact, unclear.\nAllowed recommended_severity values are IMPORTANT, REVIEW, and IGNORE.\n\nIMPORTANT:\n- likely contact with vehicle\n- possible vandalism\n- person clearly interacting with door/window/handle\n- possible impact/collision\n- person lingering very close to vehicle\n\nREVIEW:\n- person near vehicle\n- vehicle stopped nearby\n- unclear movement\n- uncertain possible interaction\n\nIGNORE:\n- normal traffic\n- distant pedestrians\n- harmless movement\n- empty scene\n\nBe conservative.\nMost clips should be IGNORE.\nUse REVIEW when the event is ambiguous or worth quick human review.\nYou are not the final classifier. Return structured visual evidence only.\n\nImpact safety note:\n- This contact sheet may show a parked vehicle impact.\n- Look for sudden collision/contact with the POV vehicle.\n- Do not mark as IGNORE if there is possible impact, collision, or damage.\n- Use IMPORTANT for likely crash, contact, impact, vandalism, or damage.\n- Return valid JSON only.",
+        "ai_parse_error": false,
+        "ai_review_skipped_reason": "",
+        "severity": "REVIEW",
+        "event_type": "possible_contact",
+        "summary": "AI evidence review scene_type=possible_contact, recommended_severity=REVIEW.",
+        "recommended_action": "Review manually if needed."
+      },
+      "ai_raw_response": "{\n  \"scene_type\": \"possible_contact\",\n  \"visible_person\": false,\n  \"visible_vehicle_close\": true,\n  \"visible_contact\": false,\n  \"visible_impact\": true,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Vehicle shows signs of impact\", \"No clear contact with another vehicle shown\"],\n  \"concerns\": [\"Impact is not directly visible but possible based on damage\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.75\n}",
+      "ai_parse_error": false,
+      "ai_review_skipped_reason": "",
+      "ai_decision": "REVIEW",
+      "ai_confidence": 0.75,
+      "event_type": "possible_contact",
+      "summary": "AI evidence review scene_type=possible_contact, recommended_severity=REVIEW.",
+      "evidence": [
+        "Vehicle shows signs of impact",
+        "No clear contact with another vehicle shown",
+        "possible sudden movement detected by frame motion analysis",
+        "possible close contact detected by proximity and local motion analysis"
+      ],
+      "recommended_action": "Review manually if needed.",
+      "score": 229.6,
+      "persons": 0,
+      "vehicles": 33,
+      "active_frames": 27,
+      "video_duration_sec": 29.1,
+      "fps": 30.0,
+      "max_motion_score": 22.36,
+      "motion_spike_time_sec": 10.5,
+      "camera_shake_score": 22.36,
+      "optical_flow_score": 9.27,
+      "scene_change_score": 12.04,
+      "proximity_score": 14.53,
+      "local_motion_score": 34.32,
+      "contact_time_sec": 10.5,
+      "contact_score": 0.77,
+      "contact_level": "HIGH",
+      "possible_contact": true,
+      "contact_reasons": [
+        "local edge motion suggests possible side contact",
+        "proximity plus motion spike suggests possible contact"
+      ],
+      "impact_score": 0.72,
+      "impact_level": "HIGH",
+      "possible_impact": true,
+      "crash_safety_triggered": true,
+      "motion_triggered": true,
+      "trigger_reasons": [
+        "impact-like motion spike detected",
+        "vehicle-only sudden motion suggests possible front or rear impact"
+      ],
+      "impact_reasons": [
+        "impact-like motion spike detected",
+        "vehicle-only sudden motion suggests possible front or rear impact",
+        "camera shake suggests possible contact event",
+        "optical flow indicates possible sudden movement",
+        "nearby or large object activity suggests possible contact event",
+        "vehicle-only sudden motion suggests possible front or rear impact"
+      ],
+      "object_tracks": [
+        {
+          "track_id": 1,
+          "class_name": "vehicle",
+          "class_id": 2,
+          "first_seen_time_sec": 0.5,
+          "last_seen_time_sec": 13.5,
+          "dwell_time_sec": 13.0,
+          "frame_count": 23,
+          "consecutive_frame_count_max": 23,
+          "max_consecutive_frames": 23,
+          "confidence_avg": 0.601,
+          "confidence_max": 0.795,
+          "bbox_first": [
+            58.43,
+            0.0,
+            552.08,
+            284.15
+          ],
+          "bbox_last": [
+            21.49,
+            0.24,
+            552.55,
+            285.05
+          ],
+          "bbox_largest": [
+            11.97,
+            0.37,
+            552.83,
+            285.28
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            11.97,
+            0.37,
+            552.83,
+            285.28
+          ],
+          "approximate_motion_direction": "left",
+          "movement_direction": "left",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.986,
+          "close_to_vehicle_zone": true,
+          "camera": "unknown",
+          "source_incident_id": "incident_0002",
+          "group_track_id": "unknown-1"
+        },
+        {
+          "track_id": 2,
+          "class_name": "vehicle",
+          "class_id": 7,
+          "first_seen_time_sec": 0.5,
+          "last_seen_time_sec": 15.0,
+          "dwell_time_sec": 14.5,
+          "frame_count": 10,
+          "consecutive_frame_count_max": 6,
+          "max_consecutive_frames": 6,
+          "confidence_avg": 0.495,
+          "confidence_max": 0.59,
+          "bbox_first": [
+            68.35,
+            0.26,
+            552.76,
+            284.4
+          ],
+          "bbox_last": [
+            14.72,
+            0.0,
+            554.0,
+            285.4
+          ],
+          "bbox_largest": [
+            10.75,
+            0.0,
+            553.85,
+            285.18
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            10.75,
+            0.0,
+            553.85,
+            285.18
+          ],
+          "approximate_motion_direction": "left",
+          "movement_direction": "left",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.986,
+          "close_to_vehicle_zone": true,
+          "camera": "unknown",
+          "source_incident_id": "incident_0002",
+          "group_track_id": "unknown-2"
+        }
+      ],
+      "object_persistence_summary": {
+        "persons": {
+          "track_count": 0,
+          "max_dwell_time_sec": 0.0,
+          "max_consecutive_frames": 0,
+          "long_linger_detected": false,
+          "brief_only": true,
+          "passby_detected": false,
+          "lingering_detected": false,
+          "approaching_detected": false,
+          "irrelevant_distant": true
+        },
+        "vehicles": {
+          "track_count": 2,
+          "max_dwell_time_sec": 14.5,
+          "max_consecutive_frames": 23,
+          "long_linger_detected": true,
+          "brief_only": false,
+          "passby_detected": false,
+          "lingering_detected": true,
+          "approaching_detected": false,
+          "irrelevant_distant": false
+        }
+      },
+      "brief_vehicle_only": false,
+      "brief_person_only": false,
+      "lingering_person_detected": false,
+      "lingering_vehicle_detected": true,
+      "person_passby_detected": false,
+      "person_lingering_detected": false,
+      "vehicle_passby_detected": false,
+      "vehicle_lingering_detected": true,
+      "normal_passing_traffic_evidence": false,
+      "person_near_only": false,
+      "person_passby_evidence": false,
+      "person_interaction_evidence": false,
+      "contact_evidence_level": "HIGH",
+      "impact_evidence_level": "HIGH",
+      "important_requires_hard_evidence": true,
+      "important_evidence_found": true,
+      "severity_cap_applied": false,
+      "severity_cap_reason": "",
+      "timeline_markers": [
+        {
+          "time_sec": 0.5,
+          "frame_index": 15,
+          "type": "event_started",
+          "severity": "NEUTRAL",
+          "label": "Event started",
+          "description": "Mimir detected activity worth reviewing."
+        },
+        {
+          "time_sec": 10.5,
+          "frame_index": 315,
+          "type": "possible_impact",
+          "severity": "IMPORTANT",
+          "label": "Possible impact",
+          "description": "Sudden motion or scene change suggests possible contact or collision."
+        },
+        {
+          "time_sec": 10.5,
+          "frame_index": 315,
+          "type": "possible_contact",
+          "severity": "IMPORTANT",
+          "label": "Possible contact",
+          "description": "Close object movement suggests possible contact with the parked vehicle."
+        },
+        {
+          "time_sec": 10.5,
+          "frame_index": 315,
+          "type": "event_peak",
+          "severity": "REVIEW",
+          "label": "Highest activity",
+          "description": "This was the most active moment in the event."
+        },
+        {
+          "time_sec": 15.0,
+          "frame_index": 450,
+          "type": "event_ended",
+          "severity": "NEUTRAL",
+          "label": "Event ended",
+          "description": "The reviewable activity ended."
+        }
+      ],
+      "timeline_quality": {
+        "markers_before_cleanup": 6,
+        "markers_after_cleanup": 5,
+        "cleanup_applied": true
+      },
+      "hero_thumbnail": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0002\\hero_thumbnail.jpg",
+      "thumbnail": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0002\\hero_thumbnail.jpg",
+      "start_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0002\\start.jpg",
+      "best_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0002\\best.jpg",
+      "end_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0002\\end.jpg",
+      "contact_sheet": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0002\\contact_sheet.jpg",
+      "classification_debug": {
+        "ai_decision": "REVIEW",
+        "local_rule_severity": "IMPORTANT",
+        "ai_recommended_severity": "REVIEW",
+        "ai_confidence": 0.75,
+        "final_decision_source": "local_rules",
+        "ai_allowed_to_change": false,
+        "ai_blocked_reason": "AI downgrade blocked by protected local crash/contact/motion evidence",
+        "ai_review_skipped_reason": "",
+        "event_type": "possible_contact",
+        "pre_escalation_severity": "IMPORTANT",
+        "final_severity": "IMPORTANT",
+        "impact_level": "HIGH",
+        "impact_score": 0.72,
+        "possible_impact": true,
+        "crash_safety_triggered": true,
+        "motion_triggered": true,
+        "trigger_reasons": [
+          "impact-like motion spike detected",
+          "vehicle-only sudden motion suggests possible front or rear impact"
+        ],
+        "contact_level": "HIGH",
+        "contact_score": 0.77,
+        "possible_contact": true,
+        "contact_reasons": [
+          "local edge motion suggests possible side contact",
+          "proximity plus motion spike suggests possible contact"
+        ],
+        "impact_reasons": [
+          "impact-like motion spike detected",
+          "vehicle-only sudden motion suggests possible front or rear impact",
+          "camera shake suggests possible contact event",
+          "optical flow indicates possible sudden movement",
+          "nearby or large object activity suggests possible contact event",
+          "vehicle-only sudden motion suggests possible front or rear impact"
+        ],
+        "severity_reasons": [
+          "impact_level=HIGH",
+          "crash_safety_triggered prevents IGNORE",
+          "motion trigger found impact-like frame change",
+          "contact_level=HIGH",
+          "possible_contact with high contact_score",
+          "possible_impact with high impact_score",
+          "AI scene_type suggests contact, impact, entry, or vandalism",
+          "AI visible_impact=true",
+          "AI visible_vehicle_close=true",
+          "lingering vehicle detected",
+          "timeline marker indicates IMPORTANT possible contact or impact",
+          "AI REVIEW plus impact reasons",
+          "AI did not override contact safety signals",
+          "AI REVIEW with high-risk interaction language"
+        ],
+        "brief_vehicle_only": false,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": true,
+        "normal_passing_traffic_evidence": false,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": true,
+        "person_near_only": false,
+        "person_passby_evidence": false,
+        "person_interaction_evidence": false,
+        "contact_evidence_level": "HIGH",
+        "impact_evidence_level": "HIGH",
+        "important_requires_hard_evidence": true,
+        "important_evidence_found": true,
+        "severity_cap_applied": false,
+        "severity_cap_reason": "",
+        "passby_logic_applied": false,
+        "passby_logic_reason": "",
+        "escalation_applied": false,
+        "grouping_version": "grouped_incidents_v1",
+        "group_severity": "IMPORTANT",
+        "grouped_camera_incident_count": 1,
+        "prepass_motion_score": 40.89,
+        "prepass_candidate_reason": "strong motion or scene-change spike; prepass found lingering vehicle; prepass score above deep-analysis threshold",
+        "prepass_severity_hint": "IGNORE",
+        "deep_analysis_performed": true,
+        "skipped_reason": ""
+      },
+      "created_at": "2026-07-04T18:48:19",
+      "tesla_event_raw": {},
+      "tesla_event_timestamp": null,
+      "tesla_event_reason": null,
+      "tesla_event_city": null,
+      "tesla_event_est_lat": null,
+      "tesla_event_est_lon": null,
+      "tesla_event_group_id": null,
+      "tesla_camera": null,
+      "tesla_event_cameras": {},
+      "tesla_event_camera_count": 0,
+      "tesla_event_missing_cameras": [],
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "camera": "unknown",
+      "camera_group_id": "reddit 3",
+      "raw_camera_suffix": null,
+      "cameras_available": {},
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "source_clip": "C:\\Mimir\\Test\\reddit 3.mp4",
+      "event_group_id": "reddit 3",
+      "event_timestamp": null,
+      "available_cameras": [
+        "unknown"
+      ],
+      "primary_camera": "unknown",
+      "camera_clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\reddit 3.mp4",
+          "filename": "reddit 3.mp4",
+          "duration_sec": 29.1,
+          "exists": true
+        }
+      ],
+      "camera_count": 1,
+      "grouped_camera_incident_count": 1,
+      "grouping_version": "grouped_incidents_v1",
+      "prepass_motion_score": 40.89,
+      "prepass_candidate_reason": "strong motion or scene-change spike; prepass found lingering vehicle; prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IGNORE",
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    },
+    {
+      "id": "incident_0003",
+      "original_source_video": "C:\\Mimir\\Test\\reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+      "source_video": "C:\\Mimir\\Test\\reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+      "video_path": "C:\\Mimir\\Test\\reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+      "video_exists": true,
+      "storage_action_applied": "analyze_only",
+      "event_id": 0,
+      "severity": "IMPORTANT",
+      "pre_escalation_severity": "IMPORTANT",
+      "final_severity": "IMPORTANT",
+      "severity_reasons": [
+        "impact_level=HIGH",
+        "crash_safety_triggered prevents IGNORE",
+        "motion trigger found impact-like frame change",
+        "possible_impact with high impact_score",
+        "AI scene_type suggests contact, impact, entry, or vandalism",
+        "AI evidence suggests possible contact with vehicle",
+        "AI visible_impact=true",
+        "AI visible_vehicle_close=true",
+        "lingering vehicle detected",
+        "timeline marker indicates IMPORTANT possible contact or impact",
+        "AI REVIEW plus impact reasons",
+        "AI REVIEW with high-risk interaction language"
+      ],
+      "escalation_applied": false,
+      "local_evidence_summary": {
+        "motion_score": 13.29,
+        "impact_score": 0.72,
+        "impact_level": "HIGH",
+        "contact_score": 0.41,
+        "contact_level": "LOW",
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": true,
+        "person_proximity": {
+          "persons_detected": 0,
+          "proximity_score": 4.87
+        },
+        "vehicle_proximity": {
+          "vehicles_detected": 43,
+          "proximity_score": 4.87
+        },
+        "camera_shake": 13.29,
+        "scene_change": 7.24,
+        "event_metadata": {
+          "event_score": 59.76,
+          "active_frames": 36,
+          "crash_safety_triggered": true,
+          "motion_triggered": true,
+          "possible_impact": true,
+          "possible_contact": false,
+          "trigger_reasons": [
+            "vehicle-only sudden motion suggests possible front or rear impact"
+          ],
+          "impact_reasons": [
+            "vehicle-only sudden motion suggests possible front or rear impact",
+            "optical flow indicates possible sudden movement",
+            "vehicle-only sudden motion suggests possible front or rear impact"
+          ],
+          "contact_reasons": [
+            "local edge motion suggests possible side contact"
+          ]
+        },
+        "object_persistence": {
+          "summary": {
+            "persons": {
+              "track_count": 0,
+              "max_dwell_time_sec": 0.0,
+              "max_consecutive_frames": 0,
+              "long_linger_detected": false,
+              "brief_only": true,
+              "passby_detected": false,
+              "lingering_detected": false,
+              "approaching_detected": false,
+              "irrelevant_distant": true
+            },
+            "vehicles": {
+              "track_count": 3,
+              "max_dwell_time_sec": 17.5,
+              "max_consecutive_frames": 18,
+              "long_linger_detected": true,
+              "brief_only": false,
+              "passby_detected": false,
+              "lingering_detected": true,
+              "approaching_detected": false,
+              "irrelevant_distant": false
+            }
+          },
+          "brief_vehicle_only": false,
+          "brief_person_only": false,
+          "lingering_person_detected": false,
+          "lingering_vehicle_detected": true,
+          "person_passby_detected": false,
+          "person_lingering_detected": false,
+          "vehicle_passby_detected": false,
+          "vehicle_lingering_detected": true,
+          "normal_passing_traffic_evidence": false
+        },
+        "camera_angle_evidence": {
+          "camera": "unknown",
+          "event_group_id": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended",
+          "available_cameras": {}
+        },
+        "severity_policy": {
+          "person_near_only": false,
+          "person_passby_evidence": false,
+          "person_interaction_evidence": false,
+          "person_passby_detected": false,
+          "person_lingering_detected": false,
+          "vehicle_passby_detected": false,
+          "vehicle_lingering_detected": true,
+          "contact_evidence_level": "LOW",
+          "impact_evidence_level": "HIGH",
+          "important_requires_hard_evidence": true,
+          "important_evidence_found": true,
+          "severity_cap_applied": false,
+          "severity_cap_reason": ""
+        }
+      },
+      "final_decision_source": "local_rules",
+      "ai_evidence_review": {
+        "scene_type": "possible_contact",
+        "visible_person": false,
+        "visible_vehicle_close": true,
+        "visible_contact": false,
+        "visible_impact": true,
+        "normal_passing_traffic": false,
+        "evidence": [
+          "Vehicle appears to be in contact with another vehicle",
+          "Damage visible on the front of the white car",
+          "possible sudden movement detected by frame motion analysis"
+        ],
+        "concerns": [
+          "Contact is not directly visible, but damage suggests impact"
+        ],
+        "recommended_severity": "REVIEW",
+        "confidence": 0.75,
+        "raw_response": "{\n  \"scene_type\": \"possible_contact\",\n  \"visible_person\": false,\n  \"visible_vehicle_close\": true,\n  \"visible_contact\": false,\n  \"visible_impact\": true,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Vehicle appears to be in contact with another vehicle\", \"Damage visible on the front of the white car\"],\n  \"concerns\": [\"Contact is not directly visible, but damage suggests impact\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.75\n}",
+        "ai_prompt": "You are analyzing Tesla Sentry footage.\n\nThe image may be a contact sheet showing START, PEAK, and END frames from the same event.\nReview the full event sequence, not just one frame.\nDetermine what likely happened over time.\nDo not overstate certainty.\nUse the word \"possible\" when the activity is uncertain.\n\nReturn ONLY valid JSON with this exact shape:\n{\n  \"scene_type\": \"person_near_vehicle\",\n  \"visible_person\": true,\n  \"visible_vehicle_close\": false,\n  \"visible_contact\": false,\n  \"visible_impact\": false,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Person visible near the vehicle\", \"No clear door contact shown\"],\n  \"concerns\": [\"Interaction is partly occluded\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.62\n}\nDo not include markdown, code fences, or extra commentary.\n\nAllowed scene_type values are normal_traffic, person_near_vehicle, possible_contact, possible_impact, unclear.\nAllowed recommended_severity values are IMPORTANT, REVIEW, and IGNORE.\n\nIMPORTANT:\n- likely contact with vehicle\n- possible vandalism\n- person clearly interacting with door/window/handle\n- possible impact/collision\n- person lingering very close to vehicle\n\nREVIEW:\n- person near vehicle\n- vehicle stopped nearby\n- unclear movement\n- uncertain possible interaction\n\nIGNORE:\n- normal traffic\n- distant pedestrians\n- harmless movement\n- empty scene\n\nBe conservative.\nMost clips should be IGNORE.\nUse REVIEW when the event is ambiguous or worth quick human review.\nYou are not the final classifier. Return structured visual evidence only.\n\nImpact safety note:\n- This contact sheet may show a parked vehicle impact.\n- Look for sudden collision/contact with the POV vehicle.\n- Do not mark as IGNORE if there is possible impact, collision, or damage.\n- Use IMPORTANT for likely crash, contact, impact, vandalism, or damage.\n- Return valid JSON only.",
+        "ai_parse_error": false,
+        "ai_review_skipped_reason": "",
+        "severity": "REVIEW",
+        "event_type": "possible_contact",
+        "summary": "AI evidence review scene_type=possible_contact, recommended_severity=REVIEW.",
+        "recommended_action": "Review manually if needed."
+      },
+      "ai_raw_response": "{\n  \"scene_type\": \"possible_contact\",\n  \"visible_person\": false,\n  \"visible_vehicle_close\": true,\n  \"visible_contact\": false,\n  \"visible_impact\": true,\n  \"normal_passing_traffic\": false,\n  \"evidence\": [\"Vehicle appears to be in contact with another vehicle\", \"Damage visible on the front of the white car\"],\n  \"concerns\": [\"Contact is not directly visible, but damage suggests impact\"],\n  \"recommended_severity\": \"REVIEW\",\n  \"confidence\": 0.75\n}",
+      "ai_parse_error": false,
+      "ai_review_skipped_reason": "",
+      "ai_decision": "REVIEW",
+      "ai_confidence": 0.75,
+      "event_type": "possible_contact",
+      "summary": "AI evidence review scene_type=possible_contact, recommended_severity=REVIEW.",
+      "evidence": [
+        "Vehicle appears to be in contact with another vehicle",
+        "Damage visible on the front of the white car",
+        "possible sudden movement detected by frame motion analysis"
+      ],
+      "recommended_action": "Review manually if needed.",
+      "score": 59.8,
+      "persons": 0,
+      "vehicles": 43,
+      "active_frames": 36,
+      "video_duration_sec": 29.93,
+      "fps": 30.0,
+      "max_motion_score": 13.29,
+      "motion_spike_time_sec": 12.5,
+      "camera_shake_score": 13.29,
+      "optical_flow_score": 3.9,
+      "scene_change_score": 7.24,
+      "proximity_score": 4.87,
+      "local_motion_score": 9.05,
+      "contact_time_sec": 12.5,
+      "contact_score": 0.41,
+      "contact_level": "LOW",
+      "possible_contact": false,
+      "contact_reasons": [
+        "local edge motion suggests possible side contact"
+      ],
+      "impact_score": 0.72,
+      "impact_level": "HIGH",
+      "possible_impact": true,
+      "crash_safety_triggered": true,
+      "motion_triggered": true,
+      "trigger_reasons": [
+        "vehicle-only sudden motion suggests possible front or rear impact"
+      ],
+      "impact_reasons": [
+        "vehicle-only sudden motion suggests possible front or rear impact",
+        "optical flow indicates possible sudden movement",
+        "vehicle-only sudden motion suggests possible front or rear impact"
+      ],
+      "object_tracks": [
+        {
+          "track_id": 1,
+          "class_name": "vehicle",
+          "class_id": 2,
+          "first_seen_time_sec": 12.0,
+          "last_seen_time_sec": 29.5,
+          "dwell_time_sec": 17.5,
+          "frame_count": 19,
+          "consecutive_frame_count_max": 18,
+          "max_consecutive_frames": 18,
+          "confidence_avg": 0.772,
+          "confidence_max": 0.864,
+          "bbox_first": [
+            179.3,
+            1.53,
+            341.94,
+            108.46
+          ],
+          "bbox_last": [
+            190.42,
+            0.0,
+            346.02,
+            63.17
+          ],
+          "bbox_largest": [
+            193.62,
+            2.08,
+            386.51,
+            126.6
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            193.62,
+            2.08,
+            386.51,
+            126.6
+          ],
+          "approximate_motion_direction": "up",
+          "movement_direction": "up",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.7,
+          "close_to_vehicle_zone": true,
+          "camera": "unknown",
+          "source_incident_id": "incident_0003",
+          "group_track_id": "unknown-1"
+        },
+        {
+          "track_id": 2,
+          "class_name": "vehicle",
+          "class_id": 2,
+          "first_seen_time_sec": 12.0,
+          "last_seen_time_sec": 29.5,
+          "dwell_time_sec": 17.5,
+          "frame_count": 18,
+          "consecutive_frame_count_max": 17,
+          "max_consecutive_frames": 17,
+          "confidence_avg": 0.663,
+          "confidence_max": 0.805,
+          "bbox_first": [
+            308.75,
+            1.1,
+            478.3,
+            87.84
+          ],
+          "bbox_last": [
+            324.4,
+            0.04,
+            401.48,
+            36.02
+          ],
+          "bbox_largest": [
+            308.75,
+            1.1,
+            478.3,
+            87.84
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            308.75,
+            1.1,
+            478.3,
+            87.84
+          ],
+          "approximate_motion_direction": "up_left",
+          "movement_direction": "up_left",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.444,
+          "close_to_vehicle_zone": false,
+          "camera": "unknown",
+          "source_incident_id": "incident_0003",
+          "group_track_id": "unknown-2"
+        },
+        {
+          "track_id": 3,
+          "class_name": "vehicle",
+          "class_id": 2,
+          "first_seen_time_sec": 22.0,
+          "last_seen_time_sec": 29.5,
+          "dwell_time_sec": 7.5,
+          "frame_count": 6,
+          "consecutive_frame_count_max": 4,
+          "max_consecutive_frames": 4,
+          "confidence_avg": 0.589,
+          "confidence_max": 0.651,
+          "bbox_first": [
+            409.06,
+            20.98,
+            483.88,
+            58.74
+          ],
+          "bbox_last": [
+            408.45,
+            22.47,
+            493.2,
+            72.34
+          ],
+          "bbox_largest": [
+            408.45,
+            22.47,
+            493.2,
+            72.34
+          ],
+          "closest_bbox_to_vehicle_zone": [
+            428.76,
+            29.73,
+            498.23,
+            78.67
+          ],
+          "approximate_motion_direction": "mostly_static",
+          "movement_direction": "mostly_static",
+          "entered_and_exited_quickly": false,
+          "proximity_score": 0.352,
+          "close_to_vehicle_zone": false,
+          "camera": "unknown",
+          "source_incident_id": "incident_0003",
+          "group_track_id": "unknown-3"
+        }
+      ],
+      "object_persistence_summary": {
+        "persons": {
+          "track_count": 0,
+          "max_dwell_time_sec": 0.0,
+          "max_consecutive_frames": 0,
+          "long_linger_detected": false,
+          "brief_only": true,
+          "passby_detected": false,
+          "lingering_detected": false,
+          "approaching_detected": false,
+          "irrelevant_distant": true
+        },
+        "vehicles": {
+          "track_count": 3,
+          "max_dwell_time_sec": 17.5,
+          "max_consecutive_frames": 18,
+          "long_linger_detected": true,
+          "brief_only": false,
+          "passby_detected": false,
+          "lingering_detected": true,
+          "approaching_detected": false,
+          "irrelevant_distant": false
+        }
+      },
+      "brief_vehicle_only": false,
+      "brief_person_only": false,
+      "lingering_person_detected": false,
+      "lingering_vehicle_detected": true,
+      "person_passby_detected": false,
+      "person_lingering_detected": false,
+      "vehicle_passby_detected": false,
+      "vehicle_lingering_detected": true,
+      "normal_passing_traffic_evidence": false,
+      "person_near_only": false,
+      "person_passby_evidence": false,
+      "person_interaction_evidence": false,
+      "contact_evidence_level": "LOW",
+      "impact_evidence_level": "HIGH",
+      "important_requires_hard_evidence": true,
+      "important_evidence_found": true,
+      "severity_cap_applied": false,
+      "severity_cap_reason": "",
+      "timeline_markers": [
+        {
+          "time_sec": 12.0,
+          "frame_index": 360,
+          "type": "event_started",
+          "severity": "NEUTRAL",
+          "label": "Event started",
+          "description": "Mimir detected activity worth reviewing."
+        },
+        {
+          "time_sec": 12.5,
+          "frame_index": 375,
+          "type": "possible_impact",
+          "severity": "IMPORTANT",
+          "label": "Possible impact",
+          "description": "Sudden motion or scene change suggests possible contact or collision."
+        },
+        {
+          "time_sec": 12.5,
+          "frame_index": 375,
+          "type": "event_peak",
+          "severity": "REVIEW",
+          "label": "Highest activity",
+          "description": "This was the most active moment in the event."
+        },
+        {
+          "time_sec": 29.5,
+          "frame_index": 885,
+          "type": "event_ended",
+          "severity": "NEUTRAL",
+          "label": "Event ended",
+          "description": "The reviewable activity ended."
+        }
+      ],
+      "timeline_quality": {
+        "markers_before_cleanup": 4,
+        "markers_after_cleanup": 4,
+        "cleanup_applied": false
+      },
+      "hero_thumbnail": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0003\\hero_thumbnail.jpg",
+      "thumbnail": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0003\\hero_thumbnail.jpg",
+      "start_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0003\\start.jpg",
+      "best_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0003\\best.jpg",
+      "end_frame_image": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0003\\end.jpg",
+      "contact_sheet": "C:\\Mimir_Backend\\MimirOutput\\incidents\\incident_0003\\contact_sheet.jpg",
+      "classification_debug": {
+        "ai_decision": "REVIEW",
+        "local_rule_severity": "IMPORTANT",
+        "ai_recommended_severity": "REVIEW",
+        "ai_confidence": 0.75,
+        "final_decision_source": "local_rules",
+        "ai_allowed_to_change": false,
+        "ai_blocked_reason": "AI downgrade blocked by protected local crash/contact/motion evidence",
+        "ai_review_skipped_reason": "",
+        "event_type": "possible_contact",
+        "pre_escalation_severity": "IMPORTANT",
+        "final_severity": "IMPORTANT",
+        "impact_level": "HIGH",
+        "impact_score": 0.72,
+        "possible_impact": true,
+        "crash_safety_triggered": true,
+        "motion_triggered": true,
+        "trigger_reasons": [
+          "vehicle-only sudden motion suggests possible front or rear impact"
+        ],
+        "contact_level": "LOW",
+        "contact_score": 0.41,
+        "possible_contact": false,
+        "contact_reasons": [
+          "local edge motion suggests possible side contact"
+        ],
+        "impact_reasons": [
+          "vehicle-only sudden motion suggests possible front or rear impact",
+          "optical flow indicates possible sudden movement",
+          "vehicle-only sudden motion suggests possible front or rear impact"
+        ],
+        "severity_reasons": [
+          "impact_level=HIGH",
+          "crash_safety_triggered prevents IGNORE",
+          "motion trigger found impact-like frame change",
+          "possible_impact with high impact_score",
+          "AI scene_type suggests contact, impact, entry, or vandalism",
+          "AI evidence suggests possible contact with vehicle",
+          "AI visible_impact=true",
+          "AI visible_vehicle_close=true",
+          "lingering vehicle detected",
+          "timeline marker indicates IMPORTANT possible contact or impact",
+          "AI REVIEW plus impact reasons",
+          "AI REVIEW with high-risk interaction language"
+        ],
+        "brief_vehicle_only": false,
+        "brief_person_only": false,
+        "lingering_person_detected": false,
+        "lingering_vehicle_detected": true,
+        "normal_passing_traffic_evidence": false,
+        "person_passby_detected": false,
+        "person_lingering_detected": false,
+        "vehicle_passby_detected": false,
+        "vehicle_lingering_detected": true,
+        "person_near_only": false,
+        "person_passby_evidence": false,
+        "person_interaction_evidence": false,
+        "contact_evidence_level": "LOW",
+        "impact_evidence_level": "HIGH",
+        "important_requires_hard_evidence": true,
+        "important_evidence_found": true,
+        "severity_cap_applied": false,
+        "severity_cap_reason": "",
+        "passby_logic_applied": false,
+        "passby_logic_reason": "",
+        "escalation_applied": false,
+        "grouping_version": "grouped_incidents_v1",
+        "group_severity": "IMPORTANT",
+        "grouped_camera_incident_count": 1,
+        "prepass_motion_score": 15.3,
+        "prepass_candidate_reason": "useful Sentry/Saved event metadata; source metadata or filename suggests crash/contact importance; prepass found brief object presence; prepass score above deep-analysis threshold",
+        "prepass_severity_hint": "IMPORTANT",
+        "deep_analysis_performed": true,
+        "skipped_reason": ""
+      },
+      "created_at": "2026-07-04T18:48:29",
+      "tesla_event_raw": {},
+      "tesla_event_timestamp": null,
+      "tesla_event_reason": null,
+      "tesla_event_city": null,
+      "tesla_event_est_lat": null,
+      "tesla_event_est_lon": null,
+      "tesla_event_group_id": null,
+      "tesla_camera": null,
+      "tesla_event_cameras": {},
+      "tesla_event_camera_count": 0,
+      "tesla_event_missing_cameras": [],
+      "source_category": "Generic",
+      "event_folder": "C:\\Mimir\\Test",
+      "camera": "unknown",
+      "camera_group_id": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended",
+      "raw_camera_suffix": null,
+      "cameras_available": {},
+      "event_json_path": null,
+      "source_event_timestamp": null,
+      "source_event_reason": null,
+      "source_event_city": null,
+      "source_event_est_lat": null,
+      "source_event_est_lon": null,
+      "source_event_raw": null,
+      "source_clip": "C:\\Mimir\\Test\\reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+      "event_group_id": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended",
+      "event_timestamp": null,
+      "available_cameras": [
+        "unknown"
+      ],
+      "primary_camera": "unknown",
+      "camera_clips": [
+        {
+          "camera": "unknown",
+          "path": "C:\\Mimir\\Test\\reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+          "filename": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+          "duration_sec": 29.93,
+          "exists": true
+        }
+      ],
+      "camera_count": 1,
+      "grouped_camera_incident_count": 1,
+      "grouping_version": "grouped_incidents_v1",
+      "prepass_motion_score": 15.3,
+      "prepass_candidate_reason": "useful Sentry/Saved event metadata; source metadata or filename suggests crash/contact importance; prepass found brief object presence; prepass score above deep-analysis threshold",
+      "prepass_severity_hint": "IMPORTANT",
+      "deep_analysis_performed": true,
+      "skipped_reason": ""
+    }
+  ],
+  "grouping_debug": {
+    "video_files_found": 6,
+    "event_groups_built": 6,
+    "incidents_created": 3,
+    "grouping_ratio": "3 incidents from 6 groups"
+  }
 }

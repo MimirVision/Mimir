@@ -6,10 +6,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 LATEST_SESSION = ROOT / "MimirOutput" / "latest_session.json"
+GROUPING_CONTRACT_REPORT = ROOT / "MimirOutput" / "grouping_contract_report.json"
 TEST_INPUT = r"C:\mimir\test"
 
 
 class CriticalRegressionDetected(Exception):
+    pass
+
+
+class GroupingContractFailed(Exception):
     pass
 
 
@@ -89,6 +94,80 @@ def run_regression_check_if_exists():
     return "passed"
 
 
+def safe_read_json(path):
+    try:
+        if not path.exists():
+            return None
+
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        return data if isinstance(data, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def run_grouping_contract_check():
+    path = ROOT / "test_grouping_contract.py"
+
+    if not path.exists():
+        print()
+        print("RELEASE CHECK FAILED - camera angle grouping is broken")
+        print("Missing required grouping contract: test_grouping_contract.py")
+        raise GroupingContractFailed()
+
+    if not run_command(
+        [
+            sys.executable,
+            "test_grouping_contract.py",
+            "--input",
+            TEST_INPUT,
+        ]
+    ):
+        print()
+        print("RELEASE CHECK FAILED - camera angle grouping is broken")
+        raise GroupingContractFailed()
+
+    return "passed"
+
+
+def print_grouping_summary():
+    session = safe_read_json(LATEST_SESSION) or {}
+    report = safe_read_json(GROUPING_CONTRACT_REPORT) or {}
+    grouping_debug = session.get("grouping_debug")
+
+    if not isinstance(grouping_debug, dict):
+        grouping_debug = {}
+
+    video_files_found = (
+        report.get("total_mp4_files")
+        if report.get("total_mp4_files") is not None
+        else grouping_debug.get("video_files_found", "not available")
+    )
+    event_groups_built = grouping_debug.get(
+        "event_groups_built",
+        session.get(
+            "event_groups_found",
+            report.get("total_timestamp_groups", "not available")
+        )
+    )
+    incidents_created = grouping_debug.get(
+        "incidents_created",
+        len(session.get("incidents", [])) if isinstance(session.get("incidents"), list) else "not available"
+    )
+    multi_camera_groups = session.get(
+        "multi_camera_groups",
+        "not available"
+    )
+
+    print()
+    print("Grouping summary:")
+    print(f"- video files found: {video_files_found}")
+    print(f"- event groups built: {event_groups_built}")
+    print(f"- incidents created: {incidents_created}")
+    print(f"- multi camera groups: {multi_camera_groups}")
+
+
 def print_session_summary():
     print()
     print("Backend summary:")
@@ -136,6 +215,7 @@ def main():
         compile_if_exists("mimir_clip_actions.py")
         compile_if_exists("discover_footage_source.py")
         compile_if_exists("regression_check.py")
+        compile_if_exists("test_grouping_contract.py")
 
         run_required(
             [
@@ -150,20 +230,33 @@ def main():
             ]
         )
         run_required([sys.executable, "validate_mimir_output.py"])
+        grouping_contract_status = run_grouping_contract_check()
         run_if_exists("inspect_latest_session.py")
         run_if_labels_exist("benchmark_mimir.py", "benchmark_labels.csv")
         run_if_labels_exist("benchmark_impact.py", "impact_labels.csv")
         regression_status = run_regression_check_if_exists()
 
         print_session_summary()
+        print_grouping_summary()
         print()
+        print(f"Grouping contract: {grouping_contract_status}")
         print(f"Regression check: {regression_status}")
         print()
         print("RELEASE CHECK PASSED")
         return 0
+    except GroupingContractFailed:
+        print_session_summary()
+        print_grouping_summary()
+        print()
+        print("Grouping contract: failed")
+        print(f"Regression check: {regression_status}")
+        print()
+        print("RELEASE CHECK FAILED - camera angle grouping is broken")
+        return 1
     except CriticalRegressionDetected:
         regression_status = "failed"
         print_session_summary()
+        print_grouping_summary()
         print()
         print(f"Regression check: {regression_status}")
         print()
@@ -171,6 +264,7 @@ def main():
         return 1
     except SystemExit:
         print_session_summary()
+        print_grouping_summary()
         print()
         print(f"Regression check: {regression_status}")
         print()
