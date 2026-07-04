@@ -1,0 +1,4 @@
+     Running BeforeDevCommand (`node ./node_modules/vite/bin/vite.js`)
+        Info Watching C:\Mimir\src-tauri for changes...
+[1m[92m   Compiling[0m mimir v0.1.0 (C:\Mimir\src-tauri)
+[1m[96m    Building[0m [=======================> ] 355/356: mimir(b…                                                            [1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 7.26s

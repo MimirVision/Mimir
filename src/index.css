@@ -4,19 +4,20 @@
 
 @layer base {
   :root {
-    --mimir-bg: #050505;
+    --mimir-bg: #040404;
     --mimir-bg-depth: #080808;
     --mimir-surface: #101010;
-    --mimir-surface-soft: #171717;
-    --mimir-surface-muted: #202020;
-    --mimir-text: #f4f1ea;
-    --mimir-text-muted: #8f8f8f;
-    --mimir-text-subtle: #5f5f5f;
-    --mimir-border: rgba(255, 255, 255, 0.1);
-    --mimir-border-strong: rgba(255, 255, 255, 0.16);
-    --mimir-status-red: #d95b58;
-    --mimir-status-amber: #c99a4a;
-    --mimir-status-green: #73a87c;
+    --mimir-surface-soft: #151515;
+    --mimir-surface-muted: #1c1c1c;
+    --mimir-text: #f3f0e8;
+    --mimir-text-muted: #96938c;
+    --mimir-text-subtle: #66635d;
+    --mimir-border: rgba(255, 255, 255, 0.085);
+    --mimir-border-strong: rgba(255, 255, 255, 0.14);
+    --mimir-status-red: #b96561;
+    --mimir-status-amber: #ad8b55;
+    --mimir-status-green: #78927a;
+    --mimir-status-slate: #7f8588;
   }
 
   * {
@@ -55,5 +56,15 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.22);
+  }
+
+  @keyframes mimir-progress-pulse {
+    0% {
+      transform: translateX(-110%);
+    }
+
+    100% {
+      transform: translateX(320%);
+    }
   }
 }

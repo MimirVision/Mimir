@@ -33,7 +33,7 @@ export function ScanProgress({ steps, activeStep, progress, folderName }: ScanPr
             <div>
               <div className="text-[12px] text-[var(--mimir-text-subtle)]">Selected footage</div>
               <div className="mt-1 max-w-[520px] truncate text-[14px] font-medium text-[var(--mimir-text)]">
-                {folderName || 'TeslaCam folder'}
+                {folderName || 'Footage folder'}
               </div>
             </div>
             <div className="rounded-full border border-[var(--mimir-border)] bg-white/[0.035] px-3 py-1.5 text-[12px] text-[var(--mimir-text-muted)]">
@@ -97,7 +97,7 @@ export function ScanProgress({ steps, activeStep, progress, folderName }: ScanPr
               Scan details
             </summary>
             <div className="mt-3 max-w-[420px] text-[12px] leading-6 text-[var(--mimir-text-subtle)]">
-              Future diagnostics can appear here without exposing raw terminal output by default.
+              Future diagnostics can appear here without exposing raw technical output by default.
             </div>
           </details>
           <button
