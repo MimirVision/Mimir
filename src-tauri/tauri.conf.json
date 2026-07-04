@@ -24,14 +24,39 @@
       "protocol": {
         "asset": true,
         "assetScope": [
-          "C:\\Mimir_Backend\\Frames\\*"
+          "C:\\Mimir_Backend\\Frames\\*",
+          "C:\\Mimir_Backend\\MimirOutput\\**",
+          "C:\\**",
+          "D:\\**",
+          "E:\\**",
+          "F:\\**",
+          "G:\\**",
+          "H:\\**",
+          "I:\\**",
+          "J:\\**",
+          "K:\\**",
+          "L:\\**",
+          "M:\\**",
+          "N:\\**",
+          "O:\\**",
+          "P:\\**",
+          "Q:\\**",
+          "R:\\**",
+          "S:\\**",
+          "T:\\**",
+          "U:\\**",
+          "V:\\**",
+          "W:\\**",
+          "X:\\**",
+          "Y:\\**",
+          "Z:\\**"
         ]
       },
       "shell": {
         "sidecar": true,
         "scope": [
           {
-            "name": "binaries/mimir-api",
+            "name": "binaries/mimir-backend",
             "sidecar": true
           }
         ]
@@ -42,7 +67,7 @@
       "category": "Utility",
       "copyright": "",
       "externalBin": [
-        "binaries/mimir-api"
+        "binaries/mimir-backend"
       ],
       "icon": [
         "icons/32x32.png",
@@ -52,9 +77,21 @@
         "icons/icon.ico"
       ],
       "identifier": "com.mimir.scanner",
-      "longDescription": "Local incident review for vehicle and dashcam footage.",
-      "shortDescription": "Dashcam incident scanner",
-      "targets": "all"
+      "longDescription": "AI incident review for vehicle footage.",
+      "publisher": "Mimir",
+      "resources": [
+        "resources/mimir-backend/**"
+      ],
+      "shortDescription": "AI incident review for vehicle footage",
+      "targets": [
+        "nsis"
+      ],
+      "windows": {
+        "webviewInstallMode": {
+          "silent": true,
+          "type": "downloadBootstrapper"
+        }
+      }
     },
     "security": {
       "csp": null
@@ -62,10 +99,12 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 760,
+        "height": 820,
+        "minHeight": 720,
+        "minWidth": 1080,
         "resizable": true,
         "title": "Mimir",
-        "width": 1180
+        "width": 1280
       }
     ]
   }

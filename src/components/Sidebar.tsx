@@ -7,11 +7,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mode, engineLabel }: SidebarProps) {
-  const navItems = [
-    { label: 'Sessions', active: mode !== 'empty' },
-    { label: 'Reports', active: false },
-    { label: 'Settings', active: false },
-  ]
+  const navItems = [{ label: 'Sessions', active: mode !== 'empty' }]
 
   return (
     <aside className="flex w-[216px] shrink-0 flex-col border-r border-[var(--mimir-border)] bg-[var(--mimir-bg-depth)] px-4 py-5">
