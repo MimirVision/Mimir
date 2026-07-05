@@ -133,6 +133,8 @@ SCENE_CHANGE_SCORE_SCALE = 35.0
 LOCAL_EDGE_MOTION_SCORE_SCALE = 18.0
 IMPACT_FOCUSED_CONTACT_SHEET_SCORE = 0.45
 AI_CLEAR_IGNORE_CONFIDENCE = 0.75
+IMPORTANT_IMPACT_SCORE_THRESHOLD = 0.70
+IMPORTANT_CONTACT_SCORE_THRESHOLD = 0.68
 OBJECT_BRIEF_DWELL_SEC = 1.0
 OBJECT_BRIEF_MAX_FRAMES = 2
 OBJECT_LINGER_DWELL_SEC = 3.0
@@ -5627,8 +5629,8 @@ def resolve_final_severity(
     if impact_level == "HIGH":
         reasons.append("impact_level=HIGH")
 
-    if impact_score >= 0.75:
-        reasons.append("impact_score>=0.75")
+    if impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD:
+        reasons.append("impact_score>=high_threshold")
 
     if crash_safety_triggered:
         reasons.append("crash_safety_triggered prevents IGNORE")
@@ -5645,10 +5647,10 @@ def resolve_final_severity(
     if contact_level == "MEDIUM" and pre_severity == "IGNORE":
         reasons.append("contact_level=MEDIUM prevents IGNORE")
 
-    if possible_contact and contact_score >= 0.55:
+    if possible_contact and contact_score >= IMPORTANT_CONTACT_SCORE_THRESHOLD:
         reasons.append("possible_contact with high contact_score")
 
-    if possible_impact and impact_score >= 0.58:
+    if possible_impact and impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD:
         reasons.append("possible_impact with high impact_score")
 
     if (
@@ -5681,24 +5683,42 @@ def resolve_final_severity(
     if lingering_vehicle_detected or vehicle_lingering_detected:
         reasons.append("lingering vehicle detected")
 
-    contact_hard_evidence = (
-        visible_contact
-        or contact_level == "HIGH"
-        or contact_score >= 0.68
-        or ai_text_has_person_interaction
-    )
-    impact_hard_evidence = (
-        visible_impact
-        or impact_level == "HIGH"
-        or impact_score >= 0.75
-        or crash_safety_triggered
-    )
     strong_motion_spike = (
         to_float(max_motion_score) >= MOTION_SPIKE_THRESHOLD
         or to_float(max_motion_score) >= CRASH_GLOBAL_MOTION_TRIGGER
         or motion_triggered
     )
-    person_interaction_evidence = bool(ai_text_has_person_interaction)
+    tampering_evidence = bool(
+        text_has_keyword(
+            combined_review_blob,
+            ["tamper", "tampering", "vandal", "vandalism", "attempted entry", "trying to enter"]
+        )
+        and not text_has_negated_high_risk(combined_review_blob)
+    )
+    door_handle_attempt = bool(
+        text_has_keyword(
+            combined_review_blob,
+            ["door handle", "handle", "trying door", "tries door", "trying to open"]
+        )
+        and not text_has_negated_high_risk(combined_review_blob)
+    )
+    person_interaction_evidence = bool(
+        ai_text_has_person_interaction
+        or tampering_evidence
+        or door_handle_attempt
+    )
+    contact_hard_evidence = (
+        visible_contact
+        or contact_level == "HIGH"
+        or contact_score >= IMPORTANT_CONTACT_SCORE_THRESHOLD
+        or person_interaction_evidence
+    )
+    impact_hard_evidence = (
+        visible_impact
+        or impact_level == "HIGH"
+        or impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD
+        or crash_safety_triggered
+    )
     person_presence_evidence = (
         to_int(persons) > 0
         or visible_person
@@ -5712,22 +5732,50 @@ def resolve_final_severity(
         or normal_passing_traffic_evidence
         or text_has_keyword(combined_review_blob, ["walking past", "walks past", "passes by", "passing by"])
     )
-    important_evidence_found = bool(
-        contact_hard_evidence
-        or impact_hard_evidence
-        or strong_motion_spike
-        or person_interaction_evidence
-    )
+    important_evidence_reasons = []
+
+    if crash_safety_triggered:
+        important_evidence_reasons.append("crash_safety_triggered")
+
+    if impact_level == "HIGH":
+        important_evidence_reasons.append("impact_level_HIGH")
+
+    if contact_level == "HIGH":
+        important_evidence_reasons.append("contact_level_HIGH")
+
+    if impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD:
+        important_evidence_reasons.append("impact_score_high")
+
+    if contact_score >= IMPORTANT_CONTACT_SCORE_THRESHOLD:
+        important_evidence_reasons.append("contact_score_high")
+
+    if visible_contact:
+        important_evidence_reasons.append("visible_contact")
+
+    if visible_impact:
+        important_evidence_reasons.append("visible_impact")
+
+    if person_interaction_evidence:
+        important_evidence_reasons.append("person_interaction_evidence")
+
+    if tampering_evidence:
+        important_evidence_reasons.append("tampering_evidence")
+
+    if door_handle_attempt:
+        important_evidence_reasons.append("door_handle_attempt")
+
+    if strong_motion_spike:
+        important_evidence_reasons.append("strong_motion_spike")
+
+    important_evidence_found = bool(important_evidence_reasons)
     person_near_only = bool(
         person_presence_evidence
         and not important_evidence_found
         and contact_level in {"NONE", "LOW", "MEDIUM"}
         and impact_level in {"NONE", "LOW", "MEDIUM"}
         and not possible_impact
-        and not (
-            possible_contact
-            and contact_level == "HIGH"
-        )
+        and not person_interaction_evidence
+        and not strong_motion_spike
     )
 
     if person_near_only and not person_interaction_evidence:
@@ -5799,12 +5847,12 @@ def resolve_final_severity(
 
     local_supports_important = (
         impact_level == "HIGH"
-        or impact_score >= 0.75
+        or impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD
         or contact_level == "HIGH"
         or visible_contact
         or visible_impact
         or person_interaction_evidence
-        or important_marker_found
+        or (important_marker_found and important_evidence_found)
     )
     local_supports_review = (
         local_supports_important
@@ -5827,15 +5875,15 @@ def resolve_final_severity(
         local_supports_important
         or crash_safety_triggered
         or motion_triggered
-        or impact_score >= 0.75
-        or contact_score >= 0.68
+        or impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD
+        or contact_score >= IMPORTANT_CONTACT_SCORE_THRESHOLD
     )
     protected_local_signal = (
         crash_safety_triggered
         or impact_level == "HIGH"
         or contact_level == "HIGH"
-        or impact_score >= 0.75
-        or contact_score >= 0.75
+        or impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD
+        or contact_score >= IMPORTANT_CONTACT_SCORE_THRESHOLD
         or to_float(max_motion_score) >= MOTION_SPIKE_THRESHOLD
         or to_float(max_motion_score) >= CRASH_GLOBAL_MOTION_TRIGGER
         or motion_triggered
@@ -5859,13 +5907,18 @@ def resolve_final_severity(
     if impact_level == "HIGH":
         local_rule_severity = "IMPORTANT"
 
-    elif impact_score >= 0.75:
+    elif impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD:
         local_rule_severity = "IMPORTANT"
 
     elif contact_level == "HIGH":
         local_rule_severity = "IMPORTANT"
 
-    elif important_reasons and local_supports_important and not has_normal_only_language:
+    elif (
+        important_reasons
+        and local_supports_important
+        and important_evidence_found
+        and not has_normal_only_language
+    ):
         local_rule_severity = "IMPORTANT"
 
     elif impact_level == "MEDIUM" and severity_priority(local_rule_severity) < 1:
@@ -5889,9 +5942,13 @@ def resolve_final_severity(
     if (
         (brief_person_only or person_passby_detected)
         and not possible_impact
-        and not possible_contact
+        and contact_level in {"NONE", "LOW"}
+        and not contact_hard_evidence
+        and not impact_hard_evidence
         and not crash_safety_triggered
         and not person_interaction_evidence
+        and not tampering_evidence
+        and not door_handle_attempt
         and not protected_local_signal
     ):
         local_rule_severity = "IGNORE"
@@ -5903,7 +5960,9 @@ def resolve_final_severity(
     if (
         (brief_vehicle_only or vehicle_passby_detected)
         and not possible_impact
-        and not possible_contact
+        and contact_level in {"NONE", "LOW"}
+        and not contact_hard_evidence
+        and not impact_hard_evidence
         and not crash_safety_triggered
         and not visible_person
         and severity_priority(local_rule_severity) < 2
@@ -5965,11 +6024,11 @@ def resolve_final_severity(
         or visible_impact
         or contact_level == "HIGH"
         or impact_level == "HIGH"
-        or contact_score >= 0.68
-        or impact_score >= 0.75
+        or contact_score >= IMPORTANT_CONTACT_SCORE_THRESHOLD
+        or impact_score >= IMPORTANT_IMPACT_SCORE_THRESHOLD
         or person_interaction_evidence
-        or text_has_keyword(combined_review_blob, ["tamper", "vandal", "damage", "collision", "impact"])
-        or ai_text_has_high_risk
+        or tampering_evidence
+        or door_handle_attempt
     )
 
     if severity_priority(ai_severity) < severity_priority(local_rule_severity):
@@ -5983,10 +6042,15 @@ def resolve_final_severity(
         and severity_priority(ai_severity) >= 1
         and clear_ai_review_evidence
     ):
-        final_severity = "REVIEW"
-        ai_allowed_to_change = True
-        final_decision_source = "ai_escalated"
-        reasons.append("AI escalated IGNORE to REVIEW with clear person/contact/impact evidence")
+        if ai_severity == "IMPORTANT" and (person_near_only or person_passby_evidence) and not important_evidence_found:
+            blocked_reason = "AI escalation blocked: no hard contact, impact, or tampering evidence."
+        elif person_passby_evidence and not important_evidence_found:
+            blocked_reason = "AI escalation blocked: brief pass-by without contact, impact, or tampering evidence."
+        else:
+            final_severity = "REVIEW"
+            ai_allowed_to_change = True
+            final_decision_source = "ai_escalated"
+            reasons.append("AI escalated IGNORE to REVIEW with clear person/contact/impact evidence")
 
     elif (
         local_rule_severity == "REVIEW"
@@ -5994,9 +6058,11 @@ def resolve_final_severity(
         and clear_ai_important_evidence
     ):
         if person_near_only and not important_evidence_found:
-            blocked_reason = "AI important recommendation blocked because local evidence showed person near only with no contact/impact."
+            blocked_reason = "AI escalation blocked: no hard contact, impact, or tampering evidence."
         elif has_normal_only_language and not local_supports_ai_important:
             blocked_reason = "AI IMPORTANT blocked: normal passing traffic without local support"
+        elif not important_evidence_found:
+            blocked_reason = "AI escalation blocked: no hard contact, impact, or tampering evidence."
         else:
             final_severity = "IMPORTANT"
             ai_allowed_to_change = True
@@ -6004,8 +6070,10 @@ def resolve_final_severity(
             reasons.append("AI escalated REVIEW to IMPORTANT with clear contact/impact/tampering evidence")
 
     elif severity_priority(ai_severity) > severity_priority(local_rule_severity):
-        if ai_severity == "IMPORTANT" and person_near_only and not important_evidence_found:
-            blocked_reason = "AI important recommendation blocked because local evidence showed person near only with no contact/impact."
+        if ai_severity == "IMPORTANT" and (person_near_only or person_passby_evidence) and not important_evidence_found:
+            blocked_reason = "AI escalation blocked: no hard contact, impact, or tampering evidence."
+        elif ai_severity == "IMPORTANT" and not important_evidence_found:
+            blocked_reason = "AI escalation blocked: no hard contact, impact, or tampering evidence."
         else:
             blocked_reason = "AI escalation blocked: evidence was not clear enough"
 
@@ -6016,16 +6084,16 @@ def resolve_final_severity(
         final_severity = local_rule_severity
         final_decision_source = "local_rules"
         ai_allowed_to_change = False
-        blocked_reason = "AI IMPORTANT blocked: normal passing traffic without local impact/contact/person support"
+        blocked_reason = "AI escalation blocked: no hard contact, impact, or tampering evidence."
 
-    if final_severity == "IMPORTANT" and person_near_only and not important_evidence_found:
+    if final_severity == "IMPORTANT" and not important_evidence_found:
         final_severity = "REVIEW" if not person_passby_evidence else "IGNORE"
         final_decision_source = "local_rules"
         ai_allowed_to_change = False
         severity_cap_applied = True
-        severity_cap_reason = "Capped at Review because no hard Important evidence was found."
+        severity_cap_reason = "Capped below Important because no hard contact, impact, or tampering evidence was found."
         if ai_severity == "IMPORTANT":
-            blocked_reason = "AI important recommendation blocked because local evidence showed person near only with no contact/impact."
+            blocked_reason = "AI escalation blocked: no hard contact, impact, or tampering evidence."
         if severity_cap_reason not in reasons:
             reasons.append(severity_cap_reason)
 
@@ -6058,6 +6126,9 @@ def resolve_final_severity(
         "impact_evidence_level": impact_level,
         "important_requires_hard_evidence": True,
         "important_evidence_found": important_evidence_found,
+        "important_evidence_reasons": important_evidence_reasons,
+        "tampering_evidence": tampering_evidence,
+        "door_handle_attempt": door_handle_attempt,
         "severity_cap_applied": severity_cap_applied,
         "severity_cap_reason": severity_cap_reason,
         "passby_logic_applied": passby_logic_applied,
@@ -6696,6 +6767,19 @@ def annotate_group_incident(primary_incident, group_incidents, event_group):
     prepass_severity_hint = str(
         event_group.get("prepass_severity_hint", "IGNORE")
     ).upper()
+    group_has_hard_important_evidence = any(
+        bool(incident.get("important_evidence_found"))
+        or str(incident.get("impact_level", "")).upper() == "HIGH"
+        or str(incident.get("contact_level", "")).upper() == "HIGH"
+        or bool(incident.get("crash_safety_triggered"))
+        or bool(incident.get("person_interaction_evidence"))
+        or bool(incident.get("tampering_evidence"))
+        or bool(incident.get("door_handle_attempt"))
+        or to_float(incident.get("impact_score", 0.0)) >= IMPORTANT_IMPACT_SCORE_THRESHOLD
+        or to_float(incident.get("contact_score", 0.0)) >= IMPORTANT_CONTACT_SCORE_THRESHOLD
+        or to_float(incident.get("max_motion_score", 0.0)) >= MOTION_SPIKE_THRESHOLD
+        for incident in group_incidents
+    )
 
     if severity_priority(prepass_severity_hint) > severity_priority(group_severity):
         group_severity = prepass_severity_hint
@@ -6725,7 +6809,8 @@ def annotate_group_incident(primary_incident, group_incidents, event_group):
         primary_incident.get("person_near_only")
         and not primary_incident.get("important_evidence_found")
         and not any(
-            str(incident.get("impact_level", "")).upper() == "HIGH"
+            bool(incident.get("important_evidence_found"))
+            or str(incident.get("impact_level", "")).upper() == "HIGH"
             or str(incident.get("contact_level", "")).upper() == "HIGH"
             or bool(incident.get("crash_safety_triggered"))
             or to_float(incident.get("max_motion_score", 0.0)) >= MOTION_SPIKE_THRESHOLD
@@ -6738,6 +6823,18 @@ def annotate_group_incident(primary_incident, group_incidents, event_group):
         primary_incident["severity_cap_reason"] = (
             "Capped at Review because no hard Important evidence was found."
         )
+        primary_incident.setdefault("severity_reasons", []).append(
+            primary_incident["severity_cap_reason"]
+        )
+
+    if group_severity == "IMPORTANT" and not group_has_hard_important_evidence:
+        group_severity = "IGNORE" if primary_incident.get("person_passby_evidence") else "REVIEW"
+        primary_incident["severity_cap_applied"] = True
+        primary_incident["severity_cap_reason"] = (
+            "Capped below Important because no hard contact, impact, or tampering evidence was found."
+        )
+        primary_incident["important_evidence_found"] = False
+        primary_incident.setdefault("important_evidence_reasons", [])
         primary_incident.setdefault("severity_reasons", []).append(
             primary_incident["severity_cap_reason"]
         )
@@ -6777,6 +6874,9 @@ def annotate_group_incident(primary_incident, group_incidents, event_group):
         debug["impact_evidence_level"] = primary_incident.get("impact_evidence_level", "NONE")
         debug["important_requires_hard_evidence"] = True
         debug["important_evidence_found"] = bool(primary_incident.get("important_evidence_found", False))
+        debug["important_evidence_reasons"] = primary_incident.get("important_evidence_reasons", [])
+        debug["tampering_evidence"] = bool(primary_incident.get("tampering_evidence", False))
+        debug["door_handle_attempt"] = bool(primary_incident.get("door_handle_attempt", False))
         debug["severity_cap_applied"] = bool(primary_incident.get("severity_cap_applied", False))
         debug["severity_cap_reason"] = primary_incident.get("severity_cap_reason", "")
 
@@ -7552,6 +7652,9 @@ def add_incident(
             "impact_evidence_level": severity_resolution["impact_evidence_level"],
             "important_requires_hard_evidence": True,
             "important_evidence_found": bool(severity_resolution["important_evidence_found"]),
+            "important_evidence_reasons": severity_resolution["important_evidence_reasons"],
+            "tampering_evidence": bool(severity_resolution["tampering_evidence"]),
+            "door_handle_attempt": bool(severity_resolution["door_handle_attempt"]),
             "severity_cap_applied": bool(severity_resolution["severity_cap_applied"]),
             "severity_cap_reason": severity_resolution["severity_cap_reason"]
         }
@@ -7668,6 +7771,9 @@ def add_incident(
         "impact_evidence_level": severity_resolution["impact_evidence_level"],
         "important_requires_hard_evidence": True,
         "important_evidence_found": bool(severity_resolution["important_evidence_found"]),
+        "important_evidence_reasons": severity_resolution["important_evidence_reasons"],
+        "tampering_evidence": bool(severity_resolution["tampering_evidence"]),
+        "door_handle_attempt": bool(severity_resolution["door_handle_attempt"]),
         "severity_cap_applied": bool(severity_resolution["severity_cap_applied"]),
         "severity_cap_reason": severity_resolution["severity_cap_reason"],
         "timeline_markers": timeline_markers,
@@ -7730,6 +7836,9 @@ def add_incident(
             "impact_evidence_level": severity_resolution["impact_evidence_level"],
             "important_requires_hard_evidence": True,
             "important_evidence_found": severity_resolution["important_evidence_found"],
+            "important_evidence_reasons": severity_resolution["important_evidence_reasons"],
+            "tampering_evidence": severity_resolution["tampering_evidence"],
+            "door_handle_attempt": severity_resolution["door_handle_attempt"],
             "severity_cap_applied": severity_resolution["severity_cap_applied"],
             "severity_cap_reason": severity_resolution["severity_cap_reason"],
             "passby_logic_applied": severity_resolution["passby_logic_applied"],
@@ -8138,19 +8247,18 @@ def build_timeline_markers(
         )
     ]
     contact_marker_has_hard_evidence = (
-        contact_score >= 0.45
+        contact_score >= 0.55
         and (
             contact_level == "HIGH"
+            or contact_score >= IMPORTANT_CONTACT_SCORE_THRESHOLD
             or any(
                 token in " ".join(contact_reasons)
                 for token in [
                     "local edge motion",
                     "proximity plus motion",
-                    "combined proximity and motion",
                     "side contact",
                     "door",
-                    "vehicle close",
-                    "side camera"
+                    "handle"
                 ]
             )
         )
@@ -8196,8 +8304,8 @@ def build_timeline_markers(
                 video_duration_sec,
                 "person_detected",
                 "REVIEW",
-                "Person entered view",
-                "A person was detected during the event.",
+                "Person nearby",
+                "A person was detected near the vehicle.",
                 first_person_time_sec
             )
         )
