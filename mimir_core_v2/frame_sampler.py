@@ -23,10 +23,10 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
     cv2 = _load_cv2()
     warnings: list[str] = []
     settings = {
-        "fast": {"sample_fps": 0.25, "max_frames": 8},
-        "balanced": {"sample_fps": 0.5, "max_frames": 16},
-        "thorough": {"sample_fps": 1.0, "max_frames": 32},
-    }.get(mode, {"sample_fps": 0.5, "max_frames": 16})
+        "fast": {"sample_fps": 1.0, "max_frames": 30},
+        "balanced": {"sample_fps": 2.0, "max_frames": 60},
+        "thorough": {"sample_fps": 4.0, "max_frames": 120},
+    }.get(mode, {"sample_fps": 2.0, "max_frames": 60})
     sample_fps = float(settings["sample_fps"])
     max_frames = int(settings["max_frames"])
     samples: list[dict] = []
@@ -39,6 +39,7 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
     for clip in event_group.get("clips", []):
         path = Path(str(clip.get("path") or ""))
         if not path.exists():
+            warnings.append(f"Video file is missing: {path}")
             clip_metrics.append({"camera": clip.get("camera", "unknown"), "sampled_frames": 0, "duration_sec": 0.0})
             continue
 

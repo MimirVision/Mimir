@@ -11,15 +11,19 @@ PERSON_LINGER_MIN_SEC = 4.0
 VEHICLE_PASSBY_MAX_SEC = 2.0
 VEHICLE_LINGER_MIN_SEC = 4.0
 
-MOTION_LOW_THRESHOLD = 0.18
-MOTION_MEDIUM_THRESHOLD = 0.35
-MOTION_HIGH_THRESHOLD = 0.65
+EVIDENCE_VERSION = "local_evidence_v2_0_1"
+
+MOTION_LOW_THRESHOLD = 0.28
+MOTION_MEDIUM_THRESHOLD = 0.55
+MOTION_HIGH_THRESHOLD = 0.82
 
 PERSON_CLASS_IDS = {0}
 VEHICLE_CLASS_IDS = {2, 3, 5, 7}
 
 _YOLO_MODEL: Any = None
 _YOLO_LOAD_ATTEMPTED = False
+_YOLO_AVAILABLE = False
+_YOLO_FAILURES = 0
 
 
 def _load_cv2() -> Any:
@@ -32,7 +36,7 @@ def _load_cv2() -> Any:
 
 
 def _load_yolo() -> Any:
-    global _YOLO_MODEL, _YOLO_LOAD_ATTEMPTED
+    global _YOLO_AVAILABLE, _YOLO_MODEL, _YOLO_LOAD_ATTEMPTED, _YOLO_FAILURES
 
     if _YOLO_LOAD_ATTEMPTED:
         return _YOLO_MODEL
@@ -41,6 +45,7 @@ def _load_yolo() -> Any:
     try:
         from ultralytics import YOLO  # type: ignore
     except Exception:
+        _YOLO_AVAILABLE = False
         return None
 
     backend_root = Path(__file__).resolve().parents[1]
@@ -48,11 +53,22 @@ def _load_yolo() -> Any:
         if weights.exists():
             try:
                 _YOLO_MODEL = YOLO(str(weights))
+                _YOLO_AVAILABLE = True
                 return _YOLO_MODEL
             except Exception:
+                _YOLO_FAILURES += 1
+                _YOLO_AVAILABLE = False
                 return None
 
+    _YOLO_AVAILABLE = False
     return None
+
+
+def get_evidence_runtime_diagnostics() -> dict:
+    return {
+        "yolo_available": bool(_YOLO_AVAILABLE),
+        "yolo_failures": int(_YOLO_FAILURES),
+    }
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -132,6 +148,8 @@ def _motion_for_samples(samples: list[dict]) -> dict:
 
 
 def _detect_objects(samples: list[dict]) -> list[dict]:
+    global _YOLO_FAILURES
+
     model = _load_yolo()
     if model is None:
         return []
@@ -144,6 +162,7 @@ def _detect_objects(samples: list[dict]) -> list[dict]:
         try:
             results = model.predict(frame, verbose=False, imgsz=320, conf=0.35)
         except Exception:
+            _YOLO_FAILURES += 1
             return detections
         for result in results:
             boxes = getattr(result, "boxes", None)
@@ -243,6 +262,54 @@ def _camera_score(camera_evidence: dict) -> float:
     return round(score, 4)
 
 
+def fallback_evidence(event_group: dict, warning: str) -> dict:
+    clips = event_group.get("clips") if isinstance(event_group.get("clips"), list) else []
+    cameras = event_group.get("available_cameras") if isinstance(event_group.get("available_cameras"), list) else []
+    return {
+        "evidence_version": EVIDENCE_VERSION,
+        "camera_count": len(clips),
+        "available_cameras": cameras,
+        "total_duration_sec": 0.0,
+        "sampled_frames": 0,
+        "multi_camera": len(clips) > 1,
+        "has_video": any(bool(clip.get("exists")) for clip in clips),
+        "motion_score": 0.0,
+        "max_motion_score": 0.0,
+        "motion_spike_time_sec": 0.0,
+        "strong_impact_like_motion": False,
+        "possible_impact": False,
+        "impact_level": "NONE",
+        "impact_score": 0.0,
+        "possible_contact": False,
+        "contact_level": "NONE",
+        "contact_score": 0.0,
+        "person_detected": False,
+        "vehicle_detected": False,
+        "person_near_only": False,
+        "person_passby_detected": False,
+        "person_passby": False,
+        "person_lingering_detected": False,
+        "vehicle_passby_detected": False,
+        "vehicle_lingering_detected": False,
+        "normal_traffic": False,
+        "normal_traffic_evidence": False,
+        "visible_contact": False,
+        "visible_impact": False,
+        "person_interaction_evidence": False,
+        "tampering_evidence": False,
+        "door_handle_attempt": False,
+        "crash_safety_triggered": False,
+        "camera_evidence": {},
+        "object_tracks": [],
+        "primary_camera_candidate": "",
+        "timeline_markers": [],
+        "hero_thumbnail": "",
+        "contact_sheet": "",
+        "evidence_warnings": [warning],
+        **get_evidence_runtime_diagnostics(),
+    }
+
+
 def extract_evidence(event_group: dict, sample_result: dict) -> dict:
     clips = event_group.get("clips") if isinstance(event_group.get("clips"), list) else []
     cameras = event_group.get("available_cameras") if isinstance(event_group.get("available_cameras"), list) else []
@@ -272,9 +339,10 @@ def extract_evidence(event_group: dict, sample_result: dict) -> dict:
         max_motion = _safe_float(motion.get("max_motion_score"))
         impact_level = _motion_level(max_motion)
         possible_impact = impact_level in {"MEDIUM", "HIGH"}
-        possible_contact = bool(possible_impact and (person_detected or vehicle_detected))
-        contact_level = impact_level if possible_contact else "NONE"
-        normal_traffic = bool(vehicle_detected and not person_detected and not possible_impact and max_motion < MOTION_MEDIUM_THRESHOLD)
+        strong_impact_like_motion = impact_level == "HIGH"
+        possible_contact = False
+        contact_level = "NONE"
+        normal_traffic = bool((vehicle_detected or person_detected) and not possible_impact and max_motion < MOTION_MEDIUM_THRESHOLD)
 
         camera_evidence[camera] = {
             **motion,
@@ -310,10 +378,16 @@ def extract_evidence(event_group: dict, sample_result: dict) -> dict:
     vehicle_passby = any(item.get("vehicle_passby_detected") for item in camera_evidence.values())
     vehicle_lingering = any(item.get("vehicle_lingering_detected") for item in camera_evidence.values())
     normal_traffic = bool(
-        any(item.get("normal_traffic_evidence") for item in camera_evidence.values())
+        (
+            any(item.get("normal_traffic_evidence") for item in camera_evidence.values())
+            or person_passby
+            or vehicle_passby
+            or (person_detected or vehicle_detected)
+        )
         and not possible_impact
         and not possible_contact
         and not person_lingering
+        and not vehicle_lingering
     )
 
     timeline_markers = []
@@ -342,6 +416,7 @@ def extract_evidence(event_group: dict, sample_result: dict) -> dict:
         )
 
     return {
+        "evidence_version": EVIDENCE_VERSION,
         "camera_count": len(clips),
         "available_cameras": cameras,
         "total_duration_sec": round(duration, 3),
@@ -355,8 +430,9 @@ def extract_evidence(event_group: dict, sample_result: dict) -> dict:
         "possible_impact": possible_impact,
         "impact_level": impact_level,
         "impact_score": round(max_motion_score, 4),
-        "possible_contact": possible_contact,
-        "contact_level": contact_level,
+        "strong_impact_like_motion": max_motion_score >= MOTION_HIGH_THRESHOLD,
+        "possible_contact": False,
+        "contact_level": "NONE",
         "contact_score": round(max_motion_score if possible_contact else 0.0, 4),
         "person_detected": person_detected,
         "vehicle_detected": vehicle_detected,
@@ -368,11 +444,18 @@ def extract_evidence(event_group: dict, sample_result: dict) -> dict:
         "normal_traffic_evidence": normal_traffic,
         "normal_traffic": normal_traffic,
         "person_near_only": bool(person_detected and not possible_contact and not possible_impact),
-        "strong_motion_spike": max_motion_score >= MOTION_HIGH_THRESHOLD,
+        "visible_contact": False,
+        "visible_impact": False,
+        "person_interaction_evidence": False,
+        "tampering_evidence": False,
+        "door_handle_attempt": False,
+        "crash_safety_triggered": False,
         "camera_evidence": camera_evidence,
         "object_tracks": all_tracks,
         "primary_camera_candidate": best_camera,
         "timeline_markers": timeline_markers,
         "hero_thumbnail": "",
         "contact_sheet": "",
+        "evidence_warnings": [],
+        **get_evidence_runtime_diagnostics(),
     }
