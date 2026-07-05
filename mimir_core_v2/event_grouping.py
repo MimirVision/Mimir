@@ -12,6 +12,9 @@ from pathlib import Path
 from .validators import sorted_cameras, stable_id_text
 
 
+GROUPING_VERSION = "event_grouping_v2_0_1"
+
+
 def event_key_for_video(video: dict) -> tuple[str, str]:
     event_timestamp = str(video.get("event_timestamp") or "").strip()
     source_folder = str(video.get("source_folder") or "")
@@ -64,3 +67,34 @@ def group_videos(videos: list[dict]) -> list[dict]:
         )
 
     return event_groups
+
+
+def build_grouping_debug(event_groups: list[dict], warnings: list[str] | None = None) -> dict:
+    unknown_camera_files: list[str] = []
+    ungrouped_files: list[str] = []
+
+    for group in event_groups:
+        clips = group.get("clips") if isinstance(group.get("clips"), list) else []
+        if not group.get("event_timestamp"):
+            ungrouped_files.extend(str(clip.get("filename") or "") for clip in clips if isinstance(clip, dict))
+        for clip in clips:
+            if isinstance(clip, dict) and clip.get("camera") == "unknown":
+                unknown_camera_files.append(str(clip.get("filename") or ""))
+
+    mp4_files_found = sum(int(group.get("camera_count") or 0) for group in event_groups)
+    multi_camera_groups = sum(1 for group in event_groups if int(group.get("camera_count") or 0) > 1)
+    single_camera_groups = sum(1 for group in event_groups if int(group.get("camera_count") or 0) == 1)
+
+    grouping_warnings = list(warnings or [])
+    if not event_groups:
+        grouping_warnings.append("No event groups were built from the selected input.")
+
+    return {
+        "mp4_files_found": mp4_files_found,
+        "event_groups_built": len(event_groups),
+        "multi_camera_groups": multi_camera_groups,
+        "single_camera_groups": single_camera_groups,
+        "unknown_camera_files": unknown_camera_files,
+        "ungrouped_files": ungrouped_files,
+        "grouping_warnings": grouping_warnings,
+    }

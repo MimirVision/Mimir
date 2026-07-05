@@ -2,6 +2,16 @@
   "schema_version": "mimir_v2",
   "scanner_version": "mimir_core_v2_0_1",
   "selected_input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+  "grouping_version": "event_grouping_v2_0_1",
+  "grouping_debug": {
+    "mp4_files_found": 8,
+    "event_groups_built": 2,
+    "multi_camera_groups": 2,
+    "single_camera_groups": 0,
+    "unknown_camera_files": [],
+    "ungrouped_files": [],
+    "grouping_warnings": []
+  },
   "event_groups_found": 2,
   "multi_camera_groups": 2,
   "single_camera_groups": 0,

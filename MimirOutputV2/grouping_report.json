@@ -1,0 +1,13 @@
+{
+  "grouping_version": "event_grouping_v2_0_1",
+  "input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+  "mp4_files_found": 8,
+  "groups_found": 2,
+  "passes": [
+    "PASS: 2026-04-18_16-02-44 grouped into 1 incident with 4 cameras.",
+    "PASS: 2026-04-18_16-03-46 grouped into 1 incident with 4 cameras."
+  ],
+  "problems": [],
+  "warnings": [],
+  "verdict": "GROUPING OK"
+}
