@@ -2,75 +2,103 @@
 
 from __future__ import annotations
 
-from .severity_resolver import resolve_severity
+from .severity_resolver import SEVERITY_RANK, resolve_severity
 
 
-BASE_GROUP = {
-    "available_cameras": ["front"],
-    "clips": [{"camera": "front", "path": "example.mp4", "exists": True}],
-}
-
-
-def run_case(name: str, evidence: dict, ai_review: dict | None, expected: set[str]) -> tuple[bool, str]:
+def run_case(
+    name: str,
+    evidence: dict,
+    ai_evidence: dict | None,
+    allowed: set[str],
+    blocked_ai_required: bool = False,
+) -> tuple[bool, str]:
     merged = {"has_video": True, "multi_camera": False, **evidence}
-    result = resolve_severity(BASE_GROUP, merged, ai_review or {})
+    result = resolve_severity(merged, ai_evidence or {})
     actual = result.get("final_severity")
-    ok = actual in expected
-    detail = f"{name}: expected {sorted(expected)}, actual {actual}"
+    debug = result.get("classification_debug") if isinstance(result.get("classification_debug"), dict) else {}
+    ok = actual in allowed
+    if blocked_ai_required and not debug.get("ai_blocked_reason"):
+        ok = False
+    detail = f"{name}: expected {sorted(allowed)}, actual {actual}"
+    if blocked_ai_required:
+        detail += f", ai_blocked_reason={debug.get('ai_blocked_reason', '')!r}"
     return ok, detail
+
+
+def at_least_review(name: str, evidence: dict) -> tuple[bool, str]:
+    result = resolve_severity({"has_video": True, **evidence}, {})
+    actual = result.get("final_severity")
+    ok = actual in SEVERITY_RANK and SEVERITY_RANK[actual] >= SEVERITY_RANK["REVIEW"]
+    return ok, f"{name}: expected at least REVIEW, actual {actual}"
 
 
 def main() -> int:
     cases = [
-        (
-            "person pass-by no contact",
+        run_case(
+            "person_passby true, no contact/impact/tampering",
             {"person_passby": True},
             {},
             {"IGNORE"},
         ),
-        (
-            "person near no contact",
+        run_case(
+            "person_near_only true, no contact/impact/tampering",
             {"person_near_only": True},
             {},
             {"IGNORE", "REVIEW"},
         ),
-        (
-            "normal traffic",
+        run_case(
+            "normal_traffic true, no contact/impact",
             {"normal_traffic": True},
             {},
             {"IGNORE"},
         ),
-        (
-            "rear impact high",
-            {"impact_level": "HIGH", "possible_impact": True},
-            {},
-            {"IMPORTANT"},
-        ),
-        (
-            "weak possible contact",
+        run_case(
+            "possible_contact true, contact_level LOW",
             {"possible_contact": True, "contact_level": "LOW"},
             {},
             {"REVIEW"},
         ),
-        (
-            "high contact",
-            {"possible_contact": True, "contact_level": "HIGH"},
+        run_case(
+            "possible_contact true, contact_level MEDIUM",
+            {"possible_contact": True, "contact_level": "MEDIUM"},
+            {},
+            {"REVIEW"},
+        ),
+        run_case(
+            "contact_level HIGH",
+            {"contact_level": "HIGH"},
             {},
             {"IMPORTANT"},
         ),
-        (
-            "AI says Important but pass-by only",
+        run_case(
+            "impact_level HIGH",
+            {"impact_level": "HIGH"},
+            {},
+            {"IMPORTANT"},
+        ),
+        at_least_review(
+            "crash_safety_triggered true",
+            {"crash_safety_triggered": True},
+        ),
+        run_case(
+            "AI recommends IMPORTANT but local evidence is person_passby only",
             {"person_passby": True},
-            {"recommendation": "IMPORTANT"},
+            {"recommended_severity": "IMPORTANT"},
             {"IGNORE", "REVIEW"},
+            blocked_ai_required=True,
+        ),
+        run_case(
+            "visible_contact true",
+            {"visible_contact": True},
+            {},
+            {"IMPORTANT"},
         ),
     ]
 
     failures = []
     print("Mimir Core v2 Resolver Tests")
     print("============================")
-    for name, evidence, ai_review, expected in cases:
-        ok, detail = run_case(name, evidence, ai_review, expected)
+    for ok, detail in cases:
         print(("PASS " if ok else "FAIL ") + detail)
         if not ok:
             failures.append(detail)
