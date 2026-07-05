@@ -49,6 +49,7 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
         "ai_evidence_review": ai_review,
         "severity_reasons": severity.get("severity_reasons", []),
         "classification_debug": severity.get("classification_debug", {}),
+        "warnings": evidence.get("evidence_warnings", []),
     }
 
 
