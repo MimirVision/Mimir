@@ -69,7 +69,7 @@ def run_scan(
                 ai_reviewed_groups += 1
             else:
                 ai_skipped_groups += 1
-        severity = resolve_severity(event_group, evidence, ai_review)
+        severity = resolve_severity(evidence, ai_review)
         incidents.append(incident_from_group(index, event_group, evidence, severity, ai_review))
 
     session = build_session(str(Path(input_folder)), event_groups, incidents, warnings)

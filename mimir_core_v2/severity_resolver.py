@@ -7,7 +7,6 @@ from .validators import CAMERA_PRIORITY
 
 RESOLVER_VERSION = "safe_resolver_v2"
 SEVERITY_RANK = {"IGNORE": 0, "REVIEW": 1, "IMPORTANT": 2}
-HIGH_MOTION_SPIKE_THRESHOLD = 0.85
 
 
 def _bool(data: dict, field: str) -> bool:
@@ -31,17 +30,22 @@ def _min_severity(left: str, right: str) -> str:
     return left if SEVERITY_RANK[left] <= SEVERITY_RANK[right] else right
 
 
-def _motion_spike(evidence: dict) -> bool:
-    if _bool(evidence, "strong_motion_spike") or _bool(evidence, "impact_like_motion_spike"):
-        return True
+def _has_contact_impact_or_tampering(evidence: dict) -> bool:
+    return bool(
+        _bool(evidence, "visible_contact")
+        or _bool(evidence, "visible_impact")
+        or _bool(evidence, "person_interaction_evidence")
+        or _bool(evidence, "tampering_evidence")
+        or _bool(evidence, "door_handle_attempt")
+        or _bool(evidence, "possible_impact")
+        or _bool(evidence, "possible_contact")
+        or _level(evidence, "impact_level") in {"LOW", "MEDIUM", "HIGH"}
+        or _level(evidence, "contact_level") in {"LOW", "MEDIUM", "HIGH"}
+    )
 
-    try:
-        return float(evidence.get("motion_score") or 0.0) >= HIGH_MOTION_SPIKE_THRESHOLD
-    except (TypeError, ValueError):
-        return False
 
-
-def important_evidence_reasons(evidence: dict) -> list[str]:
+def important_evidence_reasons(local_evidence: dict) -> list[str]:
+    evidence = local_evidence if isinstance(local_evidence, dict) else {}
     reasons: list[str] = []
 
     if _bool(evidence, "crash_safety_triggered"):
@@ -60,53 +64,53 @@ def important_evidence_reasons(evidence: dict) -> list[str]:
         reasons.append("tampering_evidence")
     if _bool(evidence, "door_handle_attempt"):
         reasons.append("door_handle_attempt")
-    if _motion_spike(evidence):
-        reasons.append("strong impact-like motion spike")
+    if _bool(evidence, "strong_impact_like_motion"):
+        reasons.append("strong_impact_like_motion")
 
     return reasons
 
 
-def _contact_or_impact_or_tampering(evidence: dict) -> bool:
-    return bool(
-        important_evidence_reasons(evidence)
-        or _bool(evidence, "possible_impact")
-        or _bool(evidence, "possible_contact")
-        or _level(evidence, "impact_level") in {"LOW", "MEDIUM", "HIGH"}
-        or _level(evidence, "contact_level") in {"LOW", "MEDIUM", "HIGH"}
-        or _bool(evidence, "tampering_evidence")
-    )
+def _extract_ai_evidence(ai_evidence: dict | None) -> dict:
+    if not isinstance(ai_evidence, dict):
+        return {}
+    nested = ai_evidence.get("ai_evidence")
+    if isinstance(nested, dict):
+        return nested
+    return ai_evidence
 
 
-def _ai_recommendation(ai_review: dict | None) -> str:
-    if not isinstance(ai_review, dict):
-        return "IGNORE"
-
-    ai_evidence = ai_review.get("ai_evidence")
-    if isinstance(ai_evidence, dict) and ai_evidence.get("recommended_severity"):
-        return _severity(ai_evidence.get("recommended_severity"))
-
+def _ai_recommendation(ai_evidence: dict | None) -> str:
+    evidence = _extract_ai_evidence(ai_evidence)
     return _severity(
-        ai_review.get("recommended_severity")
-        or ai_review.get("recommendation")
-        or ai_review.get("severity")
+        evidence.get("recommended_severity")
+        or evidence.get("recommendation")
+        or evidence.get("severity")
     )
 
 
-def choose_primary_camera(event_group: dict, evidence: dict) -> str:
-    cameras = event_group.get("available_cameras")
+def choose_primary_camera(local_evidence: dict) -> str:
+    evidence = local_evidence if isinstance(local_evidence, dict) else {}
+    cameras = evidence.get("available_cameras")
     if not isinstance(cameras, list) or not cameras:
-        return "unknown"
+        return str(evidence.get("primary_camera_candidate") or "unknown")
+
+    candidate = str(evidence.get("primary_camera_candidate") or "")
+    if candidate in cameras:
+        return candidate
 
     camera_evidence = evidence.get("camera_evidence") if isinstance(evidence.get("camera_evidence"), dict) else {}
     if camera_evidence:
-        best_camera, best_score = "unknown", -1.0
+        best_camera, best_score = "", -1.0
         for camera, details in camera_evidence.items():
             if camera not in cameras or not isinstance(details, dict):
                 continue
-            score = float(details.get("evidence_score") or 0.0)
+            try:
+                score = float(details.get("evidence_score") or 0.0)
+            except (TypeError, ValueError):
+                score = 0.0
             if score > best_score:
                 best_camera, best_score = camera, score
-        if best_camera != "unknown" and best_score > 0:
+        if best_camera and best_score > 0:
             return best_camera
 
     for camera in ["back", "rear", "front", *CAMERA_PRIORITY]:
@@ -116,11 +120,41 @@ def choose_primary_camera(event_group: dict, evidence: dict) -> str:
     return str(cameras[0])
 
 
-def resolve_severity(event_group: dict, evidence: dict, ai_review: dict) -> dict:
-    local_evidence = evidence if isinstance(evidence, dict) else {}
-    ai_evidence = ai_review if isinstance(ai_review, dict) else {}
-    has_video = bool(local_evidence.get("has_video"))
-    event_type = "multi_camera_event" if evidence.get("multi_camera") else "single_camera_event"
+def _base_event_type(evidence: dict) -> str:
+    if _bool(evidence, "possible_impact") or _level(evidence, "impact_level") != "NONE":
+        return "possible_impact"
+    if _bool(evidence, "possible_contact") or _level(evidence, "contact_level") != "NONE":
+        return "possible_contact"
+    if _bool(evidence, "person_passby") or _bool(evidence, "person_passby_detected"):
+        return "person_passby"
+    if _bool(evidence, "person_near_only") or _bool(evidence, "person_detected"):
+        return "person_near_vehicle"
+    if _bool(evidence, "normal_traffic") or _bool(evidence, "normal_traffic_evidence"):
+        return "normal_traffic"
+    if _bool(evidence, "multi_camera"):
+        return "multi_camera_event"
+    return "single_camera_event"
+
+
+def _summary_for(severity: str, event_type: str, evidence: dict) -> str:
+    if severity == "IMPORTANT":
+        return "Possible impact/contact evidence was detected."
+    if event_type == "person_passby":
+        return "People passed near the vehicle. No contact, impact, or tampering was detected."
+    if event_type == "person_near_vehicle":
+        return "Mimir saw a person near the vehicle, but no clear contact or tampering was detected."
+    if event_type == "normal_traffic":
+        return "Normal traffic or background movement was detected. No contact or impact evidence was found."
+    if not _bool(evidence, "has_video"):
+        return "Mimir found an event group, but no video file could be confirmed."
+    if severity == "REVIEW":
+        return "Mimir found uncertain activity worth review."
+    return "No concerning evidence was found."
+
+
+def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> dict:
+    evidence = local_evidence if isinstance(local_evidence, dict) else {}
+    ai = _extract_ai_evidence(ai_evidence)
     reasons: list[str] = []
     debug = {
         "resolver_version": RESOLVER_VERSION,
@@ -133,43 +167,44 @@ def resolve_severity(event_group: dict, evidence: dict, ai_review: dict) -> dict
         "ai_blocked_reason": "",
     }
 
-    if not has_video:
-        summary = "Mimir found an event group, but no video file could be confirmed."
-    elif evidence.get("multi_camera"):
-        summary = "Mimir grouped multiple camera angles into one event."
-    else:
-        summary = "Mimir found one video for this event."
-
-    hard_reasons = important_evidence_reasons(local_evidence)
+    hard_reasons = important_evidence_reasons(evidence)
     hard_important = bool(hard_reasons)
     debug["important_evidence_found"] = hard_important
     debug["important_evidence_reasons"] = hard_reasons
 
+    has_video = bool(evidence.get("has_video", True))
     severity = "IGNORE" if has_video else "REVIEW"
+    event_type = _base_event_type(evidence)
+
     if not has_video:
         reasons.append("Video file could not be confirmed.")
 
-    if _bool(local_evidence, "normal_traffic"):
+    if _bool(evidence, "normal_traffic") or _bool(evidence, "normal_traffic_evidence"):
         severity = "IGNORE"
         reasons.append("Normal traffic evidence.")
 
-    if _bool(local_evidence, "person_near_only"):
-        severity = _max_severity(severity, "REVIEW")
-        reasons.append("Person near vehicle without contact or tampering evidence.")
-
-    if _bool(local_evidence, "person_passby") or _bool(local_evidence, "person_passby_detected"):
-        severity = _max_severity(severity, "IGNORE")
+    if _bool(evidence, "person_passby") or _bool(evidence, "person_passby_detected"):
         reasons.append("Brief person pass-by evidence.")
+        if _bool(evidence, "uncertain"):
+            severity = _max_severity(severity, "REVIEW")
 
-    if _bool(local_evidence, "possible_contact"):
+    if _bool(evidence, "person_near_only"):
+        severity = _max_severity(severity, "REVIEW")
+        reasons.append("Person near vehicle without contact, impact, or tampering evidence.")
+
+    if _bool(evidence, "possible_contact"):
         severity = _max_severity(severity, "REVIEW")
         reasons.append("Possible contact evidence.")
 
-    if _bool(local_evidence, "uncertain"):
+    if _bool(evidence, "possible_impact"):
+        severity = _max_severity(severity, "REVIEW")
+        reasons.append("Possible impact evidence.")
+
+    if _bool(evidence, "uncertain"):
         severity = _max_severity(severity, "REVIEW")
         reasons.append("Uncertain local evidence.")
 
-    if _bool(local_evidence, "crash_safety_triggered"):
+    if _bool(evidence, "crash_safety_triggered"):
         if SEVERITY_RANK[severity] < SEVERITY_RANK["REVIEW"]:
             debug["severity_floor_applied"] = True
             debug["severity_floor_reason"] = "crash_safety_triggered requires at least REVIEW"
@@ -180,7 +215,7 @@ def resolve_severity(event_group: dict, evidence: dict, ai_review: dict) -> dict
         severity = "IMPORTANT"
         reasons.extend(hard_reasons)
 
-    ai_recommendation = _ai_recommendation(ai_evidence)
+    ai_recommendation = _ai_recommendation(ai)
     if ai_recommendation == "IMPORTANT":
         if hard_important:
             severity = "IMPORTANT"
@@ -189,26 +224,29 @@ def resolve_severity(event_group: dict, evidence: dict, ai_review: dict) -> dict
             debug["ai_blocked_reason"] = "AI escalation blocked: no hard contact, impact, or tampering evidence."
             reasons.append(debug["ai_blocked_reason"])
     elif ai_recommendation == "REVIEW":
-        if not _bool(local_evidence, "normal_traffic") or hard_important:
+        if not (_bool(evidence, "normal_traffic") or _bool(evidence, "normal_traffic_evidence")) or hard_important:
             severity = _max_severity(severity, "REVIEW")
             reasons.append("AI recommended review.")
 
     cap_reason = ""
     if not hard_important:
-        if _bool(local_evidence, "normal_traffic"):
-            cap_reason = "normal_traffic capped at IGNORE without hard evidence"
+        if _bool(evidence, "normal_traffic") or _bool(evidence, "normal_traffic_evidence"):
+            cap_reason = "normal traffic capped at IGNORE without hard evidence"
             severity = _min_severity(severity, "IGNORE")
-        elif _bool(local_evidence, "person_passby") or _bool(local_evidence, "person_passby_detected"):
-            if not _contact_or_impact_or_tampering(local_evidence):
-                cap_reason = "person pass-by capped at IGNORE without contact, impact, or tampering"
-                severity = _min_severity(severity, "IGNORE")
-            else:
+        elif _bool(evidence, "person_passby") or _bool(evidence, "person_passby_detected"):
+            if _has_contact_impact_or_tampering(evidence):
                 cap_reason = "person pass-by capped at REVIEW without hard evidence"
                 severity = _min_severity(severity, "REVIEW")
-        elif _bool(local_evidence, "person_near_only"):
+            elif _bool(evidence, "uncertain"):
+                cap_reason = "person pass-by capped at REVIEW because evidence is uncertain"
+                severity = _min_severity(severity, "REVIEW")
+            else:
+                cap_reason = "person pass-by capped at IGNORE without contact, impact, or tampering"
+                severity = _min_severity(severity, "IGNORE")
+        elif _bool(evidence, "person_near_only"):
             cap_reason = "person near only capped at REVIEW without contact, impact, or tampering"
             severity = _min_severity(severity, "REVIEW")
-        elif _bool(local_evidence, "possible_contact") and _level(local_evidence, "contact_level") != "HIGH":
+        elif _bool(evidence, "possible_contact") and _level(evidence, "contact_level") in {"NONE", "LOW", "MEDIUM"}:
             cap_reason = "weak possible contact capped at REVIEW without high contact or visible contact"
             severity = _min_severity(severity, "REVIEW")
 
@@ -217,26 +255,14 @@ def resolve_severity(event_group: dict, evidence: dict, ai_review: dict) -> dict
         debug["severity_cap_reason"] = cap_reason
         reasons.append(cap_reason)
 
-    if severity == "IMPORTANT":
-        if _level(local_evidence, "impact_level") == "HIGH":
-            summary = "Mimir found high impact evidence."
-        elif _level(local_evidence, "contact_level") == "HIGH":
-            summary = "Mimir found high contact evidence."
-        else:
-            summary = "Mimir found hard Important evidence."
-    elif _bool(local_evidence, "person_near_only"):
-        summary = "Mimir saw a person near the vehicle, but no clear contact or tampering was detected."
-    elif _bool(local_evidence, "normal_traffic"):
-        summary = "Mimir saw ordinary traffic with no contact or impact evidence."
-    elif severity == "REVIEW":
-        summary = "Mimir found uncertain activity worth review."
-
+    summary = _summary_for(severity, event_type, evidence)
     return {
         "severity": severity,
         "final_severity": severity,
         "event_type": event_type,
         "summary": summary,
-        "primary_camera": choose_primary_camera(event_group, local_evidence),
+        "primary_camera": choose_primary_camera(evidence),
         "severity_reasons": reasons or ["No concerning evidence found."],
         "classification_debug": debug,
     }
+

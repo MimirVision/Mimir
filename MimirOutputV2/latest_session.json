@@ -28,7 +28,7 @@
       "source_category": "SentryClips",
       "severity": "REVIEW",
       "final_severity": "REVIEW",
-      "event_type": "multi_camera_event",
+      "event_type": "possible_impact",
       "summary": "Mimir found uncertain activity worth review.",
       "camera_count": 4,
       "available_cameras": [
@@ -2557,6 +2557,7 @@
       "severity_reasons": [
         "Brief person pass-by evidence.",
         "Possible contact evidence.",
+        "Possible impact evidence.",
         "person pass-by capped at REVIEW without hard evidence"
       ],
       "classification_debug": {
@@ -2578,8 +2579,8 @@
       "source_category": "SentryClips",
       "severity": "REVIEW",
       "final_severity": "REVIEW",
-      "event_type": "multi_camera_event",
-      "summary": "Mimir saw a person near the vehicle, but no clear contact or tampering was detected.",
+      "event_type": "possible_impact",
+      "summary": "Mimir found uncertain activity worth review.",
       "camera_count": 4,
       "available_cameras": [
         "front",
@@ -3127,8 +3128,8 @@
         "summary": "AI model not configured."
       },
       "severity_reasons": [
-        "Person near vehicle without contact or tampering evidence.",
         "Brief person pass-by evidence.",
+        "Person near vehicle without contact, impact, or tampering evidence.",
         "person pass-by capped at REVIEW without hard evidence"
       ],
       "classification_debug": {
