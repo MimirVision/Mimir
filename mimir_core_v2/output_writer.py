@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from . import SCANNER_VERSION, SCHEMA_VERSION
+from .event_grouping import GROUPING_VERSION, build_grouping_debug
 
 
 def incident_from_group(index: int, event_group: dict, evidence: dict, severity: dict, ai_review: dict) -> dict:
@@ -60,6 +61,8 @@ def build_session(selected_input: str, event_groups: list[dict], incidents: list
         "schema_version": SCHEMA_VERSION,
         "scanner_version": SCANNER_VERSION,
         "selected_input": selected_input,
+        "grouping_version": GROUPING_VERSION,
+        "grouping_debug": build_grouping_debug(event_groups, warnings),
         "event_groups_found": len(event_groups),
         "multi_camera_groups": sum(1 for group in event_groups if int(group.get("camera_count") or 0) > 1),
         "single_camera_groups": sum(1 for group in event_groups if int(group.get("camera_count") or 0) == 1),

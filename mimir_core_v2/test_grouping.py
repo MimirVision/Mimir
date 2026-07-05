@@ -11,12 +11,13 @@ import json
 import sys
 from pathlib import Path
 
-from .event_grouping import event_key_for_video, group_videos
+from .event_grouping import GROUPING_VERSION, group_videos
 from .source_discovery import discover_videos
 from .validators import sorted_cameras
 
 
 DEFAULT_OUTPUT = Path(r"C:\Mimir_Backend\MimirOutputV2\latest_session.json")
+DEFAULT_REPORT = Path(r"C:\Mimir_Backend\MimirOutputV2\grouping_report.json")
 
 
 def normalize_path(value: str) -> str:
@@ -32,6 +33,17 @@ def group_key_for_incident(incident: dict) -> tuple[str, str]:
 
 def camera_list_from_clips(clips: list[dict]) -> list[str]:
     return sorted_cameras([str(clip.get("camera") or "unknown") for clip in clips if isinstance(clip, dict)])
+
+
+def filename_set_from_clips(clips: list[dict]) -> set[str]:
+    filenames: set[str] = set()
+    for clip in clips:
+        if not isinstance(clip, dict):
+            continue
+        filename = str(clip.get("filename") or "").strip().lower()
+        if filename:
+            filenames.add(filename)
+    return filenames
 
 
 def read_latest_session(path: Path) -> tuple[dict | None, str]:
@@ -64,11 +76,12 @@ def build_expected_groups(input_folder: str) -> tuple[list[dict], list[str], lis
     return groups, warnings, duplicate_problems
 
 
-def compare_output_to_expected(expected_groups: list[dict], session: dict) -> list[str]:
+def compare_output_to_expected(expected_groups: list[dict], session: dict) -> tuple[list[str], list[str]]:
     problems: list[str] = []
+    passes: list[str] = []
     incidents = session.get("incidents")
     if not isinstance(incidents, list):
-        return ["v2 output does not contain an incidents list"]
+        return ["v2 output does not contain an incidents list"], passes
 
     incidents_by_key: dict[tuple[str, str], list[dict]] = {}
     for incident in incidents:
@@ -79,21 +92,23 @@ def compare_output_to_expected(expected_groups: list[dict], session: dict) -> li
     for key, matching_incidents in sorted(incidents_by_key.items()):
         if key[1] and len(matching_incidents) > 1:
             problems.append(
-                f"output split timestamp into {len(matching_incidents)} incidents: folder={key[0]} timestamp={key[1]}"
+                f"FAIL: {key[1]} has output split into {len(matching_incidents)} incidents. Expected 1."
             )
 
     for group in expected_groups:
         expected_count = int(group.get("camera_count") or 0)
-        if expected_count <= 1:
-            continue
-
         key = (normalize_path(str(group.get("event_folder") or "")), str(group.get("event_timestamp") or ""))
         matching_incidents = incidents_by_key.get(key, [])
         expected_cameras = set(group.get("available_cameras") or [])
+        expected_clips = group.get("clips") if isinstance(group.get("clips"), list) else []
+        expected_filenames = filename_set_from_clips(expected_clips)
+
+        if not key[1]:
+            continue
 
         if len(matching_incidents) != 1:
             problems.append(
-                f"expected one incident for folder={key[0]} timestamp={key[1]}, found {len(matching_incidents)}"
+                f"FAIL: {key[1]} has {expected_count} camera files but output has {len(matching_incidents)} incidents. Expected 1."
             )
             continue
 
@@ -104,17 +119,25 @@ def compare_output_to_expected(expected_groups: list[dict], session: dict) -> li
 
         actual_count = int(incident.get("camera_count") or len(camera_clips))
         actual_cameras = set(camera_list_from_clips(camera_clips))
+        actual_filenames = filename_set_from_clips(camera_clips)
 
         if actual_count != expected_count:
             problems.append(
-                f"incident {incident.get('id', 'unknown')} camera_count={actual_count}, expected {expected_count}"
+                f"FAIL: {key[1]} incident {incident.get('id', 'unknown')} camera_count={actual_count}, expected {expected_count}."
             )
         if not expected_cameras.issubset(actual_cameras):
             problems.append(
-                f"incident {incident.get('id', 'unknown')} missing cameras: {sorted(expected_cameras - actual_cameras)}"
+                f"FAIL: {key[1]} incident {incident.get('id', 'unknown')} missing cameras: {sorted(expected_cameras - actual_cameras)}."
+            )
+        if not expected_filenames.issubset(actual_filenames):
+            problems.append(
+                f"FAIL: {key[1]} incident {incident.get('id', 'unknown')} missing camera files: {sorted(expected_filenames - actual_filenames)}."
             )
 
-    return problems
+        if actual_count == expected_count and expected_cameras.issubset(actual_cameras) and expected_filenames.issubset(actual_filenames):
+            passes.append(f"PASS: {key[1]} grouped into 1 incident with {expected_count} cameras.")
+
+    return problems, passes
 
 
 def print_group_summary(groups: list[dict]) -> None:
@@ -132,7 +155,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate Mimir Core v2 event grouping.")
     parser.add_argument("--input", required=True, help="Folder containing MP4 footage.")
     parser.add_argument("--session", default=str(DEFAULT_OUTPUT), help="Path to MimirOutputV2/latest_session.json.")
+    parser.add_argument("--report", default=str(DEFAULT_REPORT), help="Path to write grouping_report.json.")
     return parser
+
+
+def write_report(path: Path, report: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(report, file, indent=2)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -147,10 +177,12 @@ def main(argv: list[str] | None = None) -> int:
     print_group_summary(groups)
 
     problems = list(duplicate_problems)
+    passes: list[str] = []
     if session_error:
         problems.append(session_error)
     elif session is not None:
-        problems.extend(compare_output_to_expected(groups, session))
+        compare_problems, passes = compare_output_to_expected(groups, session)
+        problems.extend(compare_problems)
 
     warnings = discovery_warnings + grouping_warnings
     if warnings:
@@ -160,20 +192,40 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- {warning}")
 
     print()
-    print("duplicate problems:")
+    print("grouping results:")
     if problems:
         for problem in problems:
             print(f"- {problem}")
         print()
-        print("GROUPING TEST FAILED")
-        return 1
+        verdict = "GROUPING FAILED"
+    else:
+        if passes:
+            for passed in passes:
+                print(f"- {passed}")
+        else:
+            print("- No timestamp groups with multiple cameras found in this input.")
+        print()
+        verdict = "GROUPING OK"
 
-    print("- none")
+    report = {
+        "grouping_version": GROUPING_VERSION,
+        "input": args.input,
+        "mp4_files_found": len(videos),
+        "groups_found": len(groups),
+        "passes": passes,
+        "problems": problems,
+        "warnings": warnings,
+        "verdict": verdict,
+    }
+    write_report(Path(args.report), report)
+    print(f"Report written: {Path(args.report)}")
     print()
-    print("GROUPING TEST PASSED")
+    print(verdict)
+
+    if problems:
+        return 1
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
