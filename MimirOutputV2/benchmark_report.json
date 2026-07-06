@@ -1,0 +1,48 @@
+{
+  "labels_loaded": 3,
+  "labels_matched": 2,
+  "skipped_unmatched": 1,
+  "passed": 2,
+  "failed": 0,
+  "critical_failures": 0,
+  "false_importants": 0,
+  "false_ignores": 0,
+  "results": [
+    {
+      "filename_or_group": "2026-04-19_12-43-26",
+      "expected_severity": "REVIEW",
+      "actual_severity": "REVIEW",
+      "category": "person_near",
+      "matched_incident_id": "incident_0001",
+      "notes": "person near vehicle with no clear contact should be review at most and never important",
+      "passed": true,
+      "critical": false,
+      "skipped": false,
+      "reason": "matched expected severity"
+    },
+    {
+      "filename_or_group": "2026-04-19_12-44-29",
+      "expected_severity": "IGNORE",
+      "actual_severity": "IGNORE",
+      "category": "person_passby",
+      "matched_incident_id": "incident_0002",
+      "notes": "person/pass-by with no contact should never be important",
+      "passed": true,
+      "critical": false,
+      "skipped": false,
+      "reason": "matched expected severity"
+    },
+    {
+      "filename_or_group": "2026-04-17_17-51-51",
+      "expected_severity": "IGNORE",
+      "actual_severity": "MISSING",
+      "category": "person_passby",
+      "matched_incident_id": "",
+      "notes": "people walking by no contact should never be important",
+      "passed": false,
+      "critical": false,
+      "skipped": true,
+      "reason": "not present in current scan"
+    }
+  ]
+}

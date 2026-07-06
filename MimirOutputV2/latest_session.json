@@ -1,20 +1,20 @@
 {
   "schema_version": "mimir_v2",
   "scanner_version": "mimir_core_v2_0_1",
-  "selected_input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+  "selected_input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
   "grouping_version": "event_grouping_v2_0_1",
   "grouping_debug": {
-    "mp4_files_found": 8,
+    "mp4_files_found": 3,
     "event_groups_built": 2,
-    "multi_camera_groups": 2,
-    "single_camera_groups": 0,
+    "multi_camera_groups": 1,
+    "single_camera_groups": 1,
     "unknown_camera_files": [],
     "ungrouped_files": [],
     "grouping_warnings": []
   },
   "event_groups_found": 2,
-  "multi_camera_groups": 2,
-  "single_camera_groups": 0,
+  "multi_camera_groups": 1,
+  "single_camera_groups": 1,
   "incident_count": 2,
   "important": 0,
   "review": 1,
@@ -22,53 +22,37 @@
   "incidents": [
     {
       "id": "incident_0001",
-      "event_group_id": "event_2026-04-18_16-02-44_25fa4265",
-      "event_timestamp": "2026-04-18_16-02-44",
-      "event_folder": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+      "event_group_id": "event_2026-04-19_12-43-26_75e3bf94",
+      "event_timestamp": "2026-04-19_12-43-26",
+      "event_folder": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
       "source_category": "SentryClips",
       "severity": "REVIEW",
       "final_severity": "REVIEW",
       "event_type": "possible_impact",
       "summary": "Mimir found uncertain activity worth review.",
-      "camera_count": 4,
+      "camera_count": 2,
       "available_cameras": [
         "front",
-        "back",
-        "left_repeater",
-        "right_repeater"
+        "left_repeater"
       ],
       "primary_camera": "left_repeater",
       "camera_clips": [
         {
           "camera": "front",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-02-44-front.mp4",
-          "filename": "2026-04-18_16-02-44-front.mp4",
-          "duration_sec": 60.3,
-          "exists": true
-        },
-        {
-          "camera": "back",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-02-44-back.mp4",
-          "filename": "2026-04-18_16-02-44-back.mp4",
-          "duration_sec": 60.388,
+          "path": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51\\2026-04-19_12-43-26-front.mp4",
+          "filename": "2026-04-19_12-43-26-front.mp4",
+          "duration_sec": 60.696,
           "exists": true
         },
         {
           "camera": "left_repeater",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-02-44-left_repeater.mp4",
-          "filename": "2026-04-18_16-02-44-left_repeater.mp4",
-          "duration_sec": 60.297,
-          "exists": true
-        },
-        {
-          "camera": "right_repeater",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-02-44-right_repeater.mp4",
-          "filename": "2026-04-18_16-02-44-right_repeater.mp4",
-          "duration_sec": 60.298,
+          "path": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51\\2026-04-19_12-43-26-left_repeater.mp4",
+          "filename": "2026-04-19_12-43-26-left_repeater.mp4",
+          "duration_sec": 60.687,
           "exists": true
         }
       ],
-      "video_path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-02-44-left_repeater.mp4",
+      "video_path": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51\\2026-04-19_12-43-26-left_repeater.mp4",
       "hero_thumbnail": "",
       "contact_sheet": "",
       "timeline_markers": [
@@ -81,24 +65,22 @@
       ],
       "local_evidence": {
         "evidence_version": "local_evidence_v2_0_1",
-        "camera_count": 4,
+        "camera_count": 2,
         "available_cameras": [
           "front",
-          "back",
-          "left_repeater",
-          "right_repeater"
+          "left_repeater"
         ],
-        "total_duration_sec": 241.283,
-        "sampled_frames": 240,
+        "total_duration_sec": 121.383,
+        "sampled_frames": 120,
         "multi_camera": true,
         "has_video": true,
-        "motion_score": 0.0795,
-        "max_motion_score": 0.3767,
-        "motion_spike_time_sec": 1.53,
-        "scene_change_score": 0.3767,
+        "motion_score": 0.1125,
+        "max_motion_score": 0.4541,
+        "motion_spike_time_sec": 38.382,
+        "scene_change_score": 0.4541,
         "possible_impact": false,
         "impact_level": "LOW",
-        "impact_score": 0.3767,
+        "impact_score": 0.4541,
         "strong_impact_like_motion": false,
         "possible_contact": false,
         "contact_level": "NONE",
@@ -107,7 +89,7 @@
         "vehicle_detected": true,
         "person_passby_detected": true,
         "person_passby": true,
-        "person_lingering_detected": true,
+        "person_lingering_detected": false,
         "vehicle_passby_detected": true,
         "vehicle_lingering_detected": true,
         "normal_traffic_evidence": false,
@@ -121,29 +103,10 @@
         "crash_safety_triggered": false,
         "camera_evidence": {
           "front": {
-            "motion_score": 0.0346,
-            "max_motion_score": 0.1051,
-            "motion_spike_time_sec": 45.225,
-            "scene_change_score": 0.1051,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": false,
-            "vehicle_detected": true,
-            "person_passby_detected": false,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": true,
-            "vehicle_lingering_detected": false,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 60,
-            "evidence_score": 0.3551
-          },
-          "back": {
-            "motion_score": 0.0481,
-            "max_motion_score": 0.1992,
-            "motion_spike_time_sec": 42.326,
-            "scene_change_score": 0.1992,
+            "motion_score": 0.0321,
+            "max_motion_score": 0.2466,
+            "motion_spike_time_sec": 47.393,
+            "scene_change_score": 0.2466,
             "possible_impact": false,
             "impact_level": "NONE",
             "possible_contact": false,
@@ -151,18 +114,18 @@
             "person_detected": true,
             "vehicle_detected": true,
             "person_passby_detected": true,
-            "person_lingering_detected": true,
+            "person_lingering_detected": false,
             "vehicle_passby_detected": true,
-            "vehicle_lingering_detected": false,
+            "vehicle_lingering_detected": true,
             "normal_traffic_evidence": true,
             "sampled_frames": 60,
-            "evidence_score": 0.9492
+            "evidence_score": 0.9966
           },
           "left_repeater": {
-            "motion_score": 0.0795,
-            "max_motion_score": 0.3767,
-            "motion_spike_time_sec": 1.53,
-            "scene_change_score": 0.3767,
+            "motion_score": 0.1125,
+            "max_motion_score": 0.4541,
+            "motion_spike_time_sec": 38.382,
+            "scene_change_score": 0.4541,
             "possible_impact": false,
             "impact_level": "LOW",
             "possible_contact": false,
@@ -170,447 +133,405 @@
             "person_detected": true,
             "vehicle_detected": true,
             "person_passby_detected": true,
-            "person_lingering_detected": true,
+            "person_lingering_detected": false,
             "vehicle_passby_detected": true,
             "vehicle_lingering_detected": true,
             "normal_traffic_evidence": true,
             "sampled_frames": 60,
-            "evidence_score": 1.1267
-          },
-          "right_repeater": {
-            "motion_score": 0.0256,
-            "max_motion_score": 0.0478,
-            "motion_spike_time_sec": 46.24,
-            "scene_change_score": 0.0478,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": true,
-            "vehicle_detected": true,
-            "person_passby_detected": true,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": true,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 60,
-            "evidence_score": 0.7978
+            "evidence_score": 1.2041
           }
         },
         "object_tracks": [
           {
             "track_id": 1,
             "camera": "front",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 20.834,
-            "last_seen_time_sec": 20.834,
-            "frame_count": 1,
+            "class_name": "person",
+            "first_seen_time_sec": 45.397,
+            "last_seen_time_sec": 47.393,
+            "frame_count": 2,
             "bbox_first": [
-              876.6,
-              573.15,
-              1278.82,
-              744.82
+              398.98,
+              356.77,
+              680.08,
+              947.45
             ],
             "bbox_last": [
-              876.6,
-              573.15,
-              1278.82,
-              744.82
+              513.65,
+              338.49,
+              838.71,
+              939.68
             ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.6356,
-            "confidence_max": 0.6356
+            "dwell_time_sec": 1.996,
+            "confidence_avg": 0.8339,
+            "confidence_max": 0.8716
           },
           {
             "track_id": 2,
             "camera": "front",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 44.209,
-            "last_seen_time_sec": 44.209,
+            "class_name": "person",
+            "first_seen_time_sec": 46.395,
+            "last_seen_time_sec": 46.395,
             "frame_count": 1,
             "bbox_first": [
-              144.76,
-              574.59,
-              626.59,
-              755.97
+              10.83,
+              339.85,
+              285.23,
+              940.27
             ],
             "bbox_last": [
-              144.76,
-              574.59,
-              626.59,
-              755.97
+              10.83,
+              339.85,
+              285.23,
+              940.27
             ],
             "dwell_time_sec": 0.0,
-            "confidence_avg": 0.8944,
-            "confidence_max": 0.8944
-          },
-          {
-            "track_id": 1,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 18.974,
-            "last_seen_time_sec": 22.866,
-            "frame_count": 6,
-            "bbox_first": [
-              1123.49,
-              277.65,
-              1279.09,
-              636.12
-            ],
-            "bbox_last": [
-              1186.08,
-              280.43,
-              1279.3,
-              619.03
-            ],
-            "dwell_time_sec": 3.892,
-            "confidence_avg": 0.6414,
-            "confidence_max": 0.7746
-          },
-          {
-            "track_id": 2,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 38.434,
-            "last_seen_time_sec": 58.381,
-            "frame_count": 21,
-            "bbox_first": [
-              1092.15,
-              213.01,
-              1255.69,
-              546.6
-            ],
-            "bbox_last": [
-              790.14,
-              56.19,
-              947.97,
-              490.22
-            ],
-            "dwell_time_sec": 19.947,
-            "confidence_avg": 0.6903,
-            "confidence_max": 0.8517
+            "confidence_avg": 0.8672,
+            "confidence_max": 0.8672
           },
           {
             "track_id": 3,
-            "camera": "back",
+            "camera": "front",
             "class_name": "person",
-            "first_seen_time_sec": 41.353,
-            "last_seen_time_sec": 41.353,
-            "frame_count": 1,
+            "first_seen_time_sec": 46.395,
+            "last_seen_time_sec": 48.39,
+            "frame_count": 2,
             "bbox_first": [
-              813.27,
-              113.68,
-              1152.1,
-              675.4
+              1008.74,
+              378.3,
+              1272.91,
+              937.35
             ],
             "bbox_last": [
-              813.27,
-              113.68,
-              1152.1,
-              675.4
+              1062.7,
+              458.75,
+              1279.58,
+              930.95
             ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.7883,
-            "confidence_max": 0.7883
+            "dwell_time_sec": 1.995,
+            "confidence_avg": 0.6096,
+            "confidence_max": 0.8666
           },
           {
             "track_id": 4,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 42.326,
-            "last_seen_time_sec": 42.326,
-            "frame_count": 1,
+            "camera": "front",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 59.366,
+            "frame_count": 60,
             "bbox_first": [
-              591.26,
-              19.29,
-              831.05,
-              603.33
+              99.95,
+              452.02,
+              376.68,
+              656.05
             ],
             "bbox_last": [
-              591.26,
-              19.29,
-              831.05,
-              603.33
+              99.6,
+              452.21,
+              377.39,
+              656.98
             ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.839,
-            "confidence_max": 0.839
+            "dwell_time_sec": 59.366,
+            "confidence_avg": 0.8432,
+            "confidence_max": 0.8726
           },
           {
             "track_id": 5,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 43.299,
-            "last_seen_time_sec": 50.597,
-            "frame_count": 8,
+            "camera": "front",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 59.366,
+            "frame_count": 59,
             "bbox_first": [
-              439.82,
-              34.39,
-              630.9,
-              503.08
+              442.79,
+              474.38,
+              680.49,
+              672.81
             ],
             "bbox_last": [
-              161.86,
-              225.53,
-              213.14,
-              344.07
+              442.61,
+              474.45,
+              680.49,
+              669.42
             ],
-            "dwell_time_sec": 7.298,
-            "confidence_avg": 0.7098,
-            "confidence_max": 0.8571
+            "dwell_time_sec": 59.366,
+            "confidence_avg": 0.7753,
+            "confidence_max": 0.8312
           },
           {
             "track_id": 6,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 53.516,
-            "last_seen_time_sec": 59.354,
-            "frame_count": 7,
+            "camera": "front",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 59.366,
+            "frame_count": 60,
             "bbox_first": [
-              983.3,
-              125.03,
-              1194.16,
-              604.87
+              759.83,
+              495.95,
+              1009.63,
+              699.95
             ],
             "bbox_last": [
-              809.85,
-              75.89,
-              1204.61,
-              722.14
+              760.39,
+              495.26,
+              1010.45,
+              700.57
             ],
-            "dwell_time_sec": 5.838,
-            "confidence_avg": 0.8084,
-            "confidence_max": 0.8497
+            "dwell_time_sec": 59.366,
+            "confidence_avg": 0.7633,
+            "confidence_max": 0.8522
           },
           {
             "track_id": 7,
-            "camera": "back",
+            "camera": "front",
             "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 0.0,
-            "frame_count": 1,
-            "bbox_first": [
-              1055.58,
-              263.75,
-              1279.21,
-              680.29
-            ],
-            "bbox_last": [
-              1055.58,
-              263.75,
-              1279.21,
-              680.29
-            ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.654,
-            "confidence_max": 0.654
-          },
-          {
-            "track_id": 8,
-            "camera": "back",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 0.973,
+            "first_seen_time_sec": 45.397,
+            "last_seen_time_sec": 47.393,
             "frame_count": 2,
             "bbox_first": [
-              5.06,
-              30.92,
-              1278.22,
-              957.87
+              1175.33,
+              534.29,
+              1279.04,
+              638.41
             ],
             "bbox_last": [
-              2.38,
-              35.1,
-              1278.66,
-              954.19
+              1150.9,
+              528.21,
+              1247.67,
+              606.05
             ],
-            "dwell_time_sec": 0.973,
-            "confidence_avg": 0.4447,
-            "confidence_max": 0.4808
-          },
-          {
-            "track_id": 9,
-            "camera": "back",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 26.272,
-            "last_seen_time_sec": 29.191,
-            "frame_count": 3,
-            "bbox_first": [
-              0.09,
-              23.56,
-              1279.03,
-              952.96
-            ],
-            "bbox_last": [
-              0.25,
-              25.26,
-              1278.97,
-              952.11
-            ],
-            "dwell_time_sec": 2.919,
-            "confidence_avg": 0.3845,
-            "confidence_max": 0.4107
+            "dwell_time_sec": 1.996,
+            "confidence_avg": 0.739,
+            "confidence_max": 0.7476
           },
           {
             "track_id": 1,
             "camera": "left_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 15.807,
-            "last_seen_time_sec": 17.847,
+            "first_seen_time_sec": 19.191,
+            "last_seen_time_sec": 22.221,
             "frame_count": 4,
             "bbox_first": [
-              82.13,
-              209.36,
-              301.22,
-              876.86
+              299.11,
+              40.48,
+              622.63,
+              943.98
             ],
             "bbox_last": [
-              154.33,
-              329.27,
-              339.49,
-              751.04
+              269.65,
+              156.51,
+              471.53,
+              921.99
             ],
-            "dwell_time_sec": 2.04,
-            "confidence_avg": 0.72,
-            "confidence_max": 0.8777
+            "dwell_time_sec": 3.03,
+            "confidence_avg": 0.7883,
+            "confidence_max": 0.9013
           },
           {
             "track_id": 2,
             "camera": "left_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 41.303,
-            "last_seen_time_sec": 41.303,
+            "first_seen_time_sec": 25.251,
+            "last_seen_time_sec": 25.251,
             "frame_count": 1,
             "bbox_first": [
-              5.28,
-              354.26,
-              73.33,
-              548.68
+              513.52,
+              807.33,
+              726.66,
+              922.69
             ],
             "bbox_last": [
-              5.28,
-              354.26,
-              73.33,
-              548.68
+              513.52,
+              807.33,
+              726.66,
+              922.69
             ],
             "dwell_time_sec": 0.0,
-            "confidence_avg": 0.3984,
-            "confidence_max": 0.3984
+            "confidence_avg": 0.3718,
+            "confidence_max": 0.3718
           },
           {
             "track_id": 3,
             "camera": "left_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 54.56,
-            "last_seen_time_sec": 59.659,
-            "frame_count": 10,
+            "first_seen_time_sec": 33.331,
+            "last_seen_time_sec": 36.362,
+            "frame_count": 4,
             "bbox_first": [
-              2.74,
-              359.47,
-              76.2,
-              600.35
+              224.78,
+              176.66,
+              460.45,
+              892.6
             ],
             "bbox_last": [
-              2.87,
-              366.57,
-              82.25,
-              599.58
+              314.83,
+              110.97,
+              574.31,
+              950.43
             ],
-            "dwell_time_sec": 5.099,
-            "confidence_avg": 0.6591,
-            "confidence_max": 0.85
+            "dwell_time_sec": 3.031,
+            "confidence_avg": 0.8159,
+            "confidence_max": 0.8688
           },
           {
             "track_id": 4,
             "camera": "left_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 59.659,
-            "frame_count": 109,
+            "class_name": "person",
+            "first_seen_time_sec": 37.372,
+            "last_seen_time_sec": 37.372,
+            "frame_count": 1,
             "bbox_first": [
-              172.19,
-              313.04,
-              1279.33,
-              950.53
+              463.53,
+              40.34,
+              911.5,
+              945.9
             ],
             "bbox_last": [
-              245.25,
-              189.3,
-              1277.57,
-              953.32
+              463.53,
+              40.34,
+              911.5,
+              945.9
             ],
-            "dwell_time_sec": 59.659,
-            "confidence_avg": 0.6275,
-            "confidence_max": 0.9223
+            "dwell_time_sec": 0.0,
+            "confidence_avg": 0.8605,
+            "confidence_max": 0.8605
           },
           {
             "track_id": 5,
             "camera": "left_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 0.0,
+            "class_name": "person",
+            "first_seen_time_sec": 38.382,
+            "last_seen_time_sec": 38.382,
             "frame_count": 1,
             "bbox_first": [
-              1009.65,
-              400.63,
-              1278.51,
-              522.43
+              697.86,
+              3.68,
+              1278.07,
+              946.64
             ],
             "bbox_last": [
-              1009.65,
-              400.63,
-              1278.51,
-              522.43
+              697.86,
+              3.68,
+              1278.07,
+              946.64
             ],
             "dwell_time_sec": 0.0,
-            "confidence_avg": 0.399,
-            "confidence_max": 0.399
+            "confidence_avg": 0.8627,
+            "confidence_max": 0.8627
           },
           {
-            "track_id": 1,
-            "camera": "right_repeater",
-            "class_name": "person",
-            "first_seen_time_sec": 45.223,
-            "last_seen_time_sec": 46.24,
+            "track_id": 6,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 4.04,
+            "last_seen_time_sec": 23.231,
+            "frame_count": 21,
+            "bbox_first": [
+              962.36,
+              101.89,
+              1279.63,
+              943.15
+            ],
+            "bbox_last": [
+              277.85,
+              129.92,
+              1278.26,
+              891.24
+            ],
+            "dwell_time_sec": 19.191,
+            "confidence_avg": 0.7142,
+            "confidence_max": 0.9286
+          },
+          {
+            "track_id": 7,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 16.161,
+            "last_seen_time_sec": 18.181,
+            "frame_count": 3,
+            "bbox_first": [
+              462.99,
+              387.53,
+              569.55,
+              842.99
+            ],
+            "bbox_last": [
+              461.73,
+              390.45,
+              557.44,
+              839.0
+            ],
+            "dwell_time_sec": 2.02,
+            "confidence_avg": 0.6778,
+            "confidence_max": 0.7163
+          },
+          {
+            "track_id": 8,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 19.191,
+            "last_seen_time_sec": 19.191,
+            "frame_count": 1,
+            "bbox_first": [
+              30.42,
+              28.39,
+              1275.16,
+              927.95
+            ],
+            "bbox_last": [
+              30.42,
+              28.39,
+              1275.16,
+              927.95
+            ],
+            "dwell_time_sec": 0.0,
+            "confidence_avg": 0.5187,
+            "confidence_max": 0.5187
+          },
+          {
+            "track_id": 9,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 26.261,
+            "last_seen_time_sec": 27.271,
             "frame_count": 2,
             "bbox_first": [
-              1085.55,
-              395.5,
-              1177.8,
-              660.28
+              279.82,
+              129.52,
+              1278.3,
+              862.89
             ],
             "bbox_last": [
-              973.47,
-              407.83,
-              1050.34,
-              650.09
+              279.39,
+              128.78,
+              1278.32,
+              860.35
             ],
-            "dwell_time_sec": 1.017,
-            "confidence_avg": 0.7981,
-            "confidence_max": 0.8212
+            "dwell_time_sec": 1.01,
+            "confidence_avg": 0.3723,
+            "confidence_max": 0.3786
           },
           {
-            "track_id": 2,
-            "camera": "right_repeater",
+            "track_id": 10,
+            "camera": "left_repeater",
             "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 59.451,
-            "frame_count": 60,
+            "first_seen_time_sec": 31.311,
+            "last_seen_time_sec": 59.593,
+            "frame_count": 29,
             "bbox_first": [
-              2.57,
-              174.91,
-              955.32,
-              947.97
+              275.63,
+              132.34,
+              1278.26,
+              873.89
             ],
             "bbox_last": [
-              1.85,
-              177.17,
-              952.06,
-              948.27
+              463.85,
+              118.31,
+              1278.21,
+              916.71
             ],
-            "dwell_time_sec": 59.451,
-            "confidence_avg": 0.8983,
-            "confidence_max": 0.9267
+            "dwell_time_sec": 28.282,
+            "confidence_avg": 0.8241,
+            "confidence_max": 0.9313
           }
         ],
         "primary_camera_candidate": "left_repeater",
@@ -630,24 +551,22 @@
       },
       "local_evidence_summary": {
         "evidence_version": "local_evidence_v2_0_1",
-        "camera_count": 4,
+        "camera_count": 2,
         "available_cameras": [
           "front",
-          "back",
-          "left_repeater",
-          "right_repeater"
+          "left_repeater"
         ],
-        "total_duration_sec": 241.283,
-        "sampled_frames": 240,
+        "total_duration_sec": 121.383,
+        "sampled_frames": 120,
         "multi_camera": true,
         "has_video": true,
-        "motion_score": 0.0795,
-        "max_motion_score": 0.3767,
-        "motion_spike_time_sec": 1.53,
-        "scene_change_score": 0.3767,
+        "motion_score": 0.1125,
+        "max_motion_score": 0.4541,
+        "motion_spike_time_sec": 38.382,
+        "scene_change_score": 0.4541,
         "possible_impact": false,
         "impact_level": "LOW",
-        "impact_score": 0.3767,
+        "impact_score": 0.4541,
         "strong_impact_like_motion": false,
         "possible_contact": false,
         "contact_level": "NONE",
@@ -656,7 +575,7 @@
         "vehicle_detected": true,
         "person_passby_detected": true,
         "person_passby": true,
-        "person_lingering_detected": true,
+        "person_lingering_detected": false,
         "vehicle_passby_detected": true,
         "vehicle_lingering_detected": true,
         "normal_traffic_evidence": false,
@@ -670,29 +589,10 @@
         "crash_safety_triggered": false,
         "camera_evidence": {
           "front": {
-            "motion_score": 0.0346,
-            "max_motion_score": 0.1051,
-            "motion_spike_time_sec": 45.225,
-            "scene_change_score": 0.1051,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": false,
-            "vehicle_detected": true,
-            "person_passby_detected": false,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": true,
-            "vehicle_lingering_detected": false,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 60,
-            "evidence_score": 0.3551
-          },
-          "back": {
-            "motion_score": 0.0481,
-            "max_motion_score": 0.1992,
-            "motion_spike_time_sec": 42.326,
-            "scene_change_score": 0.1992,
+            "motion_score": 0.0321,
+            "max_motion_score": 0.2466,
+            "motion_spike_time_sec": 47.393,
+            "scene_change_score": 0.2466,
             "possible_impact": false,
             "impact_level": "NONE",
             "possible_contact": false,
@@ -700,18 +600,18 @@
             "person_detected": true,
             "vehicle_detected": true,
             "person_passby_detected": true,
-            "person_lingering_detected": true,
+            "person_lingering_detected": false,
             "vehicle_passby_detected": true,
-            "vehicle_lingering_detected": false,
+            "vehicle_lingering_detected": true,
             "normal_traffic_evidence": true,
             "sampled_frames": 60,
-            "evidence_score": 0.9492
+            "evidence_score": 0.9966
           },
           "left_repeater": {
-            "motion_score": 0.0795,
-            "max_motion_score": 0.3767,
-            "motion_spike_time_sec": 1.53,
-            "scene_change_score": 0.3767,
+            "motion_score": 0.1125,
+            "max_motion_score": 0.4541,
+            "motion_spike_time_sec": 38.382,
+            "scene_change_score": 0.4541,
             "possible_impact": false,
             "impact_level": "LOW",
             "possible_contact": false,
@@ -719,447 +619,405 @@
             "person_detected": true,
             "vehicle_detected": true,
             "person_passby_detected": true,
-            "person_lingering_detected": true,
+            "person_lingering_detected": false,
             "vehicle_passby_detected": true,
             "vehicle_lingering_detected": true,
             "normal_traffic_evidence": true,
             "sampled_frames": 60,
-            "evidence_score": 1.1267
-          },
-          "right_repeater": {
-            "motion_score": 0.0256,
-            "max_motion_score": 0.0478,
-            "motion_spike_time_sec": 46.24,
-            "scene_change_score": 0.0478,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": true,
-            "vehicle_detected": true,
-            "person_passby_detected": true,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": true,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 60,
-            "evidence_score": 0.7978
+            "evidence_score": 1.2041
           }
         },
         "object_tracks": [
           {
             "track_id": 1,
             "camera": "front",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 20.834,
-            "last_seen_time_sec": 20.834,
-            "frame_count": 1,
+            "class_name": "person",
+            "first_seen_time_sec": 45.397,
+            "last_seen_time_sec": 47.393,
+            "frame_count": 2,
             "bbox_first": [
-              876.6,
-              573.15,
-              1278.82,
-              744.82
+              398.98,
+              356.77,
+              680.08,
+              947.45
             ],
             "bbox_last": [
-              876.6,
-              573.15,
-              1278.82,
-              744.82
+              513.65,
+              338.49,
+              838.71,
+              939.68
             ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.6356,
-            "confidence_max": 0.6356
+            "dwell_time_sec": 1.996,
+            "confidence_avg": 0.8339,
+            "confidence_max": 0.8716
           },
           {
             "track_id": 2,
             "camera": "front",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 44.209,
-            "last_seen_time_sec": 44.209,
+            "class_name": "person",
+            "first_seen_time_sec": 46.395,
+            "last_seen_time_sec": 46.395,
             "frame_count": 1,
             "bbox_first": [
-              144.76,
-              574.59,
-              626.59,
-              755.97
+              10.83,
+              339.85,
+              285.23,
+              940.27
             ],
             "bbox_last": [
-              144.76,
-              574.59,
-              626.59,
-              755.97
+              10.83,
+              339.85,
+              285.23,
+              940.27
             ],
             "dwell_time_sec": 0.0,
-            "confidence_avg": 0.8944,
-            "confidence_max": 0.8944
-          },
-          {
-            "track_id": 1,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 18.974,
-            "last_seen_time_sec": 22.866,
-            "frame_count": 6,
-            "bbox_first": [
-              1123.49,
-              277.65,
-              1279.09,
-              636.12
-            ],
-            "bbox_last": [
-              1186.08,
-              280.43,
-              1279.3,
-              619.03
-            ],
-            "dwell_time_sec": 3.892,
-            "confidence_avg": 0.6414,
-            "confidence_max": 0.7746
-          },
-          {
-            "track_id": 2,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 38.434,
-            "last_seen_time_sec": 58.381,
-            "frame_count": 21,
-            "bbox_first": [
-              1092.15,
-              213.01,
-              1255.69,
-              546.6
-            ],
-            "bbox_last": [
-              790.14,
-              56.19,
-              947.97,
-              490.22
-            ],
-            "dwell_time_sec": 19.947,
-            "confidence_avg": 0.6903,
-            "confidence_max": 0.8517
+            "confidence_avg": 0.8672,
+            "confidence_max": 0.8672
           },
           {
             "track_id": 3,
-            "camera": "back",
+            "camera": "front",
             "class_name": "person",
-            "first_seen_time_sec": 41.353,
-            "last_seen_time_sec": 41.353,
-            "frame_count": 1,
+            "first_seen_time_sec": 46.395,
+            "last_seen_time_sec": 48.39,
+            "frame_count": 2,
             "bbox_first": [
-              813.27,
-              113.68,
-              1152.1,
-              675.4
+              1008.74,
+              378.3,
+              1272.91,
+              937.35
             ],
             "bbox_last": [
-              813.27,
-              113.68,
-              1152.1,
-              675.4
+              1062.7,
+              458.75,
+              1279.58,
+              930.95
             ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.7883,
-            "confidence_max": 0.7883
+            "dwell_time_sec": 1.995,
+            "confidence_avg": 0.6096,
+            "confidence_max": 0.8666
           },
           {
             "track_id": 4,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 42.326,
-            "last_seen_time_sec": 42.326,
-            "frame_count": 1,
+            "camera": "front",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 59.366,
+            "frame_count": 60,
             "bbox_first": [
-              591.26,
-              19.29,
-              831.05,
-              603.33
+              99.95,
+              452.02,
+              376.68,
+              656.05
             ],
             "bbox_last": [
-              591.26,
-              19.29,
-              831.05,
-              603.33
+              99.6,
+              452.21,
+              377.39,
+              656.98
             ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.839,
-            "confidence_max": 0.839
+            "dwell_time_sec": 59.366,
+            "confidence_avg": 0.8432,
+            "confidence_max": 0.8726
           },
           {
             "track_id": 5,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 43.299,
-            "last_seen_time_sec": 50.597,
-            "frame_count": 8,
+            "camera": "front",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 59.366,
+            "frame_count": 59,
             "bbox_first": [
-              439.82,
-              34.39,
-              630.9,
-              503.08
+              442.79,
+              474.38,
+              680.49,
+              672.81
             ],
             "bbox_last": [
-              161.86,
-              225.53,
-              213.14,
-              344.07
+              442.61,
+              474.45,
+              680.49,
+              669.42
             ],
-            "dwell_time_sec": 7.298,
-            "confidence_avg": 0.7098,
-            "confidence_max": 0.8571
+            "dwell_time_sec": 59.366,
+            "confidence_avg": 0.7753,
+            "confidence_max": 0.8312
           },
           {
             "track_id": 6,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 53.516,
-            "last_seen_time_sec": 59.354,
-            "frame_count": 7,
+            "camera": "front",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 59.366,
+            "frame_count": 60,
             "bbox_first": [
-              983.3,
-              125.03,
-              1194.16,
-              604.87
+              759.83,
+              495.95,
+              1009.63,
+              699.95
             ],
             "bbox_last": [
-              809.85,
-              75.89,
-              1204.61,
-              722.14
+              760.39,
+              495.26,
+              1010.45,
+              700.57
             ],
-            "dwell_time_sec": 5.838,
-            "confidence_avg": 0.8084,
-            "confidence_max": 0.8497
+            "dwell_time_sec": 59.366,
+            "confidence_avg": 0.7633,
+            "confidence_max": 0.8522
           },
           {
             "track_id": 7,
-            "camera": "back",
+            "camera": "front",
             "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 0.0,
-            "frame_count": 1,
-            "bbox_first": [
-              1055.58,
-              263.75,
-              1279.21,
-              680.29
-            ],
-            "bbox_last": [
-              1055.58,
-              263.75,
-              1279.21,
-              680.29
-            ],
-            "dwell_time_sec": 0.0,
-            "confidence_avg": 0.654,
-            "confidence_max": 0.654
-          },
-          {
-            "track_id": 8,
-            "camera": "back",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 0.973,
+            "first_seen_time_sec": 45.397,
+            "last_seen_time_sec": 47.393,
             "frame_count": 2,
             "bbox_first": [
-              5.06,
-              30.92,
-              1278.22,
-              957.87
+              1175.33,
+              534.29,
+              1279.04,
+              638.41
             ],
             "bbox_last": [
-              2.38,
-              35.1,
-              1278.66,
-              954.19
+              1150.9,
+              528.21,
+              1247.67,
+              606.05
             ],
-            "dwell_time_sec": 0.973,
-            "confidence_avg": 0.4447,
-            "confidence_max": 0.4808
-          },
-          {
-            "track_id": 9,
-            "camera": "back",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 26.272,
-            "last_seen_time_sec": 29.191,
-            "frame_count": 3,
-            "bbox_first": [
-              0.09,
-              23.56,
-              1279.03,
-              952.96
-            ],
-            "bbox_last": [
-              0.25,
-              25.26,
-              1278.97,
-              952.11
-            ],
-            "dwell_time_sec": 2.919,
-            "confidence_avg": 0.3845,
-            "confidence_max": 0.4107
+            "dwell_time_sec": 1.996,
+            "confidence_avg": 0.739,
+            "confidence_max": 0.7476
           },
           {
             "track_id": 1,
             "camera": "left_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 15.807,
-            "last_seen_time_sec": 17.847,
+            "first_seen_time_sec": 19.191,
+            "last_seen_time_sec": 22.221,
             "frame_count": 4,
             "bbox_first": [
-              82.13,
-              209.36,
-              301.22,
-              876.86
+              299.11,
+              40.48,
+              622.63,
+              943.98
             ],
             "bbox_last": [
-              154.33,
-              329.27,
-              339.49,
-              751.04
+              269.65,
+              156.51,
+              471.53,
+              921.99
             ],
-            "dwell_time_sec": 2.04,
-            "confidence_avg": 0.72,
-            "confidence_max": 0.8777
+            "dwell_time_sec": 3.03,
+            "confidence_avg": 0.7883,
+            "confidence_max": 0.9013
           },
           {
             "track_id": 2,
             "camera": "left_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 41.303,
-            "last_seen_time_sec": 41.303,
+            "first_seen_time_sec": 25.251,
+            "last_seen_time_sec": 25.251,
             "frame_count": 1,
             "bbox_first": [
-              5.28,
-              354.26,
-              73.33,
-              548.68
+              513.52,
+              807.33,
+              726.66,
+              922.69
             ],
             "bbox_last": [
-              5.28,
-              354.26,
-              73.33,
-              548.68
+              513.52,
+              807.33,
+              726.66,
+              922.69
             ],
             "dwell_time_sec": 0.0,
-            "confidence_avg": 0.3984,
-            "confidence_max": 0.3984
+            "confidence_avg": 0.3718,
+            "confidence_max": 0.3718
           },
           {
             "track_id": 3,
             "camera": "left_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 54.56,
-            "last_seen_time_sec": 59.659,
-            "frame_count": 10,
+            "first_seen_time_sec": 33.331,
+            "last_seen_time_sec": 36.362,
+            "frame_count": 4,
             "bbox_first": [
-              2.74,
-              359.47,
-              76.2,
-              600.35
+              224.78,
+              176.66,
+              460.45,
+              892.6
             ],
             "bbox_last": [
-              2.87,
-              366.57,
-              82.25,
-              599.58
+              314.83,
+              110.97,
+              574.31,
+              950.43
             ],
-            "dwell_time_sec": 5.099,
-            "confidence_avg": 0.6591,
-            "confidence_max": 0.85
+            "dwell_time_sec": 3.031,
+            "confidence_avg": 0.8159,
+            "confidence_max": 0.8688
           },
           {
             "track_id": 4,
             "camera": "left_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 59.659,
-            "frame_count": 109,
+            "class_name": "person",
+            "first_seen_time_sec": 37.372,
+            "last_seen_time_sec": 37.372,
+            "frame_count": 1,
             "bbox_first": [
-              172.19,
-              313.04,
-              1279.33,
-              950.53
+              463.53,
+              40.34,
+              911.5,
+              945.9
             ],
             "bbox_last": [
-              245.25,
-              189.3,
-              1277.57,
-              953.32
+              463.53,
+              40.34,
+              911.5,
+              945.9
             ],
-            "dwell_time_sec": 59.659,
-            "confidence_avg": 0.6275,
-            "confidence_max": 0.9223
+            "dwell_time_sec": 0.0,
+            "confidence_avg": 0.8605,
+            "confidence_max": 0.8605
           },
           {
             "track_id": 5,
             "camera": "left_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 0.0,
+            "class_name": "person",
+            "first_seen_time_sec": 38.382,
+            "last_seen_time_sec": 38.382,
             "frame_count": 1,
             "bbox_first": [
-              1009.65,
-              400.63,
-              1278.51,
-              522.43
+              697.86,
+              3.68,
+              1278.07,
+              946.64
             ],
             "bbox_last": [
-              1009.65,
-              400.63,
-              1278.51,
-              522.43
+              697.86,
+              3.68,
+              1278.07,
+              946.64
             ],
             "dwell_time_sec": 0.0,
-            "confidence_avg": 0.399,
-            "confidence_max": 0.399
+            "confidence_avg": 0.8627,
+            "confidence_max": 0.8627
           },
           {
-            "track_id": 1,
-            "camera": "right_repeater",
-            "class_name": "person",
-            "first_seen_time_sec": 45.223,
-            "last_seen_time_sec": 46.24,
+            "track_id": 6,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 4.04,
+            "last_seen_time_sec": 23.231,
+            "frame_count": 21,
+            "bbox_first": [
+              962.36,
+              101.89,
+              1279.63,
+              943.15
+            ],
+            "bbox_last": [
+              277.85,
+              129.92,
+              1278.26,
+              891.24
+            ],
+            "dwell_time_sec": 19.191,
+            "confidence_avg": 0.7142,
+            "confidence_max": 0.9286
+          },
+          {
+            "track_id": 7,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 16.161,
+            "last_seen_time_sec": 18.181,
+            "frame_count": 3,
+            "bbox_first": [
+              462.99,
+              387.53,
+              569.55,
+              842.99
+            ],
+            "bbox_last": [
+              461.73,
+              390.45,
+              557.44,
+              839.0
+            ],
+            "dwell_time_sec": 2.02,
+            "confidence_avg": 0.6778,
+            "confidence_max": 0.7163
+          },
+          {
+            "track_id": 8,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 19.191,
+            "last_seen_time_sec": 19.191,
+            "frame_count": 1,
+            "bbox_first": [
+              30.42,
+              28.39,
+              1275.16,
+              927.95
+            ],
+            "bbox_last": [
+              30.42,
+              28.39,
+              1275.16,
+              927.95
+            ],
+            "dwell_time_sec": 0.0,
+            "confidence_avg": 0.5187,
+            "confidence_max": 0.5187
+          },
+          {
+            "track_id": 9,
+            "camera": "left_repeater",
+            "class_name": "vehicle",
+            "first_seen_time_sec": 26.261,
+            "last_seen_time_sec": 27.271,
             "frame_count": 2,
             "bbox_first": [
-              1085.55,
-              395.5,
-              1177.8,
-              660.28
+              279.82,
+              129.52,
+              1278.3,
+              862.89
             ],
             "bbox_last": [
-              973.47,
-              407.83,
-              1050.34,
-              650.09
+              279.39,
+              128.78,
+              1278.32,
+              860.35
             ],
-            "dwell_time_sec": 1.017,
-            "confidence_avg": 0.7981,
-            "confidence_max": 0.8212
+            "dwell_time_sec": 1.01,
+            "confidence_avg": 0.3723,
+            "confidence_max": 0.3786
           },
           {
-            "track_id": 2,
-            "camera": "right_repeater",
+            "track_id": 10,
+            "camera": "left_repeater",
             "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 59.451,
-            "frame_count": 60,
+            "first_seen_time_sec": 31.311,
+            "last_seen_time_sec": 59.593,
+            "frame_count": 29,
             "bbox_first": [
-              2.57,
-              174.91,
-              955.32,
-              947.97
+              275.63,
+              132.34,
+              1278.26,
+              873.89
             ],
             "bbox_last": [
-              1.85,
-              177.17,
-              952.06,
-              948.27
+              463.85,
+              118.31,
+              1278.21,
+              916.71
             ],
-            "dwell_time_sec": 59.451,
-            "confidence_avg": 0.8983,
-            "confidence_max": 0.9267
+            "dwell_time_sec": 28.282,
+            "confidence_avg": 0.8241,
+            "confidence_max": 0.9313
           }
         ],
         "primary_camera_candidate": "left_repeater",
@@ -1213,53 +1071,29 @@
     },
     {
       "id": "incident_0002",
-      "event_group_id": "event_2026-04-18_16-03-46_5569d824",
-      "event_timestamp": "2026-04-18_16-03-46",
-      "event_folder": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+      "event_group_id": "event_2026-04-19_12-44-29_f4bb0f71",
+      "event_timestamp": "2026-04-19_12-44-29",
+      "event_folder": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
       "source_category": "SentryClips",
       "severity": "IGNORE",
       "final_severity": "IGNORE",
       "event_type": "person_passby",
       "summary": "People passed near the vehicle. No contact, impact, or tampering was detected.",
-      "camera_count": 4,
+      "camera_count": 1,
       "available_cameras": [
-        "front",
-        "back",
-        "left_repeater",
         "right_repeater"
       ],
       "primary_camera": "right_repeater",
       "camera_clips": [
         {
-          "camera": "front",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-03-46-front.mp4",
-          "filename": "2026-04-18_16-03-46-front.mp4",
-          "duration_sec": 13.232,
-          "exists": true
-        },
-        {
-          "camera": "back",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-03-46-back.mp4",
-          "filename": "2026-04-18_16-03-46-back.mp4",
-          "duration_sec": 13.611,
-          "exists": true
-        },
-        {
-          "camera": "left_repeater",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-03-46-left_repeater.mp4",
-          "filename": "2026-04-18_16-03-46-left_repeater.mp4",
-          "duration_sec": 13.982,
-          "exists": true
-        },
-        {
           "camera": "right_repeater",
-          "path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-03-46-right_repeater.mp4",
-          "filename": "2026-04-18_16-03-46-right_repeater.mp4",
-          "duration_sec": 13.23,
+          "path": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51\\2026-04-19_12-44-29-right_repeater.mp4",
+          "filename": "2026-04-19_12-44-29-right_repeater.mp4",
+          "duration_sec": 19.334,
           "exists": true
         }
       ],
-      "video_path": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02\\2026-04-18_16-03-46-right_repeater.mp4",
+      "video_path": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51\\2026-04-19_12-44-29-right_repeater.mp4",
       "hero_thumbnail": "",
       "contact_sheet": "",
       "timeline_markers": [
@@ -1272,35 +1106,32 @@
       ],
       "local_evidence": {
         "evidence_version": "local_evidence_v2_0_1",
-        "camera_count": 4,
+        "camera_count": 1,
         "available_cameras": [
-          "front",
-          "back",
-          "left_repeater",
           "right_repeater"
         ],
-        "total_duration_sec": 54.055,
-        "sampled_frames": 108,
-        "multi_camera": true,
+        "total_duration_sec": 19.334,
+        "sampled_frames": 38,
+        "multi_camera": false,
         "has_video": true,
-        "motion_score": 0.0356,
-        "max_motion_score": 0.1508,
-        "motion_spike_time_sec": 0.513,
-        "scene_change_score": 0.1508,
+        "motion_score": 0.0263,
+        "max_motion_score": 0.0795,
+        "motion_spike_time_sec": 6.763,
+        "scene_change_score": 0.0795,
         "possible_impact": false,
         "impact_level": "NONE",
-        "impact_score": 0.1508,
+        "impact_score": 0.0795,
         "strong_impact_like_motion": false,
         "possible_contact": false,
         "contact_level": "NONE",
         "contact_score": 0.0,
         "person_detected": true,
-        "vehicle_detected": true,
+        "vehicle_detected": false,
         "person_passby_detected": true,
         "person_passby": true,
         "person_lingering_detected": true,
         "vehicle_passby_detected": false,
-        "vehicle_lingering_detected": true,
+        "vehicle_lingering_detected": false,
         "normal_traffic_evidence": false,
         "normal_traffic": false,
         "person_near_only": true,
@@ -1311,198 +1142,72 @@
         "door_handle_attempt": false,
         "crash_safety_triggered": false,
         "camera_evidence": {
-          "front": {
-            "motion_score": 0.0247,
-            "max_motion_score": 0.0481,
-            "motion_spike_time_sec": 7.634,
-            "scene_change_score": 0.0481,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": false,
-            "vehicle_detected": false,
-            "person_passby_detected": false,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": false,
-            "normal_traffic_evidence": false,
-            "sampled_frames": 26,
-            "evidence_score": 0.0481
-          },
-          "back": {
-            "motion_score": 0.0356,
-            "max_motion_score": 0.1508,
-            "motion_spike_time_sec": 0.513,
-            "scene_change_score": 0.1508,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": true,
-            "vehicle_detected": false,
-            "person_passby_detected": true,
-            "person_lingering_detected": true,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": false,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 27,
-            "evidence_score": 0.6508
-          },
-          "left_repeater": {
-            "motion_score": 0.0234,
-            "max_motion_score": 0.0498,
-            "motion_spike_time_sec": 8.235,
-            "scene_change_score": 0.0498,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": false,
-            "vehicle_detected": true,
-            "person_passby_detected": false,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": true,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 28,
-            "evidence_score": 0.2998
-          },
           "right_repeater": {
-            "motion_score": 0.029,
-            "max_motion_score": 0.078,
-            "motion_spike_time_sec": 1.005,
-            "scene_change_score": 0.078,
+            "motion_score": 0.0263,
+            "max_motion_score": 0.0795,
+            "motion_spike_time_sec": 6.763,
+            "scene_change_score": 0.0795,
             "possible_impact": false,
             "impact_level": "NONE",
             "possible_contact": false,
             "contact_level": "NONE",
             "person_detected": true,
-            "vehicle_detected": true,
+            "vehicle_detected": false,
             "person_passby_detected": true,
             "person_lingering_detected": true,
             "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": true,
+            "vehicle_lingering_detected": false,
             "normal_traffic_evidence": true,
-            "sampled_frames": 27,
-            "evidence_score": 0.828
+            "sampled_frames": 38,
+            "evidence_score": 0.5795
           }
         },
         "object_tracks": [
           {
             "track_id": 1,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 8.209,
-            "frame_count": 29,
-            "bbox_first": [
-              410.63,
-              24.98,
-              733.64,
-              604.75
-            ],
-            "bbox_last": [
-              57.25,
-              295.89,
-              92.67,
-              389.03
-            ],
-            "dwell_time_sec": 8.209,
-            "confidence_avg": 0.5539,
-            "confidence_max": 0.895
-          },
-          {
-            "track_id": 2,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 1.026,
-            "frame_count": 3,
-            "bbox_first": [
-              71.78,
-              207.91,
-              163.29,
-              454.86
-            ],
-            "bbox_last": [
-              59.48,
-              236.33,
-              134.96,
-              433.14
-            ],
-            "dwell_time_sec": 1.026,
-            "confidence_avg": 0.7149,
-            "confidence_max": 0.7443
-          },
-          {
-            "track_id": 1,
-            "camera": "left_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 13.896,
-            "frame_count": 55,
-            "bbox_first": [
-              240.53,
-              187.59,
-              1278.5,
-              956.26
-            ],
-            "bbox_last": [
-              245.28,
-              189.96,
-              1277.64,
-              953.13
-            ],
-            "dwell_time_sec": 13.896,
-            "confidence_avg": 0.7474,
-            "confidence_max": 0.9004
-          },
-          {
-            "track_id": 1,
             "camera": "right_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 0.502,
-            "last_seen_time_sec": 2.01,
-            "frame_count": 6,
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 3.121,
+            "frame_count": 12,
             "bbox_first": [
-              1067.23,
-              364.53,
-              1190.82,
-              687.59
+              492.13,
+              424.9,
+              544.75,
+              551.21
             ],
             "bbox_last": [
-              900.61,
-              343.14,
-              1021.6,
-              687.48
+              474.72,
+              440.55,
+              521.17,
+              538.38
             ],
-            "dwell_time_sec": 1.508,
-            "confidence_avg": 0.7087,
-            "confidence_max": 0.8545
+            "dwell_time_sec": 3.121,
+            "confidence_avg": 0.6172,
+            "confidence_max": 0.754
           },
           {
             "track_id": 2,
             "camera": "right_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 13.062,
-            "frame_count": 27,
+            "class_name": "person",
+            "first_seen_time_sec": 7.803,
+            "last_seen_time_sec": 7.803,
+            "frame_count": 1,
             "bbox_first": [
-              1.94,
-              175.79,
-              954.32,
-              947.54
+              327.25,
+              449.39,
+              354.89,
+              530.2
             ],
             "bbox_last": [
-              2.63,
-              176.49,
-              954.37,
-              948.07
+              327.25,
+              449.39,
+              354.89,
+              530.2
             ],
-            "dwell_time_sec": 13.062,
-            "confidence_avg": 0.8831,
-            "confidence_max": 0.9065
+            "dwell_time_sec": 0.0,
+            "confidence_avg": 0.3796,
+            "confidence_max": 0.3796
           }
         ],
         "primary_camera_candidate": "right_repeater",
@@ -1522,35 +1227,32 @@
       },
       "local_evidence_summary": {
         "evidence_version": "local_evidence_v2_0_1",
-        "camera_count": 4,
+        "camera_count": 1,
         "available_cameras": [
-          "front",
-          "back",
-          "left_repeater",
           "right_repeater"
         ],
-        "total_duration_sec": 54.055,
-        "sampled_frames": 108,
-        "multi_camera": true,
+        "total_duration_sec": 19.334,
+        "sampled_frames": 38,
+        "multi_camera": false,
         "has_video": true,
-        "motion_score": 0.0356,
-        "max_motion_score": 0.1508,
-        "motion_spike_time_sec": 0.513,
-        "scene_change_score": 0.1508,
+        "motion_score": 0.0263,
+        "max_motion_score": 0.0795,
+        "motion_spike_time_sec": 6.763,
+        "scene_change_score": 0.0795,
         "possible_impact": false,
         "impact_level": "NONE",
-        "impact_score": 0.1508,
+        "impact_score": 0.0795,
         "strong_impact_like_motion": false,
         "possible_contact": false,
         "contact_level": "NONE",
         "contact_score": 0.0,
         "person_detected": true,
-        "vehicle_detected": true,
+        "vehicle_detected": false,
         "person_passby_detected": true,
         "person_passby": true,
         "person_lingering_detected": true,
         "vehicle_passby_detected": false,
-        "vehicle_lingering_detected": true,
+        "vehicle_lingering_detected": false,
         "normal_traffic_evidence": false,
         "normal_traffic": false,
         "person_near_only": true,
@@ -1561,198 +1263,72 @@
         "door_handle_attempt": false,
         "crash_safety_triggered": false,
         "camera_evidence": {
-          "front": {
-            "motion_score": 0.0247,
-            "max_motion_score": 0.0481,
-            "motion_spike_time_sec": 7.634,
-            "scene_change_score": 0.0481,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": false,
-            "vehicle_detected": false,
-            "person_passby_detected": false,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": false,
-            "normal_traffic_evidence": false,
-            "sampled_frames": 26,
-            "evidence_score": 0.0481
-          },
-          "back": {
-            "motion_score": 0.0356,
-            "max_motion_score": 0.1508,
-            "motion_spike_time_sec": 0.513,
-            "scene_change_score": 0.1508,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": true,
-            "vehicle_detected": false,
-            "person_passby_detected": true,
-            "person_lingering_detected": true,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": false,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 27,
-            "evidence_score": 0.6508
-          },
-          "left_repeater": {
-            "motion_score": 0.0234,
-            "max_motion_score": 0.0498,
-            "motion_spike_time_sec": 8.235,
-            "scene_change_score": 0.0498,
-            "possible_impact": false,
-            "impact_level": "NONE",
-            "possible_contact": false,
-            "contact_level": "NONE",
-            "person_detected": false,
-            "vehicle_detected": true,
-            "person_passby_detected": false,
-            "person_lingering_detected": false,
-            "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": true,
-            "normal_traffic_evidence": true,
-            "sampled_frames": 28,
-            "evidence_score": 0.2998
-          },
           "right_repeater": {
-            "motion_score": 0.029,
-            "max_motion_score": 0.078,
-            "motion_spike_time_sec": 1.005,
-            "scene_change_score": 0.078,
+            "motion_score": 0.0263,
+            "max_motion_score": 0.0795,
+            "motion_spike_time_sec": 6.763,
+            "scene_change_score": 0.0795,
             "possible_impact": false,
             "impact_level": "NONE",
             "possible_contact": false,
             "contact_level": "NONE",
             "person_detected": true,
-            "vehicle_detected": true,
+            "vehicle_detected": false,
             "person_passby_detected": true,
             "person_lingering_detected": true,
             "vehicle_passby_detected": false,
-            "vehicle_lingering_detected": true,
+            "vehicle_lingering_detected": false,
             "normal_traffic_evidence": true,
-            "sampled_frames": 27,
-            "evidence_score": 0.828
+            "sampled_frames": 38,
+            "evidence_score": 0.5795
           }
         },
         "object_tracks": [
           {
             "track_id": 1,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 8.209,
-            "frame_count": 29,
-            "bbox_first": [
-              410.63,
-              24.98,
-              733.64,
-              604.75
-            ],
-            "bbox_last": [
-              57.25,
-              295.89,
-              92.67,
-              389.03
-            ],
-            "dwell_time_sec": 8.209,
-            "confidence_avg": 0.5539,
-            "confidence_max": 0.895
-          },
-          {
-            "track_id": 2,
-            "camera": "back",
-            "class_name": "person",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 1.026,
-            "frame_count": 3,
-            "bbox_first": [
-              71.78,
-              207.91,
-              163.29,
-              454.86
-            ],
-            "bbox_last": [
-              59.48,
-              236.33,
-              134.96,
-              433.14
-            ],
-            "dwell_time_sec": 1.026,
-            "confidence_avg": 0.7149,
-            "confidence_max": 0.7443
-          },
-          {
-            "track_id": 1,
-            "camera": "left_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 13.896,
-            "frame_count": 55,
-            "bbox_first": [
-              240.53,
-              187.59,
-              1278.5,
-              956.26
-            ],
-            "bbox_last": [
-              245.28,
-              189.96,
-              1277.64,
-              953.13
-            ],
-            "dwell_time_sec": 13.896,
-            "confidence_avg": 0.7474,
-            "confidence_max": 0.9004
-          },
-          {
-            "track_id": 1,
             "camera": "right_repeater",
             "class_name": "person",
-            "first_seen_time_sec": 0.502,
-            "last_seen_time_sec": 2.01,
-            "frame_count": 6,
+            "first_seen_time_sec": 0.0,
+            "last_seen_time_sec": 3.121,
+            "frame_count": 12,
             "bbox_first": [
-              1067.23,
-              364.53,
-              1190.82,
-              687.59
+              492.13,
+              424.9,
+              544.75,
+              551.21
             ],
             "bbox_last": [
-              900.61,
-              343.14,
-              1021.6,
-              687.48
+              474.72,
+              440.55,
+              521.17,
+              538.38
             ],
-            "dwell_time_sec": 1.508,
-            "confidence_avg": 0.7087,
-            "confidence_max": 0.8545
+            "dwell_time_sec": 3.121,
+            "confidence_avg": 0.6172,
+            "confidence_max": 0.754
           },
           {
             "track_id": 2,
             "camera": "right_repeater",
-            "class_name": "vehicle",
-            "first_seen_time_sec": 0.0,
-            "last_seen_time_sec": 13.062,
-            "frame_count": 27,
+            "class_name": "person",
+            "first_seen_time_sec": 7.803,
+            "last_seen_time_sec": 7.803,
+            "frame_count": 1,
             "bbox_first": [
-              1.94,
-              175.79,
-              954.32,
-              947.54
+              327.25,
+              449.39,
+              354.89,
+              530.2
             ],
             "bbox_last": [
-              2.63,
-              176.49,
-              954.37,
-              948.07
+              327.25,
+              449.39,
+              354.89,
+              530.2
             ],
-            "dwell_time_sec": 13.062,
-            "confidence_avg": 0.8831,
-            "confidence_max": 0.9065
+            "dwell_time_sec": 0.0,
+            "confidence_avg": 0.3796,
+            "confidence_max": 0.3796
           }
         ],
         "primary_camera_candidate": "right_repeater",
