@@ -5,6 +5,7 @@ import { documentDir } from '@tauri-apps/api/path'
 import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
+import { MIMIR_VERSION } from '../config'
 import type { MimirCameraClip, MimirIncident, MimirSession, SessionLoadState } from '../types'
 
 type LibraryFilter = 'IMPORTANT' | 'REVIEW' | 'IGNORE' | 'ALL' | 'TRASH'
@@ -623,18 +624,15 @@ function IncidentCard({
   selectionMode,
   onOpen,
   onToggleSelected,
-  onOpenFiles,
 }: {
   incident: MimirIncident
   selected: boolean
   selectionMode: boolean
   onOpen: (incident: MimirIncident) => void
   onToggleSelected: (incident: MimirIncident) => void
-  onOpenFiles: (incident: MimirIncident) => void
 }) {
   const timestamp = formatDateTime(sourceEventTimestamp(incident))
   const title = eventLabel(incident)
-  const primaryCamera = primaryCameraLabel(incident)
 
   return (
     <article
@@ -682,27 +680,12 @@ function IncidentCard({
         <div className="min-w-0 px-3 pb-2 pt-3">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="min-w-0 truncate text-[13px] font-semibold text-[var(--mimir-text)]">{title}</div>
-          <button
-            type="button"
-            onClick={event => {
-              event.stopPropagation()
-              onOpenFiles(incident)
-            }}
-            className="shrink-0 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[11px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)]"
-          >
-            Files
-          </button>
         </div>
 
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-4 text-[var(--mimir-text-subtle)]">
           <span className="rounded-full bg-white/[0.045] px-2 py-0.5 text-[var(--mimir-text-muted)]">
             {cameraCountLabel(incident)}
           </span>
-          {primaryCamera && cameraCount(incident) > 1 && (
-            <span className="rounded-full bg-white/[0.035] px-2 py-0.5 text-[var(--mimir-text-subtle)]">
-              Best: {primaryCamera}
-            </span>
-          )}
           {timestamp && <span>{timestamp}</span>}
         </div>
       </div>
@@ -1002,6 +985,7 @@ export function IncidentLibraryView({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [filesIncident, setFilesIncident] = useState<MimirIncident | null>(null)
   const [showFreeUpModal, setShowFreeUpModal] = useState(false)
+  const [showAboutModal, setShowAboutModal] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState('')
@@ -1225,7 +1209,6 @@ export function IncidentLibraryView({
               <span>{counts.important} Important</span>
               <span>{counts.review} Review</span>
               <span>{counts.ignore} Ignore</span>
-              <span>{counts.all} total</span>
             </div>
           </div>
         </div>
@@ -1313,6 +1296,16 @@ export function IncidentLibraryView({
                     Storage cleanup
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false)
+                    setShowAboutModal(true)
+                  }}
+                  className="block h-9 w-full rounded-lg px-3 text-left text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.055] hover:text-[var(--mimir-text)]"
+                >
+                  About Mimir
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1456,7 +1449,6 @@ export function IncidentLibraryView({
                 selectionMode={selectionMode}
                 onOpen={setSelectedIncident}
                 onToggleSelected={toggleIncidentSelected}
-                onOpenFiles={setFilesIncident}
               />
             ))}
           </div>
@@ -1518,6 +1510,35 @@ export function IncidentLibraryView({
                 className="h-10 rounded-lg bg-transparent px-4 text-[13px] font-medium text-[var(--mimir-text-subtle)] transition hover:text-[var(--mimir-text)] disabled:opacity-60"
               >
                 Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showAboutModal && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+          <section className="w-full max-w-[460px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
+            <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
+              Private Beta
+            </div>
+            <h2 className="mt-2 text-[28px] font-semibold text-[var(--mimir-text)]">Mimir</h2>
+            <div className="mt-2 text-[13px] font-medium text-[var(--mimir-text-muted)]">
+              Version {MIMIR_VERSION}
+            </div>
+            <p className="mt-5 text-[14px] leading-6 text-[var(--mimir-text-muted)]">
+              Mimir scans locally and helps review vehicle/security footage.
+            </p>
+            <p className="mt-3 text-[13px] leading-6 text-[var(--mimir-text-subtle)]">
+              Scanning does not move or delete clips. File movement only happens when you choose Move to Library or Move to Mimir Trash.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowAboutModal(false)}
+                className="h-10 rounded-lg bg-[var(--mimir-text)] px-4 text-[13px] font-semibold text-black transition hover:bg-white"
+              >
+                Close
               </button>
             </div>
           </section>

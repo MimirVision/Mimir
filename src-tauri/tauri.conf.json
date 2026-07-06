@@ -18,7 +18,8 @@
       "fs": {
         "readFile": true,
         "scope": [
-          "C:\\Mimir_Backend\\MimirOutput\\latest_session.json"
+          "C:\\Mimir_Backend\\MimirOutput\\latest_session.json",
+          "C:\\Mimir_Backend\\MimirOutputV2\\latest_session.json"
         ]
       },
       "protocol": {
@@ -26,6 +27,7 @@
         "assetScope": [
           "C:\\Mimir_Backend\\Frames\\*",
           "C:\\Mimir_Backend\\MimirOutput\\**",
+          "C:\\Mimir_Backend\\MimirOutputV2\\**",
           "C:\\**",
           "D:\\**",
           "E:\\**",

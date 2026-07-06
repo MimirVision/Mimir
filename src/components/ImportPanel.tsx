@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import mimirLockup from '../assets/mimir-lockup.png'
-import { FULL_AI_BETA } from '../config'
+import { FULL_AI_BETA, MIMIR_VERSION, USE_MIMIR_CORE_V2 } from '../config'
 import type {
   BackendProgress,
   LocalAiInstallResult,
@@ -248,6 +248,10 @@ function failedSystemChecks(systemCheck: SystemCheckResult | null) {
 }
 
 function localAiLabel(localAiStatus: LocalAiStatus | null, isCheckingLocalAi: boolean) {
+  if (USE_MIMIR_CORE_V2) {
+    return 'Ready to scan'
+  }
+
   if (isCheckingLocalAi) {
     return 'Checking AI review'
   }
@@ -554,8 +558,6 @@ function ReadinessPanel({
   isCheckingSystem,
   localAiStatus,
   isCheckingLocalAi,
-  hasSelectedFolder,
-  onChooseFolder,
   onOpenLocalAiSetup,
   onRecheckLocalAi,
   selectedVisionModel,
@@ -565,8 +567,6 @@ function ReadinessPanel({
   isCheckingSystem: boolean
   localAiStatus: LocalAiStatus | null
   isCheckingLocalAi: boolean
-  hasSelectedFolder: boolean
-  onChooseFolder: () => void
   onOpenLocalAiSetup: () => void
   onRecheckLocalAi: () => void | Promise<void>
   selectedVisionModel: string
@@ -617,8 +617,9 @@ function ReadinessPanel({
   }
 
   const aiReady = localAiStatus?.ok === true
+  const aiRequired = FULL_AI_BETA && !USE_MIMIR_CORE_V2
 
-  if (isCheckingLocalAi) {
+  if (!USE_MIMIR_CORE_V2 && isCheckingLocalAi) {
     return (
       <div className="mb-4 rounded-lg border border-[var(--mimir-border)] bg-white/[0.025] p-4">
         <div className="flex items-center gap-3">
@@ -634,7 +635,7 @@ function ReadinessPanel({
     )
   }
 
-  if (!aiReady) {
+  if (aiRequired && !aiReady) {
     const detailText = [
       `Selected model: ${selectedVisionModel}`,
       localAiStatus?.message ? `Status: ${localAiStatus.message}` : '',
@@ -689,31 +690,7 @@ function ReadinessPanel({
     )
   }
 
-  return (
-    <div className="mb-4 rounded-lg border border-[rgba(120,146,122,0.22)] bg-[rgba(120,146,122,0.075)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="text-[15px] font-semibold text-green-50">Mimir is ready to scan.</div>
-          <p className="mt-2 text-[13px] leading-6 text-green-100/72">
-            Choose a USB drive or footage folder to begin.
-          </p>
-          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-green-100/16 bg-black/18 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-green-100/82">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--mimir-status-green)]" />
-            AI review ready
-          </div>
-        </div>
-        {!hasSelectedFolder && (
-          <button
-            type="button"
-            onClick={onChooseFolder}
-            className="rounded-lg bg-[var(--mimir-text)] px-4 py-2.5 text-[13px] font-semibold text-black transition hover:bg-white"
-          >
-            Choose USB drive or footage folder
-          </button>
-        )}
-      </div>
-    </div>
-  )
+  return null
 }
 
 export function ImportPanel({
@@ -764,7 +741,8 @@ export function ImportPanel({
   const systemFailures = failedSystemChecks(systemCheck)
   const scannerReady = systemCheck?.ok === true
   const aiReviewReady = localAiStatus?.ok === true
-  const canAnalyze = hasSelectedFolder && scannerReady && (!FULL_AI_BETA || aiReviewReady) && !isWorking
+  const aiRequired = FULL_AI_BETA && !USE_MIMIR_CORE_V2
+  const canAnalyze = hasSelectedFolder && scannerReady && (!aiRequired || aiReviewReady) && !isWorking
   const [showBackendLoadHelper, setShowBackendLoadHelper] = useState(false)
 
   useEffect(() => {
@@ -808,6 +786,9 @@ export function ImportPanel({
           <p className="mt-4 max-w-[500px] text-[14px] leading-6 text-[var(--mimir-text-subtle)]">
             Select the USB drive, TeslaCam folder, or any folder containing MP4 clips.
           </p>
+          <div className="mt-8 text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--mimir-text-subtle)]">
+            Private Beta - {MIMIR_VERSION}
+          </div>
         </div>
 
         <div className="flex min-h-[560px] flex-col rounded-xl border border-[var(--mimir-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.038),rgba(255,255,255,0.014))] p-4 shadow-[0_28px_80px_rgba(0,0,0,0.34)] sm:p-5">
@@ -818,8 +799,6 @@ export function ImportPanel({
                 isCheckingSystem={isCheckingSystem}
                 localAiStatus={localAiStatus}
                 isCheckingLocalAi={isCheckingLocalAi}
-                hasSelectedFolder={hasSelectedFolder}
-                onChooseFolder={onChooseFolder}
                 onOpenLocalAiSetup={onOpenLocalAiSetup}
                 onRecheckLocalAi={onRecheckLocalAi}
                 selectedVisionModel={selectedVisionModel}
@@ -884,10 +863,10 @@ export function ImportPanel({
                 <div className="mt-4 rounded-lg bg-white/[0.032] p-4">
                   <div className="min-w-0">
                     <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-                      Selected source:
+                      Selected footage
                     </div>
-                    <div className="break-all text-[14px] font-medium text-[var(--mimir-text)]">
-                      {selectedFolder}
+                    <div className="truncate text-[14px] font-medium text-[var(--mimir-text)]">
+                      {selectedFolder.split(/[\\/]/).filter(Boolean).pop() || 'Footage folder selected'}
                     </div>
                     <div className="mt-2 text-[13px] text-[var(--mimir-text-muted)]">
                       {isCountingClips

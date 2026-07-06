@@ -21,8 +21,28 @@ interface ClipActionResult {
   stderr?: string
 }
 
+interface StorageActionResult {
+  ok: boolean
+  action: string
+  incident_id: string
+  message: string
+  updated_session: string
+  report_json: string
+  stdout?: string
+  stderr?: string
+}
+
+interface StorageActionReport {
+  ok?: boolean
+  action?: string
+  moved_files?: unknown[]
+  failed_files?: unknown[]
+  skipped_files?: unknown[]
+  failures?: unknown[]
+}
+
 type MediaMode = 'video' | 'image' | 'empty'
-type IncidentAction = 'set_status_IGNORE' | 'set_status_REVIEW' | 'set_status_IMPORTANT' | 'move_to_library' | 'delete' | 'save_note' | 'save_feedback'
+type IncidentAction = 'set_status_IGNORE' | 'set_status_REVIEW' | 'set_status_IMPORTANT' | 'move_to_library' | 'move_to_trash' | 'delete' | 'save_note' | 'save_feedback'
 type AiFeedbackChoice = 'Correct' | 'Should be Important' | 'Should be Review' | 'Should be Ignore' | 'Weird AI flag' | 'Missed obvious event'
 
 interface ViewerMediaChoice {
@@ -72,6 +92,13 @@ const feedbackChoices: AiFeedbackChoice[] = [
   'Weird AI flag',
   'Missed obvious event',
 ]
+
+type GridSecondaryPlaybackMode = 'video' | 'poster'
+
+const GRID_SECONDARY_PLAYBACK_MODE: GridSecondaryPlaybackMode = 'video'
+const SECONDARY_SYNC_INTERVAL_MS = 750
+const SECONDARY_SYNC_DRIFT_SEC = 0.35
+const UI_TIME_UPDATE_MS = 250
 
 function localFileSrc(path: string) {
   return convertFileSrc(path, 'asset')
@@ -446,6 +473,29 @@ function classificationDebug(incident: MimirIncident) {
     : {}
 }
 
+function objectRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function aiEvidence(incident: MimirIncident) {
+  const direct = objectRecord(incident.ai_evidence)
+  if (Object.keys(direct).length > 0) {
+    return direct
+  }
+
+  const review = objectRecord(incident.ai_evidence_review)
+  return objectRecord(review.ai_evidence)
+}
+
+function localEvidence(incident: MimirIncident) {
+  const direct = objectRecord(incident.local_evidence)
+  if (Object.keys(direct).length > 0) {
+    return direct
+  }
+
+  return objectRecord(incident.local_evidence_summary)
+}
+
 function booleanEvidence(incident: MimirIncident, key: string, directValue?: boolean | null) {
   if (typeof directValue === 'boolean') {
     return directValue
@@ -621,6 +671,87 @@ function safeTextList(value: unknown) {
   return Array.isArray(value) ? value.map(item => safeText(item, '')).filter(Boolean) : []
 }
 
+function prettyJson(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return 'Not provided'
+  }
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return safeText(value)
+  }
+}
+
+function aiReviewed(incident: MimirIncident) {
+  if (typeof incident.ai_reviewed === 'boolean') {
+    return incident.ai_reviewed
+  }
+
+  const review = objectRecord(incident.ai_evidence_review)
+  return typeof review.ai_reviewed === 'boolean' ? review.ai_reviewed : false
+}
+
+function aiModelName(incident: MimirIncident) {
+  if (incident.ai_model) {
+    return incident.ai_model
+  }
+
+  const review = objectRecord(incident.ai_evidence_review)
+  return safeText(review.ai_model || review.model, '')
+}
+
+function aiSceneType(incident: MimirIncident) {
+  const value = safeText(aiEvidence(incident).scene_type, '')
+  return value ? formatEventType(value) : ''
+}
+
+function aiConfidenceCopy(incident: MimirIncident) {
+  const value = aiEvidence(incident).confidence
+  if (typeof value === 'number') {
+    return formatConfidence(value)
+  }
+
+  return formatConfidence(incident.ai_confidence)
+}
+
+function reviewBadgeCopy(incident: MimirIncident) {
+  return aiReviewed(incident) ? 'AI reviewed' : 'Local review'
+}
+
+function reviewBadgeDescription(incident: MimirIncident) {
+  if (aiReviewed(incident)) {
+    return 'Mimir used AI assistance for this uncertain event.'
+  }
+
+  return 'Mimir reviewed this locally.'
+}
+
+function yesNo(value: unknown) {
+  return value === true ? 'Yes' : value === false ? 'No' : 'Not provided'
+}
+
+function evidenceMetricValue(evidence: Record<string, unknown>, key: string) {
+  const value = evidence[key]
+  if (typeof value === 'number') {
+    return formatNumber(value)
+  }
+
+  if (typeof value === 'boolean') {
+    return yesNo(value)
+  }
+
+  if (Array.isArray(value)) {
+    return value.length ? safeText(value.join(', ')) : 'None'
+  }
+
+  return safeText(value)
+}
+
+function severityReasonList(incident: MimirIncident) {
+  return safeTextList(incident.severity_reasons)
+}
+
 function pathFolder(value?: string) {
   if (!value) {
     return ''
@@ -678,12 +809,26 @@ function incidentFeedbackPayload(
 }
 
 function storageState(incident: MimirIncident) {
-  if (incident.user_deleted || incident.trash_video_path || incident.storage_action_applied === 'mimir_trash') {
-    return 'Mimir Trash'
+  const state = cleanPath(incident.storage_state).toLowerCase()
+
+  if (
+    incident.user_deleted ||
+    incident.trash_video_path ||
+    state === 'trash' ||
+    state === 'partial_trash' ||
+    incident.storage_action_applied === 'mimir_trash'
+  ) {
+    return state === 'partial_trash' ? 'Mimir Trash (partial)' : 'Mimir Trash'
   }
 
-  if (incident.moved_to_library || incident.library_video_path || incident.storage_action_applied === 'move_to_library') {
-    return 'Mimir Library'
+  if (
+    incident.moved_to_library ||
+    incident.library_video_path ||
+    state === 'library' ||
+    state === 'partial_library' ||
+    incident.storage_action_applied === 'move_to_library'
+  ) {
+    return state === 'partial_library' ? 'Mimir Library (partial)' : 'Mimir Library'
   }
 
   if (incident.video_exists === false) {
@@ -803,7 +948,6 @@ function FileLocationPanel({
 }) {
   const originalPath = originalVideoPath(incident)
   const currentPath = currentVideoPath(incident)
-  const originalFolder = pathFolder(originalPath)
   const currentState = storageState(incident)
   const ignoreCopy = ignoreStorageCopy(incident)
 
@@ -830,10 +974,10 @@ function FileLocationPanel({
       )}
 
       <div className="rounded-lg border border-white/[0.04] bg-white/[0.012] px-3">
-        <FilePathRow label="Original source folder" value={originalFolder} />
-        <FilePathRow label="Current video path" value={currentPath} />
-        <FilePathRow label="Library path" value={incident.library_video_path || ''} />
-        <FilePathRow label="Trash path" value={incident.trash_video_path || ''} />
+        <FilePathRow label="Current storage" value={currentState} />
+        <FilePathRow label="Original source" value={originalPath ? 'Available' : 'Not available'} />
+        <FilePathRow label="Mimir Library" value={incident.library_video_path ? 'Available' : 'Not available'} />
+        <FilePathRow label="Mimir Trash" value={incident.trash_video_path ? 'Available' : 'Not available'} />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -953,6 +1097,44 @@ function actionErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function parseStorageActionReport(value: string): StorageActionReport {
+  if (!value.trim()) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as StorageActionReport : {}
+  } catch {
+    return {}
+  }
+}
+
+function storageActionDetails(reportJson: string, result?: StorageActionResult) {
+  const report = parseStorageActionReport(reportJson)
+  const details = {
+    report,
+    stdout: result?.stdout || '',
+    stderr: result?.stderr || '',
+  }
+
+  return JSON.stringify(details, null, 2)
+}
+
+function storageActionStatus(report: StorageActionReport) {
+  const movedCount = Array.isArray(report.moved_files) ? report.moved_files.length : 0
+  const failedCount = Array.isArray(report.failed_files) ? report.failed_files.length : 0
+  const failureCount = Array.isArray(report.failures) ? report.failures.length : 0
+
+  return {
+    movedCount,
+    failedCount,
+    failureCount,
+    partial: movedCount > 0 && (failedCount > 0 || failureCount > 0),
+    failed: movedCount === 0 && (failedCount > 0 || failureCount > 0 || report.ok === false),
+  }
+}
+
 function formatTime(value?: number) {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return '0:00'
@@ -1046,6 +1228,17 @@ function DetailMetric({ label, value }: { label: string; value: string | number 
   )
 }
 
+function TechnicalJsonBlock({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="rounded-lg border border-white/[0.045] bg-black/20 p-3">
+      <div className="mb-2 text-[11px] uppercase tracking-[0.14em] text-[var(--mimir-text-subtle)]">{label}</div>
+      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[var(--mimir-text-muted)]">
+        {prettyJson(value)}
+      </pre>
+    </div>
+  )
+}
+
 function ViewerMedia({
   incident,
   seekRequest,
@@ -1079,6 +1272,11 @@ function ViewerMedia({
   const [isPlaying, setIsPlaying] = useState(false)
   const [selectedGridKey, setSelectedGridKey] = useState('')
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
+  const lastUiTimeUpdateRef = useRef(0)
+  const lastSeekNonceRef = useRef<number | null>(null)
+  const lastPlaybackNonceRef = useRef<number | null>(null)
+  const isPlayingRef = useRef(false)
+  const pendingCameraHandoffRef = useRef<{ key: string; time: number; playing: boolean } | null>(null)
   const primaryFeed = cameraFeeds.find(feed => feed.isPrimary) || cameraFeeds[0]
   const selectedFeed = cameraFeeds.find(feed => feed.key === selectedFeedKey) || primaryFeed
   const playableFeeds = cameraFeeds.filter(feed => feed.path && isAbsoluteLocalPath(feed.path) && isVideoPath(feed.path) && feed.exists !== false)
@@ -1100,6 +1298,120 @@ function ViewerMedia({
   const selectedFeedLabel = selectedFeed?.isPrimary
     ? `Best: ${selectedFeed.label}`
     : selectedFeed?.label || 'Camera'
+  const masterVideoKey = canUseMultiCamera ? selectedFeed?.key || '' : showSingleVideo ? 'single-video' : ''
+
+  const getMasterVideo = useCallback(() => {
+    if (masterVideoKey) {
+      const masterVideo = videoRefs.current.get(masterVideoKey)
+      if (masterVideo) {
+        return masterVideo
+      }
+    }
+
+    return Array.from(videoRefs.current.values()).find(video => video.readyState > 0) || null
+  }, [masterVideoKey])
+
+  const updateUiTime = useCallback(
+    (time: number, force = false) => {
+      if (!Number.isFinite(time)) {
+        return
+      }
+
+      const now = window.performance.now()
+      if (!force && now - lastUiTimeUpdateRef.current < UI_TIME_UPDATE_MS) {
+        return
+      }
+
+      lastUiTimeUpdateRef.current = now
+      onTimeUpdate(Math.max(0, time))
+    },
+    [onTimeUpdate],
+  )
+
+  const syncSecondaryVideos = useCallback(
+    (time: number, options: { playing?: boolean; force?: boolean } = {}) => {
+      if (!Number.isFinite(time)) {
+        return
+      }
+
+      const targetTime = Math.max(0, time)
+      const shouldPlay = Boolean(options.playing)
+
+      for (const [key, video] of videoRefs.current.entries()) {
+        if (!video || key === masterVideoKey || video.readyState === 0 || failedFeedKeys.has(key)) {
+          continue
+        }
+
+        try {
+          const drift = Math.abs(video.currentTime - targetTime)
+          if (options.force || drift > SECONDARY_SYNC_DRIFT_SEC) {
+            video.currentTime = targetTime
+          }
+
+          if (shouldPlay) {
+            void video.play().catch(() => {
+              // A secondary camera refusing playback should not stop the master feed.
+            })
+          } else if (!video.paused) {
+            video.pause()
+          }
+        } catch {
+          // Keep other camera feeds usable if one media element refuses a seek/play.
+        }
+      }
+    },
+    [failedFeedKeys, masterVideoKey],
+  )
+
+  const syncAllVideosTo = useCallback(
+    (time: number, playing: boolean) => {
+      if (!Number.isFinite(time)) {
+        return
+      }
+
+      const targetTime = Math.max(0, time)
+
+      for (const [key, video] of videoRefs.current.entries()) {
+        if (!video || video.readyState === 0 || failedFeedKeys.has(key)) {
+          continue
+        }
+
+        try {
+          if (Math.abs(video.currentTime - targetTime) > 0.05) {
+            video.currentTime = targetTime
+          }
+
+          if (playing) {
+            void video.play().catch(() => {
+              if (key === masterVideoKey) {
+                setIsPlaying(false)
+              }
+            })
+          } else if (!video.paused) {
+            video.pause()
+          }
+        } catch {
+          // Shared seeking is best-effort per feed.
+        }
+      }
+
+      updateUiTime(targetTime, true)
+    },
+    [failedFeedKeys, masterVideoKey, updateUiTime],
+  )
+
+  const handleSharedPlayToggle = useCallback(() => {
+    const masterVideo = getMasterVideo()
+    const baseTime = masterVideo?.currentTime ?? currentTime
+    const nextPlaying = !isPlaying
+
+    setIsPlaying(nextPlaying)
+    syncAllVideosTo(baseTime, nextPlaying)
+  }, [currentTime, getMasterVideo, isPlaying, syncAllVideosTo])
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying
+  }, [isPlaying])
 
   useEffect(() => {
     const nextPrimary = cameraFeeds.find(feed => feed.isPrimary) || cameraFeeds[0]
@@ -1131,35 +1443,45 @@ function ViewerMedia({
   }, [selectedFeed?.key])
 
   useEffect(() => {
-    if (!seekRequest || !Number.isFinite(seekRequest.time) || seekRequest.time < 0) {
+    if (
+      !seekRequest ||
+      lastSeekNonceRef.current === seekRequest.nonce ||
+      !Number.isFinite(seekRequest.time) ||
+      seekRequest.time < 0
+    ) {
       return
     }
 
+    lastSeekNonceRef.current = seekRequest.nonce
     const safeTime = Math.max(0, seekRequest.time)
-
-    for (const video of videoRefs.current.values()) {
-      if (!video || video.readyState === 0) {
-        continue
-      }
-
-      try {
-        video.currentTime = safeTime
-        video.pause()
-      } catch {
-        // A single unavailable camera should not break shared timeline seeking.
-      }
-    }
-
-    setIsPlaying(false)
-  }, [seekRequest])
+    syncAllVideosTo(safeTime, isPlayingRef.current)
+  }, [seekRequest, syncAllVideosTo])
 
   useEffect(() => {
-    if (!playbackRequest) {
+    if (!playbackRequest || lastPlaybackNonceRef.current === playbackRequest.nonce) {
       return
     }
 
+    lastPlaybackNonceRef.current = playbackRequest.nonce
     handleSharedPlayToggle()
-  }, [playbackRequest])
+  }, [handleSharedPlayToggle, playbackRequest])
+
+  useEffect(() => {
+    if (!isPlaying || !canUseMultiCamera) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      const masterVideo = getMasterVideo()
+      if (!masterVideo || masterVideo.paused || masterVideo.readyState === 0) {
+        return
+      }
+
+      syncSecondaryVideos(masterVideo.currentTime, { playing: true })
+    }, SECONDARY_SYNC_INTERVAL_MS)
+
+    return () => window.clearInterval(intervalId)
+  }, [canUseMultiCamera, getMasterVideo, isPlaying, syncSecondaryVideos])
 
   const setVideoRef = useCallback(
     (key: string) => (node: HTMLVideoElement | null) => {
@@ -1194,40 +1516,16 @@ function ViewerMedia({
     })
   }
 
-  const syncVideosTo = (time: number, playing: boolean) => {
-    for (const video of videoRefs.current.values()) {
-      if (!video || video.readyState === 0) {
-        continue
-      }
-
-      try {
-        if (Number.isFinite(time) && Math.abs(video.currentTime - time) > 0.35) {
-          video.currentTime = Math.max(0, time)
-        }
-
-        if (playing) {
-          void video.play().catch(() => {
-            setIsPlaying(false)
-          })
-        } else {
-          video.pause()
-        }
-      } catch {
-        // Keep other camera feeds usable if one media element refuses a seek/play.
-      }
-    }
-  }
-
-  const handleSharedPlayToggle = () => {
-    const firstReadyVideo = Array.from(videoRefs.current.values()).find(video => video.readyState > 0)
-    const baseTime = firstReadyVideo?.currentTime ?? 0
-    const nextPlaying = !isPlaying
-
-    setIsPlaying(nextPlaying)
-    syncVideosTo(baseTime, nextPlaying)
-  }
-
   const selectCameraFeed = (feed: CameraFeed) => {
+    const previousMaster = getMasterVideo()
+    const handoffTime = previousMaster?.currentTime ?? currentTime
+    const shouldKeepPlaying = previousMaster ? !previousMaster.paused : isPlayingRef.current
+    pendingCameraHandoffRef.current = {
+      key: feed.key,
+      time: Number.isFinite(handoffTime) ? Math.max(0, handoffTime) : 0,
+      playing: shouldKeepPlaying,
+    }
+
     setSelectedFeedKey(feed.key)
     setSelectedGridKey(feed.key)
     setLoadedFeedKeys(previous => {
@@ -1235,6 +1533,53 @@ function ViewerMedia({
       next.add(feed.key)
       return next
     })
+
+    window.requestAnimationFrame(() => {
+      const nextMaster = videoRefs.current.get(feed.key)
+      if (!nextMaster || nextMaster.readyState === 0) {
+        return
+      }
+
+      try {
+        const targetDuration = Number.isFinite(nextMaster.duration) && nextMaster.duration > 0 ? nextMaster.duration : Number.POSITIVE_INFINITY
+        if (Number.isFinite(handoffTime)) {
+          nextMaster.currentTime = Math.min(Math.max(0, handoffTime), targetDuration)
+        }
+
+        if (shouldKeepPlaying) {
+          void nextMaster.play().catch(() => {
+            setIsPlaying(false)
+          })
+        }
+        pendingCameraHandoffRef.current = null
+      } catch {
+        // Camera switching should never break the rest of the viewer.
+      }
+    })
+  }
+
+  const applyPendingCameraHandoff = (feed: CameraFeed, video: HTMLVideoElement) => {
+    const handoff = pendingCameraHandoffRef.current
+    if (!handoff || handoff.key !== feed.key) {
+      return
+    }
+
+    try {
+      const targetDuration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : Number.POSITIVE_INFINITY
+      video.currentTime = Math.min(handoff.time, targetDuration)
+
+      if (handoff.playing) {
+        void video.play().catch(() => {
+          setIsPlaying(false)
+        })
+      } else if (!video.paused) {
+        video.pause()
+      }
+    } catch {
+      // Camera handoff is best-effort; loading failures are handled separately.
+    } finally {
+      pendingCameraHandoffRef.current = null
+    }
   }
 
   const markFeedLoading = (key: string, loading: boolean) => {
@@ -1249,27 +1594,9 @@ function ViewerMedia({
     })
   }
 
-  const handleVideoTimeUpdate = (event: SyntheticEvent<HTMLVideoElement>) => {
+  const handleMasterTimeUpdate = (event: SyntheticEvent<HTMLVideoElement>) => {
     const time = event.currentTarget.currentTime
-    onTimeUpdate(time)
-
-    if (!isPlaying) {
-      return
-    }
-
-    for (const [key, video] of videoRefs.current.entries()) {
-      if (video === event.currentTarget || video.readyState === 0 || failedFeedKeys.has(key)) {
-        continue
-      }
-
-      try {
-        if (Math.abs(video.currentTime - time) > 0.45) {
-          video.currentTime = time
-        }
-      } catch {
-        // Sync is best-effort per feed.
-      }
-    }
+    updateUiTime(time)
   }
 
   const renderUnavailable = (label: string, className = '', loadFailed = false) => (
@@ -1288,48 +1615,89 @@ function ViewerMedia({
 
   const renderFeedVideo = (feed: CameraFeed, options: { main?: boolean; muted?: boolean; className?: string }) => {
     const failed = failedFeedKeys.has(feed.key)
+    const isMasterFeed = feed.key === masterVideoKey
+    const shouldRenderSecondaryVideo = options.main || viewerMode !== 'grid' || GRID_SECONDARY_PLAYBACK_MODE === 'video'
     const shouldLoad =
-      options.main ||
-      viewerMode === 'grid' ||
-      !options.main ||
-      loadedFeedKeys.has(feed.key) ||
-      feed.key === selectedFeed?.key
+      shouldRenderSecondaryVideo &&
+      (options.main ||
+        viewerMode === 'grid' ||
+        !options.main ||
+        loadedFeedKeys.has(feed.key) ||
+        feed.key === selectedFeed?.key)
     const loading = loadingFeedKeys.has(feed.key)
 
     if (failed || !feed.path || !isAbsoluteLocalPath(feed.path) || !isVideoPath(feed.path) || feed.exists === false) {
       return renderUnavailable(feed.label, options.className, failed)
     }
 
+    if (!shouldRenderSecondaryVideo) {
+      return renderUnavailable(feed.label, options.className)
+    }
+
     return (
-      <div className={`relative overflow-hidden bg-black shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] ${options.className || ''}`}>
+      <div className={`relative overflow-hidden bg-black ${options.className || ''}`}>
         <video
           key={`${feed.key}-${feed.path}`}
           ref={setVideoRef(feed.key)}
           src={shouldLoad ? localFileSrc(feed.path) : undefined}
-          preload={options.main ? 'metadata' : 'none'}
+          preload={options.main || viewerMode === 'grid' ? 'auto' : 'metadata'}
           playsInline
-          muted={Boolean(options.muted)}
+          controls={isMasterFeed}
+          muted={!isMasterFeed || Boolean(options.muted)}
           className="h-full w-full bg-black object-contain"
           onLoadedMetadata={event => {
             markFeedLoading(feed.key, false)
             const durationValue = event.currentTarget.duration
-            if (Number.isFinite(durationValue) && durationValue > 0) {
+            if (isMasterFeed && Number.isFinite(durationValue) && durationValue > 0) {
               onDurationChange(durationValue)
             }
-            onTimeUpdate(event.currentTarget.currentTime)
+            if (isMasterFeed) {
+              applyPendingCameraHandoff(feed, event.currentTarget)
+              updateUiTime(event.currentTarget.currentTime, true)
+            }
           }}
           onDurationChange={event => {
             const durationValue = event.currentTarget.duration
-            if (Number.isFinite(durationValue) && durationValue > 0) {
+            if (isMasterFeed && Number.isFinite(durationValue) && durationValue > 0) {
               onDurationChange(durationValue)
             }
           }}
-          onTimeUpdate={handleVideoTimeUpdate}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
+          onTimeUpdate={isMasterFeed ? handleMasterTimeUpdate : undefined}
+          onSeeked={event => {
+            if (!isMasterFeed) {
+              return
+            }
+
+            syncSecondaryVideos(event.currentTarget.currentTime, {
+              playing: !event.currentTarget.paused,
+              force: true,
+            })
+            updateUiTime(event.currentTarget.currentTime, true)
+          }}
+          onPlay={event => {
+            if (!isMasterFeed) {
+              return
+            }
+
+            setIsPlaying(true)
+            syncSecondaryVideos(event.currentTarget.currentTime, { playing: true, force: true })
+          }}
+          onPause={event => {
+            if (!isMasterFeed) {
+              return
+            }
+
+            setIsPlaying(false)
+            syncSecondaryVideos(event.currentTarget.currentTime, { playing: false })
+          }}
           onLoadStart={() => markFeedLoading(feed.key, true)}
           onLoadedData={() => markFeedLoading(feed.key, false)}
-          onCanPlay={() => markFeedLoading(feed.key, false)}
+          onCanPlay={event => {
+            markFeedLoading(feed.key, false)
+            if (isMasterFeed) {
+              applyPendingCameraHandoff(feed, event.currentTarget)
+            }
+          }}
           onError={() => markFeedFailed(feed)}
         />
         <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-1.5">
@@ -1373,16 +1741,6 @@ function ViewerMedia({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSharedPlayToggle}
-                className="h-8 rounded-lg border border-white/[0.08] bg-white/[0.045] px-3 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.075]"
-              >
-                {isPlaying ? 'Pause' : 'Play'}
-              </button>
-              <span className="hidden rounded-full bg-black/22 px-2.5 py-1 text-[11px] text-[var(--mimir-text-subtle)] sm:inline">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
               <span className="rounded-full bg-white/[0.045] px-2.5 py-1 text-[11px] text-[var(--mimir-text-subtle)]">
                 {cameraFeeds.length} angles
               </span>
@@ -1462,11 +1820,20 @@ function ViewerMedia({
           {gridFeeds.map(feed => {
             const selected = (selectedGridKey || selectedFeed?.key) === feed.key
             return (
-              <button
+              <div
                 key={feed.key}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => {
-                  selectCameraFeed(feed)
+                  if (!selected) {
+                    selectCameraFeed(feed)
+                  }
+                }}
+                onKeyDown={event => {
+                  if (!selected && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault()
+                    selectCameraFeed(feed)
+                  }
                 }}
                 className={`overflow-hidden rounded-[18px] border bg-black/45 text-left shadow-[0_18px_46px_rgba(0,0,0,0.22)] transition ${
                   selected ? 'border-white/28 ring-2 ring-white/14' : 'border-white/[0.055] hover:border-white/16'
@@ -1477,7 +1844,7 @@ function ViewerMedia({
                   muted: feed.key !== selectedFeed?.key,
                   className: 'aspect-video min-h-[240px]',
                 })}
-              </button>
+              </div>
             )
           })}
         </div>
@@ -1498,6 +1865,8 @@ function ViewerMedia({
           }}
           onDurationChange={event => onDurationChange(event.currentTarget.duration)}
           onTimeUpdate={event => onTimeUpdate(event.currentTarget.currentTime)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
           onError={() => markFeedFailed(null)}
         />
       )}
@@ -1551,13 +1920,6 @@ function ViewerMedia({
         </div>
       )}
 
-      {import.meta.env.DEV && (
-        <div className="absolute bottom-3 left-3 max-w-[calc(100%-24px)] rounded-md bg-black/70 px-3 py-2 text-[11px] leading-4 text-white/55">
-          selected media: {canUseMultiCamera ? viewerMode : showSingleVideo ? 'video' : media.mode} / {selectedFeed?.label || videoCandidates[0]?.label || media.label}
-          {(selectedFeed?.path || videoCandidates[0]?.path || media.path) && <span className="ml-2 break-all">{selectedFeed?.path || videoCandidates[0]?.path || media.path}</span>}
-          <span className="ml-2">video_exists: {String(incident.video_exists ?? 'unknown')}</span>
-        </div>
-      )}
     </div>
   )
 }
@@ -1662,8 +2024,8 @@ function IncidentTimelineMarkers({
     <div className="rounded-[18px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.022),rgba(255,255,255,0.01))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-[13px] font-semibold text-[var(--mimir-text)]">Shared timeline</h2>
-          <p className="mt-1 text-[12px] text-[var(--mimir-text-subtle)]">One timeline controls every loaded angle.</p>
+          <h2 className="text-[13px] font-semibold text-[var(--mimir-text)]">Markers</h2>
+          <p className="mt-1 text-[12px] text-[var(--mimir-text-subtle)]">Jump to notable moments when needed.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1793,19 +2155,32 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
   const evidence = safeTextList(incident.evidence)
   const impactReasons = safeTextList(incident.impact_reasons)
   const contactReasons = safeTextList(incident.contact_reasons)
-  const filename = sourceFilename(cleanPath(incident.source_video) || cleanPath(incident.video_path) || cleanPath(incident.source_clip))
   const calmPersonNear = calmerPersonNearWording(incident)
   const supportedContact = hasSupportedContactEvidence(incident)
   const supportedImpact = hasSupportedImpactEvidence(incident)
   const showImpactReasons = impactReasons.length > 0 && (!calmPersonNear || supportedImpact)
   const showContactReasons = contactReasons.length > 0 && (!calmPersonNear || supportedContact)
   const displayEvidence = calmPersonNear ? ['No clear contact detected'] : evidence
+  const local = localEvidence(incident)
+  const ai = aiEvidence(incident)
+  const debug = classificationDebug(incident)
+  const aiEvidenceItems = safeTextList(ai.evidence)
+  const aiConcernItems = safeTextList(ai.concerns)
+  const resolverReasons = severityReasonList(incident)
+  const severityCapReason = safeText(debug.severity_cap_reason || incident.severity_cap_reason, '')
+  const severityFloorReason = safeText(debug.severity_floor_reason, '')
+  const reviewBadgeTone = aiReviewed(incident)
+    ? 'border-sky-200/18 bg-sky-300/10 text-sky-100/88'
+    : 'border-white/[0.07] bg-white/[0.035] text-[var(--mimir-text-muted)]'
 
   return (
     <aside className="rounded-[18px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.026),rgba(255,255,255,0.01))] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.18)] xl:sticky xl:top-5 xl:self-start">
       <div className="mb-5 flex flex-wrap gap-2">
         <span className={`rounded-full border px-3 py-1 text-[12px] font-semibold ${severityClass(incident.severity)}`}>
           {severityCopy(incident.severity)}
+        </span>
+        <span className={`rounded-full border px-3 py-1 text-[12px] font-medium ${reviewBadgeTone}`}>
+          {reviewBadgeCopy(incident)}
         </span>
         {incident.possible_impact && (!calmPersonNear || supportedImpact) && (
           <span className="rounded-full border border-amber-300/25 bg-amber-400/10 px-3 py-1 text-[12px] font-medium text-amber-100">
@@ -1821,6 +2196,9 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
         <p className="mt-3 text-[14px] leading-6 text-[var(--mimir-text)]">
           {assessmentCopy(incident)}
         </p>
+        <p className="mt-2 text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
+          {reviewBadgeDescription(incident)}
+        </p>
         {importantNotAppliedNote(incident) && (
           <div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.026] px-3 py-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
             Important was not applied because no contact or impact evidence was found.
@@ -1828,14 +2206,84 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
         )}
       </div>
 
-      <div className="rounded-xl border border-white/[0.045] bg-black/10 px-4">
-        <DetailMetric label="Source filename" value={filename || 'Not provided'} />
-        <DetailMetric label="Event type" value={eventDisplayTitle(incident)} />
-        <DetailMetric label="AI confidence" value={formatConfidence(incident.ai_confidence)} />
-        <DetailMetric label="Impact level" value={calmPersonNear && !supportedImpact ? 'No clear impact detected' : incident.impact_level || 'Not provided'} />
-        <DetailMetric label="Contact level" value={contactLevelCopy(incident)} />
-        <DetailMetric label="Source event reason" value={sourceEventReason(incident) || 'Not provided'} />
-      </div>
+      <details className="rounded-xl border border-white/[0.045] bg-black/12 p-4">
+        <summary className="cursor-pointer text-[13px] font-semibold text-[var(--mimir-text)]">
+          Review details
+        </summary>
+        <div className="mt-4 grid gap-4">
+          <div className="rounded-lg border border-white/[0.045] bg-white/[0.012] px-3">
+            <DetailMetric label="Event type" value={eventDisplayTitle(incident)} />
+            <DetailMetric label="Impact level" value={calmPersonNear && !supportedImpact ? 'No clear impact detected' : incident.impact_level || evidenceMetricValue(local, 'impact_level')} />
+            <DetailMetric label="Contact level" value={contactLevelCopy(incident)} />
+            <DetailMetric label="Motion score" value={evidenceMetricValue(local, 'max_motion_score')} />
+            <DetailMetric label="Person detected" value={evidenceMetricValue(local, 'person_detected')} />
+            <DetailMetric label="Vehicle detected" value={evidenceMetricValue(local, 'vehicle_detected')} />
+            <DetailMetric label="Normal traffic evidence" value={evidenceMetricValue(local, 'normal_traffic_evidence')} />
+          </div>
+
+          <div className="rounded-lg border border-white/[0.045] bg-white/[0.012] px-3">
+            <DetailMetric label="Mimir review" value={aiReviewed(incident) ? 'AI assistance used' : 'Local review only'} />
+            <DetailMetric label="AI model" value={aiModelName(incident) || 'Not used'} />
+            <DetailMetric label="AI scene type" value={aiSceneType(incident) || 'Not provided'} />
+            <DetailMetric label="AI confidence" value={aiConfidenceCopy(incident)} />
+          </div>
+
+          {aiEvidenceItems.length > 0 && (
+            <div>
+              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
+                AI evidence
+              </div>
+              <ul className="space-y-2">
+                {aiEvidenceItems.map((item, index) => (
+                  <li key={`${incident.id}-ai-evidence-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-200/45" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {aiConcernItems.length > 0 && (
+            <div>
+              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
+                AI concerns
+              </div>
+              <ul className="space-y-2">
+                {aiConcernItems.map((item, index) => (
+                  <li key={`${incident.id}-ai-concern-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-200/45" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {resolverReasons.length > 0 && (
+            <div>
+              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
+                Resolver reasons
+              </div>
+              <ul className="space-y-2">
+                {resolverReasons.map((item, index) => (
+                  <li key={`${incident.id}-resolver-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/35" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(severityCapReason || severityFloorReason) && (
+            <div className="rounded-lg border border-white/[0.045] bg-white/[0.016] px-3">
+              {severityCapReason && <DetailMetric label="Severity cap" value={severityCapReason} />}
+              {severityFloorReason && <DetailMetric label="Severity floor" value={severityFloorReason} />}
+            </div>
+          )}
+        </div>
+      </details>
 
       <div className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
         <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
@@ -1913,19 +2361,22 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
         </summary>
         <div className="mt-4 grid gap-3">
           <DetailMetric label="Incident ID" value={safeText(incident.id, 'Not provided')} />
-          <DetailMetric label="Source video" value={safeText(incident.source_video)} />
-          <DetailMetric label="AI decision" value={safeText(incident.ai_decision)} />
+          <DetailMetric label="AI parse error" value={yesNo(incident.ai_parse_error)} />
+          <DetailMetric label="AI skipped reason" value={safeText(incident.ai_review_skipped_reason, 'Not provided')} />
+          <DetailMetric label="AI decision" value={safeText(incident.ai_decision, 'Not provided')} />
           <DetailMetric label="Score" value={formatNumber(incident.score)} />
           <DetailMetric label="Persons" value={formatNumber(incident.persons)} />
           <DetailMetric label="Vehicles" value={formatNumber(incident.vehicles)} />
           <DetailMetric label="Active frames" value={formatNumber(incident.active_frames)} />
           <DetailMetric label="Motion score" value={formatNumber(incident.max_motion_score)} />
           <DetailMetric label="Impact score" value={formatNumber(incident.impact_score)} />
-          <DetailMetric label="Classification debug" value={safeText(incident.classification_debug, 'Not provided')} />
           <DetailMetric
             label="Source event timestamp"
             value={formatDateTime(sourceEventTimestamp(incident)) || 'Not provided'}
           />
+          <TechnicalJsonBlock label="Classification debug" value={incident.classification_debug} />
+          <TechnicalJsonBlock label="AI raw response" value={incident.ai_raw_response} />
+          <TechnicalJsonBlock label="Local evidence JSON" value={incident.local_evidence ?? incident.local_evidence_summary} />
         </div>
       </details>
     </aside>
@@ -2030,6 +2481,7 @@ function ReviewActionsPanel({
   busyAction,
   actionMessage,
   actionError,
+  actionDetails,
   feedbackChoice,
   feedbackNotes,
   feedbackIncludeVideo,
@@ -2054,6 +2506,7 @@ function ReviewActionsPanel({
   busyAction: IncidentAction | null
   actionMessage: string
   actionError: string
+  actionDetails: string
   feedbackChoice: AiFeedbackChoice | ''
   feedbackNotes: string
   feedbackIncludeVideo: boolean
@@ -2076,6 +2529,16 @@ function ReviewActionsPanel({
 }) {
   const currentSeverity = normalizeSeverity(incident.severity)
   const disabled = busyAction !== null
+  const [showActionDetails, setShowActionDetails] = useState(false)
+  const currentStorageState = storageState(incident)
+  const storageBadgeTone =
+    currentStorageState.includes('Trash')
+      ? 'border-red-300/20 bg-red-500/10 text-red-100/85'
+      : currentStorageState.includes('Library')
+        ? 'border-emerald-300/18 bg-emerald-400/10 text-emerald-100/85'
+        : currentStorageState === 'Missing file'
+          ? 'border-amber-300/20 bg-amber-400/10 text-amber-100/85'
+          : 'border-white/[0.08] bg-white/[0.035] text-[var(--mimir-text-muted)]'
 
   return (
     <section className="mb-5 rounded-[18px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.012))] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
@@ -2088,11 +2551,13 @@ function ReviewActionsPanel({
             Update this event after reviewing the evidence.
           </p>
         </div>
-        {incident.user_deleted && (
-          <span className="rounded-full border border-red-300/20 bg-red-500/10 px-3 py-1 text-[11px] font-semibold text-red-100/85">
-            In Mimir Trash
-          </span>
-        )}
+        <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${storageBadgeTone}`}>
+          {currentStorageState === 'Mimir Library'
+            ? 'In Mimir Library'
+            : currentStorageState === 'Mimir Trash'
+              ? 'In Mimir Trash'
+              : currentStorageState}
+        </span>
       </div>
 
       <div className="mb-4 rounded-xl border border-white/[0.045] bg-black/12 px-3 py-2.5">
@@ -2158,24 +2623,29 @@ function ReviewActionsPanel({
           className="h-10 rounded-lg border border-red-300/18 bg-red-500/8 px-3 text-[12px] font-semibold text-red-100/86 transition hover:bg-red-500/12 disabled:cursor-not-allowed disabled:opacity-55"
         >
           <span className="inline-flex items-center gap-2">
-            {busyAction === 'delete' && <SmallSpinner />}
+            {busyAction === 'move_to_trash' && <SmallSpinner />}
             Move to Mimir Trash
           </span>
         </button>
       </div>
 
-      <AiFeedbackPanel
-        selectedFeedback={feedbackChoice}
-        notes={feedbackNotes}
-        includeVideo={feedbackIncludeVideo}
-        busy={busyAction === 'save_feedback'}
-        message={feedbackMessage}
-        error={feedbackError}
-        onSelectFeedback={onFeedbackChoiceChange}
-        onNotesChange={onFeedbackNotesChange}
-        onIncludeVideoChange={onFeedbackIncludeVideoChange}
-        onSubmit={onSubmitFeedback}
-      />
+      <details className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
+        <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
+          Feedback
+        </summary>
+        <AiFeedbackPanel
+          selectedFeedback={feedbackChoice}
+          notes={feedbackNotes}
+          includeVideo={feedbackIncludeVideo}
+          busy={busyAction === 'save_feedback'}
+          message={feedbackMessage}
+          error={feedbackError}
+          onSelectFeedback={onFeedbackChoiceChange}
+          onNotesChange={onFeedbackNotesChange}
+          onIncludeVideoChange={onFeedbackIncludeVideoChange}
+          onSubmit={onSubmitFeedback}
+        />
+      </details>
 
       <div className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -2227,12 +2697,29 @@ function ReviewActionsPanel({
 
       {actionMessage && (
         <div className="mt-4 rounded-lg border border-white/[0.075] bg-white/[0.035] p-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
-          {actionMessage}
+          <span className="inline-flex items-center gap-2">
+            {(busyAction === 'move_to_library' || busyAction === 'move_to_trash') && <SmallSpinner />}
+            {actionMessage}
+          </span>
         </div>
       )}
       {actionError && (
         <div className="mt-4 rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/86">
-          {actionError}
+          <div>{actionError}</div>
+          {actionDetails && (
+            <button
+              type="button"
+              onClick={() => setShowActionDetails(value => !value)}
+              className="mt-2 rounded-md border border-red-100/18 bg-black/18 px-2.5 py-1 text-[11px] font-semibold text-red-50/86 transition hover:bg-black/30"
+            >
+              {showActionDetails ? 'Hide details' : 'Show details'}
+            </button>
+          )}
+          {showActionDetails && actionDetails && (
+            <pre className="mt-3 max-h-64 overflow-auto rounded-lg bg-black/30 p-3 text-[11px] leading-4 text-red-50/75">
+              {actionDetails}
+            </pre>
+          )}
         </div>
       )}
     </section>
@@ -2260,6 +2747,8 @@ export function IncidentViewerScreen({
   const [busyAction, setBusyAction] = useState<IncidentAction | null>(null)
   const [actionMessage, setActionMessage] = useState('')
   const [actionError, setActionError] = useState('')
+  const [actionDetails, setActionDetails] = useState('')
+  const [showLibraryConfirm, setShowLibraryConfirm] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showFilesDrawer, setShowFilesDrawer] = useState(false)
   const [isEditingNote, setIsEditingNote] = useState(false)
@@ -2277,6 +2766,8 @@ export function IncidentViewerScreen({
     setPlaybackRequest(null)
     setActionMessage('')
     setActionError('')
+    setActionDetails('')
+    setShowLibraryConfirm(false)
     setShowDeleteConfirm(false)
     setShowFilesDrawer(false)
     setIsEditingNote(false)
@@ -2305,11 +2796,11 @@ export function IncidentViewerScreen({
     status?: 'IGNORE' | 'REVIEW' | 'IMPORTANT',
   ) => {
     if (action === 'move_to_library') {
-      return 'Clip moved to Mimir Library'
+      return 'Moved to Mimir Library'
     }
 
     if (action === 'delete') {
-      return 'Clip moved to Mimir Trash'
+      return 'Moved to Mimir Trash'
     }
 
     if (status) {
@@ -2326,6 +2817,7 @@ export function IncidentViewerScreen({
   ) => {
     setBusyAction(busyKey)
     setActionError('')
+    setActionDetails('')
     setActionMessage('')
 
     try {
@@ -2343,9 +2835,52 @@ export function IncidentViewerScreen({
     }
   }
 
+  const runCoreV2StorageAction = async (action: 'move_to_library' | 'move_to_trash') => {
+    const busyKey: IncidentAction = action
+    const successMessage = action === 'move_to_library' ? 'Moved to Mimir Library' : 'Moved to Mimir Trash'
+
+    setBusyAction(busyKey)
+    setActionError('')
+    setActionDetails('')
+    setActionMessage('Moving clips...')
+
+    try {
+      const result = await invoke<StorageActionResult>('run_core_v2_storage_action', {
+        incidentId: incidentActionId(incident),
+        action,
+      })
+      const report = parseStorageActionReport(result.report_json)
+      const status = storageActionStatus(report)
+      const details = storageActionDetails(result.report_json, result)
+
+      await refreshCurrentIncident(status.partial || status.failed ? '' : successMessage)
+
+      if (status.partial) {
+        setActionMessage('')
+        setActionError('Some files could not be moved.')
+        setActionDetails(details)
+      } else if (status.failed || !result.ok) {
+        setActionMessage('')
+        setActionError(result.message || 'Mimir could not move this incident.')
+        setActionDetails(details)
+      } else {
+        setActionError('')
+        setActionDetails('')
+        setActionMessage(successMessage)
+      }
+    } catch (error) {
+      setActionMessage('')
+      setActionError(actionErrorMessage(error))
+      setActionDetails('')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
   const saveNote = async () => {
     setBusyAction('save_note')
     setActionError('')
+    setActionDetails('')
     setActionMessage('')
 
     try {
@@ -2373,6 +2908,7 @@ export function IncidentViewerScreen({
     setFeedbackError('')
     setFeedbackMessage('')
     setActionError('')
+    setActionDetails('')
 
     try {
       const videoPath = currentVideoPath(incident)
@@ -2472,7 +3008,7 @@ export function IncidentViewerScreen({
   }
 
   const handleViewerKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (isTextInputElement(event.target) || busyAction !== null || showDeleteConfirm || showFilesDrawer) {
+    if (isTextInputElement(event.target) || busyAction !== null || showLibraryConfirm || showDeleteConfirm || showFilesDrawer) {
       return
     }
 
@@ -2582,23 +3118,30 @@ export function IncidentViewerScreen({
                   onDurationChange={value => setDuration(Number.isFinite(value) ? value : 0)}
                 />
               </CrashSafeBoundary>
-              <div className="mt-3">
-                <CrashSafeBoundary
-                  title="Timeline error"
-                  incidentId={incidentActionId(incident)}
-                  attemptedVideoPath={attemptedVideoPath}
-                  onBack={onBack}
-                  onOpenFolder={path => void openContainingFolder(path, 'Video path is not available.')}
-                >
-                  <IncidentTimelineMarkers
-                    markers={markers}
-                    incident={incident}
-                    currentTime={currentTime}
-                    duration={duration}
-                    onSeek={handleSeek}
-                  />
-                </CrashSafeBoundary>
-              </div>
+              {markers.length > 0 && (
+                <details className="mt-3 rounded-[18px] border border-white/[0.055] bg-white/[0.014] p-3">
+                  <summary className="cursor-pointer px-1 text-[13px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
+                    Markers ({markers.length})
+                  </summary>
+                  <div className="mt-3">
+                    <CrashSafeBoundary
+                      title="Markers error"
+                      incidentId={incidentActionId(incident)}
+                      attemptedVideoPath={attemptedVideoPath}
+                      onBack={onBack}
+                      onOpenFolder={path => void openContainingFolder(path, 'Video path is not available.')}
+                    >
+                      <IncidentTimelineMarkers
+                        markers={markers}
+                        incident={incident}
+                        currentTime={currentTime}
+                        duration={duration}
+                        onSeek={handleSeek}
+                      />
+                    </CrashSafeBoundary>
+                  </div>
+                </details>
+              )}
             </section>
           </div>
 
@@ -2615,6 +3158,7 @@ export function IncidentViewerScreen({
                 busyAction={busyAction}
                 actionMessage={actionMessage}
                 actionError={actionError}
+                actionDetails={actionDetails}
                 feedbackChoice={feedbackChoice}
                 feedbackNotes={feedbackNotes}
                 feedbackIncludeVideo={feedbackIncludeVideo}
@@ -2636,7 +3180,7 @@ export function IncidentViewerScreen({
                 onSetStatus={status =>
                   void runBackendAction(`set_status`, `set_status_${status}` as IncidentAction, status)
                 }
-                onMoveToLibrary={() => void runBackendAction('move_to_library', 'move_to_library')}
+                onMoveToLibrary={() => setShowLibraryConfirm(true)}
                 onConfirmDelete={() => setShowDeleteConfirm(true)}
                 onOpenFiles={() => setShowFilesDrawer(true)}
               />
@@ -2662,14 +3206,49 @@ export function IncidentViewerScreen({
         />
       )}
 
+      {showLibraryConfirm && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+          <section className="w-full max-w-[480px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
+            <div className="text-[18px] font-semibold text-[var(--mimir-text)]">
+              Move this incident to Mimir Library?
+            </div>
+            <p className="mt-3 text-[14px] leading-6 text-[var(--mimir-text-muted)]">
+              Mimir will move all camera angles for this incident to Mimir Library and update the review paths after the move is verified.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowLibraryConfirm(false)}
+                disabled={busyAction !== null}
+                className="h-10 rounded-lg bg-white/[0.04] px-4 text-[13px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLibraryConfirm(false)
+                  void runCoreV2StorageAction('move_to_library')
+                }}
+                disabled={busyAction !== null}
+                className="h-10 rounded-lg border border-white/[0.1] bg-white/[0.08] px-4 text-[13px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.12] disabled:cursor-wait disabled:opacity-60"
+              >
+                Move to Mimir Library
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
           <section className="w-full max-w-[460px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
             <div className="text-[18px] font-semibold text-[var(--mimir-text)]">
-              Move this clip to Mimir Trash?
+              Move this incident to Mimir Trash?
             </div>
             <p className="mt-3 text-[14px] leading-6 text-[var(--mimir-text-muted)]">
-              This will not permanently delete the file. It can be recovered from the Mimir Trash folder.
+              This moves the clips to Mimir Trash. It does not permanently delete them.
+            </p>
+            <p className="mt-2 text-[13px] leading-5 text-[var(--mimir-text-subtle)]">
+              All camera angles for this incident will be moved together by Mimir.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -2682,12 +3261,12 @@ export function IncidentViewerScreen({
               <button
                 onClick={() => {
                   setShowDeleteConfirm(false)
-                  void runBackendAction('delete', 'delete')
+                  void runCoreV2StorageAction('move_to_trash')
                 }}
                 disabled={busyAction !== null}
                 className="h-10 rounded-lg border border-red-300/20 bg-red-500/12 px-4 text-[13px] font-semibold text-red-100 transition hover:bg-red-500/18 disabled:cursor-wait disabled:opacity-60"
               >
-                Move to Trash
+                Move to Mimir Trash
               </button>
             </div>
           </section>
