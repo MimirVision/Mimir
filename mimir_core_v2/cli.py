@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .ai_reviewer import empty_ai_review, review_event_group, should_review_with_ai
+from .ai_reviewer import AI_REVIEW_VERSION, DEFAULT_AI_TIMEOUT_SEC, empty_ai_review, review_event_group, should_review_with_ai
 from .event_grouping import group_videos
 from .evidence_extractor import EVIDENCE_VERSION, extract_evidence, fallback_evidence, get_evidence_runtime_diagnostics
 from .frame_sampler import sample_event_group
@@ -24,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", default="balanced", choices=["fast", "balanced", "thorough"], help="Scan quality mode.")
     parser.add_argument("--vlm", default="", help="Optional vision-language model name for structured AI evidence review.")
     parser.add_argument("--ai-review-budget", type=int, default=None, help="Maximum number of event groups reviewed by AI.")
+    parser.add_argument("--ai-timeout-sec", type=int, default=DEFAULT_AI_TIMEOUT_SEC, help="Maximum seconds to wait for one AI review.")
+    parser.add_argument("--ai-debug-review-all", action="store_true", help="Developer option: send every event group to AI when a model is configured.")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output folder for latest_session.json.")
     return parser
 
@@ -34,6 +36,8 @@ def run_scan(
     vlm: str = "",
     output: str | Path = DEFAULT_OUTPUT,
     ai_review_budget: int | None = None,
+    ai_timeout_sec: int = DEFAULT_AI_TIMEOUT_SEC,
+    ai_debug_review_all: bool = False,
 ) -> dict:
     warnings: list[str] = []
     videos, discovery_warnings = discover_videos(input_folder)
@@ -43,8 +47,10 @@ def run_scan(
     incidents: list[dict] = []
     budget = AI_BUDGET_DEFAULTS.get(mode, 50) if ai_review_budget is None else max(0, ai_review_budget)
     ai_review_candidates = 0
+    ai_review_attempted_groups = 0
     ai_reviewed_groups = 0
     ai_skipped_groups = 0
+    ai_review_runtime_sec = 0.0
     groups_with_frames = 0
     groups_without_frames = 0
     video_read_warnings: list[str] = []
@@ -71,7 +77,7 @@ def run_scan(
             evidence_warnings.append("No frames sampled for this event group.")
         evidence["evidence_warnings"] = evidence_warnings
 
-        should_review, skipped_reason = should_review_with_ai(evidence)
+        should_review, skipped_reason = should_review_with_ai(evidence, debug_review_all=ai_debug_review_all)
         if should_review:
             ai_review_candidates += 1
 
@@ -81,11 +87,22 @@ def run_scan(
         elif not should_review:
             ai_review = empty_ai_review(vlm, skipped_reason)
             ai_skipped_groups += 1
-        elif ai_reviewed_groups >= budget:
+        elif ai_review_attempted_groups >= budget:
             ai_review = empty_ai_review(vlm, "AI review budget exhausted.")
             ai_skipped_groups += 1
         else:
-            ai_review = review_event_group(event_group, evidence, vlm=vlm)
+            ai_review_attempted_groups += 1
+            ai_review = review_event_group(
+                event_group,
+                evidence,
+                vlm=vlm,
+                timeout_sec=ai_timeout_sec,
+                debug_review_all=ai_debug_review_all,
+            )
+            try:
+                ai_review_runtime_sec += float(ai_review.get("runtime_sec") or 0.0)
+            except (TypeError, ValueError):
+                pass
             if ai_review.get("ai_reviewed"):
                 ai_reviewed_groups += 1
             else:
@@ -97,8 +114,13 @@ def run_scan(
     session["ai_review_required"] = bool(vlm)
     session["ai_review_budget"] = budget
     session["ai_review_candidates"] = ai_review_candidates
+    session["ai_review_attempted_groups"] = ai_review_attempted_groups
     session["ai_reviewed_groups"] = ai_reviewed_groups
     session["ai_skipped_groups"] = ai_skipped_groups
+    session["ai_model"] = vlm
+    session["ai_review_runtime_sec"] = round(ai_review_runtime_sec, 3)
+    session["ai_review_version"] = AI_REVIEW_VERSION
+    session["ai_debug_review_all"] = bool(ai_debug_review_all)
     evidence_runtime = get_evidence_runtime_diagnostics()
     session["evidence_version"] = EVIDENCE_VERSION
     session["evidence_debug"] = {
@@ -117,6 +139,7 @@ def run_scan(
     print(f"- incidents: {len(incidents)}")
     print(f"- AI reviewed groups: {ai_reviewed_groups}")
     print(f"- AI skipped groups: {ai_skipped_groups}")
+    print(f"- AI review runtime: {session['ai_review_runtime_sec']} sec")
     print(f"- output: {output_path}")
     if warnings:
         print(f"- warnings: {len(warnings)}")
@@ -126,7 +149,15 @@ def run_scan(
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    session = run_scan(args.input, mode=args.mode, vlm=args.vlm, output=args.output, ai_review_budget=args.ai_review_budget)
+    session = run_scan(
+        args.input,
+        mode=args.mode,
+        vlm=args.vlm,
+        output=args.output,
+        ai_review_budget=args.ai_review_budget,
+        ai_timeout_sec=args.ai_timeout_sec,
+        ai_debug_review_all=args.ai_debug_review_all,
+    )
     return 0 if session.get("schema_version") == "mimir_v2" else 1
 
 
