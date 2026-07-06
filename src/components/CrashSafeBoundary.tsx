@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
+import { MIMIR_VERSION } from '../config'
 
 interface CrashSafeBoundaryProps {
   children: ReactNode
@@ -37,6 +38,7 @@ export function diagnosticsText({
 }) {
   return [
     `timestamp: ${new Date().toISOString()}`,
+    `mimir version: ${MIMIR_VERSION}`,
     `incident id: ${incidentId || 'unknown'}`,
     `attempted video path: ${attemptedVideoPath || 'not available'}`,
     `error message: ${errorMessage || 'not available'}`,

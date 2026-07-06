@@ -8,7 +8,7 @@ import { CrashSafeBoundary } from './components/CrashSafeBoundary'
 import { ImportPanel } from './components/ImportPanel'
 import { IncidentLibraryView } from './components/IncidentLibraryView'
 import { OnboardingFlow } from './components/OnboardingFlow'
-import { FULL_AI_BETA } from './config'
+import { FULL_AI_BETA, USE_MIMIR_CORE_V2 } from './config'
 import type {
   BackendProgress,
   LocalAiInstallResult,
@@ -374,6 +374,10 @@ export default function App() {
           throw new Error('Invalid Mimir session shape')
         }
 
+        if (USE_MIMIR_CORE_V2 && parsed.schema_version !== 'mimir_v2') {
+          throw new Error('Invalid Mimir Core v2 session schema')
+        }
+
         setLatestSession(parsed)
         setSessionLoadState('loaded')
         return parsed
@@ -419,10 +423,13 @@ export default function App() {
       setScanState(loadedSession && !unsupportedSource ? 'complete' : 'error')
 
       if (!loadedSession) {
-        setScanError('Scan finished, but Mimir could not load latest_session.json.')
+        setScanError('Mimir finished, but no scan result was found.')
         setScanOutput({
           stdout: result.stdout,
-          stderr: result.stderr,
+          stderr: [
+            result.stderr,
+            result.session_path ? `Expected result path: ${result.session_path}` : '',
+          ].filter(Boolean).join('\n'),
         })
       } else if (unsupportedSource) {
         setScanError(
@@ -458,14 +465,14 @@ export default function App() {
       return
     }
 
-    if (FULL_AI_BETA && localAiStatus?.ok !== true) {
+    if (FULL_AI_BETA && !USE_MIMIR_CORE_V2 && localAiStatus?.ok !== true) {
       setScanState('error')
       setScanError('Mimir needs to finish setup before scanning. AI review is not ready.')
       setSessionLoadState('idle')
       return
     }
 
-    await runScan(FULL_AI_BETA ? true : localAiStatus?.ok === true)
+    await runScan(USE_MIMIR_CORE_V2 ? false : FULL_AI_BETA ? true : localAiStatus?.ok === true)
   }
 
   const pullLocalAiModel = async () => {

@@ -51,6 +51,7 @@ export interface MimirTimelineMarker {
 export interface MimirCameraClip {
   camera?: string | null
   path?: string | null
+  original_path?: string | null
   filename?: string | null
   video_path?: string | null
   source_video?: string | null
@@ -59,6 +60,7 @@ export interface MimirCameraClip {
   library_path?: string | null
   trash_path?: string | null
   exists?: boolean | null
+  storage_state?: string | null
   duration_sec?: number | null
 }
 
@@ -90,7 +92,9 @@ export interface MimirIncident {
   primary_camera?: string | null
   available_cameras?: string[] | null
   storage_state?: string | null
-  storage_action_applied?: string
+  storage_action_applied?: string | boolean
+  library_folder?: string | null
+  trash_folder?: string | null
   user_note?: string
   user_note_updated_at?: string
   user_action_log?: Array<Record<string, unknown>>
@@ -137,14 +141,23 @@ export interface MimirIncident {
   tesla_event_reason?: string | null
   tesla_event_city?: string | null
   timeline_markers?: MimirTimelineMarker[] | null
+  ai_reviewed?: boolean | null
+  ai_evidence?: unknown
   ai_evidence_review?: unknown
   ai_raw_response?: string | null
   ai_parse_error?: boolean | null
+  ai_review_skipped_reason?: string | null
+  ai_model?: string | null
+  local_evidence?: unknown
+  local_evidence_summary?: unknown
+  severity_reasons?: unknown
   classification_debug?: unknown
   created_at?: string | null
 }
 
 export interface MimirSession {
+  schema_version?: string
+  scanner_version?: string
   status: string
   started_at: string
   finished_at: string | null
