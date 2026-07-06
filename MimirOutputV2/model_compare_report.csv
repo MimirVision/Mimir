@@ -1,0 +1,4 @@
+model,status,reason,runtime_sec,videos_found,event_groups,incidents,important,review,ignore,ai_reviewed_groups,ai_skipped_groups,labels_matched,passed,failed,critical_failures,false_importants,false_ignores
+none,ok,,0.137,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+qwen2.5vl:7b,ok,,0.129,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+llava:7b,ok,,0.132,0,0,0,0,0,0,0,0,0,0,0,0,0,0

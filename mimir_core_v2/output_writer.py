@@ -46,6 +46,7 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
         "ai_parse_error": bool(ai_review.get("ai_parse_error")),
         "ai_reviewed": bool(ai_review.get("ai_reviewed")),
         "ai_review_skipped_reason": ai_review.get("ai_review_skipped_reason", ""),
+        "ai_model": ai_review.get("ai_model") or ai_review.get("model", ""),
         "ai_evidence_review": ai_review,
         "severity_reasons": severity.get("severity_reasons", []),
         "classification_debug": severity.get("classification_debug", {}),
