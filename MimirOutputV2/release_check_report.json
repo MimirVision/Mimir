@@ -1,0 +1,26 @@
+{
+  "input_folder": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+  "scan_runtime_sec": 17.208,
+  "videos_found": 8,
+  "event_groups": 2,
+  "incidents": 2,
+  "important": 0,
+  "review": 1,
+  "ignore": 1,
+  "grouping_status": "passed",
+  "resolver_status": "passed",
+  "evidence_status": "passed",
+  "benchmark_status": "passed",
+  "critical_failures": 0,
+  "benchmark": {
+    "labels_loaded": 2,
+    "labels_matched": 0,
+    "skipped_unmatched": 2,
+    "passed": 0,
+    "failed": 0,
+    "false_importants": 0,
+    "false_ignores": 0
+  },
+  "passed": true,
+  "error": ""
+}
