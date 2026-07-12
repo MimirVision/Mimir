@@ -1,5 +1,5 @@
 {
-  "session_path": "C:\\Mimir_Backend\\MimirOutputV2\\latest_session.json",
+  "session_path": "C:\\Mimir_Backend\\MimirOutputV2\\regression_runs\\current_crash_door_ding_set\\latest_session.json",
   "labels_path": "C:\\Mimir_Backend\\mimir_core_v2\\benchmark_labels.csv",
   "labels_loaded": 8,
   "labels_matched": 5,

@@ -27,7 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ai-review-budget", type=int, default=None, help="Maximum number of event groups reviewed by AI.")
     parser.add_argument("--ai-timeout-sec", type=int, default=DEFAULT_AI_TIMEOUT_SEC, help="Maximum seconds to wait for one AI review.")
     parser.add_argument("--ai-debug-review-all", action="store_true", help="Developer option: send every event group to AI when a model is configured.")
-    parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output folder for latest_session.json.")
+    parser.add_argument("--output", dest="output", default=str(DEFAULT_OUTPUT), help="Output folder for latest_session.json.")
+    parser.add_argument("--output-dir", dest="output", default=argparse.SUPPRESS, help="Output folder for latest_session.json.")
     return parser
 
 

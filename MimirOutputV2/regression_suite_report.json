@@ -1,0 +1,52 @@
+{
+  "passed": true,
+  "config_path": "C:\\Mimir_Backend\\mimir_core_v2\\benchmark_suite.json",
+  "labels_path": "C:\\Mimir_Backend\\mimir_core_v2\\benchmark_labels.csv",
+  "runs_root": "C:\\Mimir_Backend\\MimirOutputV2\\regression_runs",
+  "folders_scanned": 1,
+  "folders_skipped": 2,
+  "totals": {
+    "labels_matched": 5,
+    "passed": 5,
+    "failed": 0,
+    "critical_failures": 0,
+    "false_importants": 0,
+    "false_ignores": 0
+  },
+  "runs": [
+    {
+      "name": "current_crash_door_ding_set",
+      "input": "C:\\Mimir\\Test",
+      "required": true,
+      "notes": "Current mixed test folder with normal clips, door dings, and rear-end.",
+      "output_dir": "C:\\Mimir_Backend\\MimirOutputV2\\regression_runs\\current_crash_door_ding_set",
+      "session_path": "C:\\Mimir_Backend\\MimirOutputV2\\regression_runs\\current_crash_door_ding_set\\latest_session.json",
+      "benchmark_report_path": "C:\\Mimir_Backend\\MimirOutputV2\\regression_runs\\current_crash_door_ding_set\\benchmark_report.json",
+      "status": "passed",
+      "labels_matched": 5,
+      "passed": 5,
+      "failed": 0,
+      "critical_failures": 0,
+      "false_importants": 0,
+      "false_ignores": 0,
+      "skipped_unmatched": 3
+    }
+  ],
+  "skipped": [
+    {
+      "name": "known_person_near_set",
+      "input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
+      "required": false,
+      "status": "skipped_missing_optional",
+      "notes": "Known person-near/pass-by regression set."
+    },
+    {
+      "name": "known_grouping_set",
+      "input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+      "required": false,
+      "status": "skipped_missing_optional",
+      "notes": "Known Tesla multi-camera grouping set."
+    }
+  ],
+  "failed": []
+}
