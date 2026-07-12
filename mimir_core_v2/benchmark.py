@@ -35,20 +35,20 @@ def normalize_severity(value: object) -> str:
     return severity if severity in VALID_SEVERITIES else "MISSING"
 
 
-def read_session() -> dict:
-    with SESSION_PATH.open("r", encoding="utf-8") as file:
+def read_session(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as file:
         data = json.load(file)
     return data if isinstance(data, dict) else {}
 
 
-def read_labels() -> list[dict]:
-    with LABELS_PATH.open("r", encoding="utf-8", newline="") as file:
+def read_labels(path: Path) -> list[dict]:
+    with path.open("r", encoding="utf-8", newline="") as file:
         return list(csv.DictReader(file))
 
 
-def write_report(report: dict) -> None:
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with REPORT_PATH.open("w", encoding="utf-8") as file:
+def write_report(report: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
         json.dump(report, file, indent=2)
 
 
@@ -173,6 +173,14 @@ def print_result(result: dict) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Mimir Core v2 benchmark checks.")
+    parser.add_argument("--session", default=str(SESSION_PATH), help="Path to latest_session.json.")
+    parser.add_argument("--labels", default=str(LABELS_PATH), help="Path to benchmark_labels.csv.")
+    parser.add_argument("--report", default=str(REPORT_PATH), help="Path to write benchmark_report.json.")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Treat unmatched benchmark labels as failures instead of skips.",
+    )
     parser.add_argument(
         "--require-all-labels",
         action="store_true",
@@ -183,28 +191,33 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    session_path = Path(args.session)
+    labels_path = Path(args.labels)
+    report_path = Path(args.report)
+    require_all_labels = bool(args.strict or args.require_all_labels)
+
     print("Mimir Core v2 Benchmark")
     print("=======================")
 
-    if not SESSION_PATH.exists():
-        print(f"latest_session.json not found: {SESSION_PATH}")
+    if not session_path.exists():
+        print(f"latest_session.json not found: {session_path}")
         return 2
-    if not LABELS_PATH.exists():
-        print(f"benchmark_labels.csv not found: {LABELS_PATH}")
+    if not labels_path.exists():
+        print(f"benchmark_labels.csv not found: {labels_path}")
         return 2
 
-    session = read_session()
+    session = read_session(session_path)
     incidents = session.get("incidents")
     if not isinstance(incidents, list):
         print("latest_session.json does not contain an incidents list")
         return 2
 
-    labels = read_labels()
+    labels = read_labels(labels_path)
     if not labels:
         print("No benchmark labels found. Add rows to benchmark_labels.csv.")
         return 0
 
-    results = [evaluate_label(label, incidents, require_all_labels=args.require_all_labels) for label in labels]
+    results = [evaluate_label(label, incidents, require_all_labels=require_all_labels) for label in labels]
     for result in results:
         print_result(result)
 
@@ -246,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     report = {
+        "session_path": str(session_path),
+        "labels_path": str(labels_path),
         "labels_loaded": len(labels),
         "labels_matched": matched_count,
         "skipped_unmatched": skipped_unmatched,
@@ -256,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
         "false_ignores": false_ignores,
         "results": report_results,
     }
-    write_report(report)
+    write_report(report, report_path)
 
     print("Summary")
     print("=======")
@@ -268,13 +283,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"critical_failures: {critical}")
     print(f"false_importants: {false_importants}")
     print(f"false_ignores: {false_ignores}")
-    print(f"report: {REPORT_PATH}")
+    print(f"report: {report_path}")
 
     if matched_count == 0:
         print()
         print("No benchmark labels matched the current scan. This is not a detection failure. Scan a benchmark folder that contains the labeled clips.")
 
-    return 2 if critical else 0
+    return 2 if critical or failed else 0
 
 
 if __name__ == "__main__":

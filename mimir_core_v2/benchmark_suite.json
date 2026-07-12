@@ -1,0 +1,20 @@
+[
+  {
+    "name": "current_crash_door_ding_set",
+    "input": "C:\\Mimir\\Test",
+    "required": true,
+    "notes": "Current mixed test folder with normal clips, door dings, and rear-end."
+  },
+  {
+    "name": "known_person_near_set",
+    "input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
+    "required": false,
+    "notes": "Known person-near/pass-by regression set."
+  },
+  {
+    "name": "known_grouping_set",
+    "input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+    "required": false,
+    "notes": "Known Tesla multi-camera grouping set."
+  }
+]
