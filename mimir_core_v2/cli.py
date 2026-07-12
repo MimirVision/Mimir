@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .ai_reviewer import AI_REVIEW_VERSION, DEFAULT_AI_TIMEOUT_SEC, empty_ai_review, review_event_group, should_review_with_ai
@@ -17,6 +19,10 @@ from .thumbnailer import THUMBNAIL_VERSION, generate_thumbnails
 
 DEFAULT_OUTPUT = Path(r"C:\Mimir_Backend\MimirOutputV2")
 AI_BUDGET_DEFAULTS = {"fast": 20, "balanced": 50, "thorough": 150}
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +47,8 @@ def run_scan(
     ai_timeout_sec: int = DEFAULT_AI_TIMEOUT_SEC,
     ai_debug_review_all: bool = False,
 ) -> dict:
+    scan_started = time.perf_counter()
+    scan_started_at = _utc_now_iso()
     warnings: list[str] = []
     videos, discovery_warnings = discover_videos(input_folder)
     warnings.extend(discovery_warnings)
@@ -133,7 +141,29 @@ def run_scan(
         thumbnails_failed += int(thumbnail_result.get("failed") or 0)
         incidents.append(incident_from_group(index, event_group, evidence, severity, ai_review))
 
-    session = build_session(str(Path(input_folder)), event_groups, incidents, warnings)
+    source_path = str(Path(input_folder))
+    session = build_session(source_path, event_groups, incidents, warnings)
+    scan_completed_at = _utc_now_iso()
+    scan_duration_sec = round(time.perf_counter() - scan_started, 3)
+    scan_summary = {
+        "videos_found": len(videos),
+        "clips_scanned": len(videos),
+        "event_groups": len(event_groups),
+        "incidents": len(incidents),
+        "important_count": session.get("important", 0),
+        "review_count": session.get("review", 0),
+        "ignore_count": session.get("ignore", 0),
+        "source_path": source_path,
+        "source_name": Path(input_folder).name or source_path,
+        "scan_started_at": scan_started_at,
+        "scan_completed_at": scan_completed_at,
+        "scan_duration_sec": scan_duration_sec,
+    }
+    session["scan_summary"] = scan_summary
+    session["videos_found"] = len(videos)
+    session["clips_scanned"] = len(videos)
+    session["event_groups_count"] = len(event_groups)
+    session["incidents_count"] = len(incidents)
     session["ai_review_required"] = bool(vlm)
     session["ai_review_budget"] = budget
     session["ai_review_candidates"] = ai_review_candidates
