@@ -2,3 +2,8 @@ filename_or_group,expected_severity,category,notes
 2026-04-19_12-43-26,REVIEW,person_near,person near vehicle with no clear contact should be review at most and never important
 2026-04-19_12-44-29,IGNORE,person_passby,person/pass-by with no contact should never be important
 2026-04-17_17-51-51,IGNORE,person_passby,people walking by no contact should never be important
+2026-06-04-21-33-05,IGNORE,person_passby,same-folder person pass-by with no visible contact should stay ignore and never important
+2026-06-05-00-33-32,IGNORE,normal_traffic,same-folder normal activity/no contact should stay ignore
+2026-06-05-04-59-11,IGNORE,normal_traffic,same-folder normal activity/no contact should stay ignore
+"Reddit 1.mp4,Important,door ding.mp4",IMPORTANT,door_ding,known door ding/contact clip should be important
+"reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",IMPORTANT,rear_impact,hard rear-end crash should never be review or ignore

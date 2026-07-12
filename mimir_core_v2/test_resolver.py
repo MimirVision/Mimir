@@ -41,6 +41,33 @@ def main() -> int:
             {"IGNORE"},
         ),
         run_case(
+            "person_passby + low motion",
+            {
+                "person_passby": True,
+                "person_passby_detected": True,
+                "motion_score": 0.02,
+                "max_motion_score": 0.08,
+                "impact_level": "NONE",
+                "contact_level": "NONE",
+                "possible_impact": False,
+                "possible_contact": False,
+            },
+            {},
+            {"IGNORE"},
+        ),
+        run_case(
+            "person_passby + strong_impact_like_motion",
+            {"person_passby": True, "strong_impact_like_motion": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "person_passby + hard_contact_candidate",
+            {"person_passby": True, "hard_contact_candidate": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
             "person_near_only true, no contact/impact/tampering",
             {"person_near_only": True},
             {},
@@ -63,6 +90,42 @@ def main() -> int:
             {"possible_contact": True, "contact_level": "MEDIUM"},
             {},
             {"REVIEW"},
+        ),
+        run_case(
+            "impact_level MEDIUM",
+            {"impact_level": "MEDIUM"},
+            {},
+            {"REVIEW"},
+        ),
+        run_case(
+            "contact_level MEDIUM",
+            {"contact_level": "MEDIUM"},
+            {},
+            {"REVIEW"},
+        ),
+        run_case(
+            "contact_level MEDIUM only",
+            {"contact_level": "MEDIUM", "possible_contact": True},
+            {},
+            {"REVIEW"},
+        ),
+        run_case(
+            "hard_contact_candidate true",
+            {"hard_contact_candidate": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "rear_impact_candidate true",
+            {"rear_impact_candidate": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "strong_impact_like_motion true",
+            {"strong_impact_like_motion": True},
+            {},
+            {"IMPORTANT"},
         ),
         run_case(
             "contact_level HIGH",
@@ -115,4 +178,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

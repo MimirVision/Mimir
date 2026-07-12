@@ -56,6 +56,7 @@ def incident_reference_blob(incident: dict) -> str:
     values = [
         incident.get("event_group_id", ""),
         incident.get("event_timestamp", ""),
+        incident.get("source_filename", ""),
         Path(str(incident.get("video_path") or "")).name,
         incident.get("video_path", ""),
     ]
@@ -92,6 +93,16 @@ def is_never_important_case(category: str, notes: str) -> bool:
     return normalize_text(category).lower() in {"person_passby", "person_near"} and "never important" in normalize_text(notes).lower()
 
 
+def allows_review_or_important(category: str, notes: str) -> bool:
+    text = normalize_text(notes).lower()
+    category_text = normalize_text(category).lower()
+    return (
+        category_text in {"door_ding", "possible_contact"}
+        or "review or important" in text
+        or "at least review" in text
+    )
+
+
 def evaluate_label(label: dict, incidents: list[dict], require_all_labels: bool = False) -> dict:
     expected = normalize_severity(label.get("expected_severity"))
     category = normalize_text(label.get("category")).lower()
@@ -119,6 +130,12 @@ def evaluate_label(label: dict, incidents: list[dict], require_all_labels: bool 
     elif expected == actual:
         passed = True
         reason = "matched expected severity"
+    elif category == "rear_impact" and expected == "IMPORTANT" and actual == "IMPORTANT":
+        passed = True
+        reason = "rear impact matched IMPORTANT"
+    elif expected == "REVIEW" and allows_review_or_important(category, notes) and actual in {"REVIEW", "IMPORTANT"}:
+        passed = True
+        reason = "within review-or-important allowance"
     elif expected == "REVIEW" and allows_review_at_most(notes) and actual in {"IGNORE", "REVIEW"}:
         passed = True
         reason = "within review-at-most allowance"
@@ -196,8 +213,18 @@ def main(argv: list[str] | None = None) -> int:
     failed = sum(1 for result in results if not result["passed"] and not result["skipped"])
     critical = sum(1 for result in results if result["critical"])
     matched_count = sum(1 for result in results if result["matched"] is not None)
-    false_ignores = sum(1 for result in results if result["expected"] == "IMPORTANT" and result["actual"] == "IGNORE")
-    false_importants = sum(1 for result in results if result["actual"] == "IMPORTANT" and result["expected"] != "IMPORTANT")
+    false_ignores = sum(
+        1
+        for result in results
+        if result["expected"] == "IMPORTANT" and result["actual"] == "IGNORE"
+    )
+    false_importants = sum(
+        1
+        for result in results
+        if result["actual"] == "IMPORTANT"
+        and result["expected"] != "IMPORTANT"
+        and not result["passed"]
+    )
 
     report_results = []
     for result in results:

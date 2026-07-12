@@ -12,6 +12,7 @@ from .frame_sampler import sample_event_group
 from .output_writer import build_session, incident_from_group, write_latest_session
 from .severity_resolver import resolve_severity
 from .source_discovery import discover_videos
+from .thumbnailer import THUMBNAIL_VERSION, generate_thumbnails
 
 
 DEFAULT_OUTPUT = Path(r"C:\Mimir_Backend\MimirOutputV2")
@@ -54,6 +55,9 @@ def run_scan(
     groups_with_frames = 0
     groups_without_frames = 0
     video_read_warnings: list[str] = []
+    thumbnails_generated = 0
+    thumbnails_failed = 0
+    thumbnail_output_dir = str((Path(output) / "thumbnails").resolve())
 
     for index, event_group in enumerate(event_groups, start=1):
         sample_result, sample_warnings = sample_event_group(event_group, mode=mode)
@@ -108,6 +112,24 @@ def run_scan(
             else:
                 ai_skipped_groups += 1
         severity = resolve_severity(evidence, ai_review)
+        incident_id = f"incident_{index:04d}"
+        thumbnail_result = generate_thumbnails(
+            event_group,
+            evidence,
+            severity,
+            sample_result,
+            output,
+            incident_id,
+        )
+        evidence["thumbnail"] = thumbnail_result.get("thumbnail")
+        evidence["hero_thumbnail"] = thumbnail_result.get("hero_thumbnail")
+        evidence["contact_sheet"] = thumbnail_result.get("contact_sheet")
+        evidence["thumbnail_primary_camera"] = thumbnail_result.get("primary_camera", "")
+        evidence_warnings = list(evidence.get("evidence_warnings") or [])
+        evidence_warnings.extend(thumbnail_result.get("warnings") or [])
+        evidence["evidence_warnings"] = evidence_warnings
+        thumbnails_generated += int(thumbnail_result.get("generated") or 0)
+        thumbnails_failed += int(thumbnail_result.get("failed") or 0)
         incidents.append(incident_from_group(index, event_group, evidence, severity, ai_review))
 
     session = build_session(str(Path(input_folder)), event_groups, incidents, warnings)
@@ -121,6 +143,10 @@ def run_scan(
     session["ai_review_runtime_sec"] = round(ai_review_runtime_sec, 3)
     session["ai_review_version"] = AI_REVIEW_VERSION
     session["ai_debug_review_all"] = bool(ai_debug_review_all)
+    session["thumbnail_version"] = THUMBNAIL_VERSION
+    session["thumbnails_generated"] = thumbnails_generated
+    session["thumbnails_failed"] = thumbnails_failed
+    session["thumbnail_output_dir"] = thumbnail_output_dir
     evidence_runtime = get_evidence_runtime_diagnostics()
     session["evidence_version"] = EVIDENCE_VERSION
     session["evidence_debug"] = {

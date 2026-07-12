@@ -39,6 +39,8 @@ def _has_contact_impact_or_tampering(evidence: dict) -> bool:
         or _bool(evidence, "door_handle_attempt")
         or _bool(evidence, "possible_impact")
         or _bool(evidence, "possible_contact")
+        or _bool(evidence, "hard_contact_candidate")
+        or _bool(evidence, "rear_impact_candidate")
         or _level(evidence, "impact_level") in {"LOW", "MEDIUM", "HIGH"}
         or _level(evidence, "contact_level") in {"LOW", "MEDIUM", "HIGH"}
     )
@@ -66,6 +68,31 @@ def important_evidence_reasons(local_evidence: dict) -> list[str]:
         reasons.append("door_handle_attempt")
     if _bool(evidence, "strong_impact_like_motion"):
         reasons.append("strong_impact_like_motion")
+    if _bool(evidence, "hard_contact_candidate"):
+        reasons.append("hard_contact_candidate")
+    if _bool(evidence, "rear_impact_candidate"):
+        reasons.append("rear_impact_candidate")
+
+    return reasons
+
+
+def ai_hard_evidence_reasons(ai_evidence: dict | None) -> list[str]:
+    evidence = _extract_ai_evidence(ai_evidence)
+    reasons: list[str] = []
+
+    for field in (
+        "visible_contact",
+        "visible_impact",
+        "person_interaction",
+        "tampering",
+        "door_handle_attempt",
+    ):
+        if _bool(evidence, field):
+            reasons.append(f"ai_{field}")
+
+    scene_type = str(evidence.get("scene_type") or "").strip().lower()
+    if scene_type in {"possible_contact", "possible_impact", "tampering"}:
+        reasons.append(f"ai_scene_type={scene_type}")
 
     return reasons
 
@@ -158,6 +185,15 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
     reasons: list[str] = []
     debug = {
         "resolver_version": RESOLVER_VERSION,
+        "impact_detection_version": evidence.get("impact_detection_version", ""),
+        "impact_evidence_reasons": evidence.get("impact_evidence_reasons", []),
+        "contact_evidence_reasons": evidence.get("contact_evidence_reasons", []),
+        "impact_candidate_score": evidence.get("impact_candidate_score", 0.0),
+        "hard_contact_candidate": bool(evidence.get("hard_contact_candidate")),
+        "rear_impact_candidate": bool(evidence.get("rear_impact_candidate")),
+        "motion_spike_ratio": evidence.get("motion_spike_ratio", 0.0),
+        "camera_shake_score": evidence.get("camera_shake_score", 0.0),
+        "strong_impact_like_motion": bool(evidence.get("strong_impact_like_motion")),
         "important_evidence_found": False,
         "important_evidence_reasons": [],
         "severity_cap_applied": False,
@@ -168,6 +204,8 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
     }
 
     hard_reasons = important_evidence_reasons(evidence)
+    ai_hard_reasons = ai_hard_evidence_reasons(ai)
+    hard_reasons.extend(ai_hard_reasons)
     hard_important = bool(hard_reasons)
     debug["important_evidence_found"] = hard_important
     debug["important_evidence_reasons"] = hard_reasons
@@ -199,6 +237,33 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
     if _bool(evidence, "possible_impact"):
         severity = _max_severity(severity, "REVIEW")
         reasons.append("Possible impact evidence.")
+
+    floor_reasons: list[str] = []
+    if _bool(evidence, "strong_impact_like_motion"):
+        floor_reasons.append("strong_impact_like_motion requires IMPORTANT")
+        severity = "IMPORTANT"
+    if _bool(evidence, "hard_contact_candidate"):
+        floor_reasons.append("hard_contact_candidate requires IMPORTANT")
+        severity = "IMPORTANT"
+    if _bool(evidence, "rear_impact_candidate"):
+        floor_reasons.append("rear_impact_candidate requires IMPORTANT")
+        severity = "IMPORTANT"
+    if _level(evidence, "impact_level") == "HIGH":
+        floor_reasons.append("impact_level HIGH requires IMPORTANT")
+        severity = "IMPORTANT"
+    if _level(evidence, "contact_level") == "HIGH":
+        floor_reasons.append("contact_level HIGH requires IMPORTANT")
+        severity = "IMPORTANT"
+    if _level(evidence, "impact_level") == "MEDIUM":
+        floor_reasons.append("impact_level MEDIUM requires at least REVIEW")
+        severity = _max_severity(severity, "REVIEW")
+    if _level(evidence, "contact_level") == "MEDIUM":
+        floor_reasons.append("contact_level MEDIUM requires at least REVIEW")
+        severity = _max_severity(severity, "REVIEW")
+    if floor_reasons:
+        debug["severity_floor_applied"] = True
+        debug["severity_floor_reason"] = "; ".join(floor_reasons)
+        reasons.extend(floor_reasons)
 
     if _bool(evidence, "uncertain"):
         severity = _max_severity(severity, "REVIEW")
@@ -265,4 +330,3 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         "severity_reasons": reasons or ["No concerning evidence found."],
         "classification_debug": debug,
     }
-
