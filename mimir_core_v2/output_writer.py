@@ -9,6 +9,57 @@ from . import SCANNER_VERSION, SCHEMA_VERSION
 from .event_grouping import GROUPING_VERSION, build_grouping_debug
 
 
+TOP_LEVEL_EVIDENCE_FIELDS = [
+    "motion_score",
+    "max_motion_score",
+    "localized_motion_score",
+    "motion_spike_time_sec",
+    "motion_spike_ratio",
+    "camera_shake_score",
+    "abrupt_scene_change",
+    "scene_change_score",
+    "strong_impact_like_motion",
+    "possible_impact",
+    "impact_level",
+    "impact_score",
+    "impact_evidence_reasons",
+    "possible_contact",
+    "contact_level",
+    "contact_score",
+    "contact_evidence_reasons",
+    "person_detected",
+    "vehicle_detected",
+    "person_near_only",
+    "person_passby",
+    "person_passby_detected",
+    "person_lingering_detected",
+    "vehicle_passby_detected",
+    "vehicle_lingering_detected",
+    "normal_traffic",
+    "normal_traffic_evidence",
+    "visible_contact",
+    "visible_impact",
+    "person_interaction_evidence",
+    "tampering_evidence",
+    "door_handle_attempt",
+    "crash_safety_triggered",
+]
+
+
+def _person_count(evidence: dict) -> int:
+    tracks = evidence.get("object_tracks")
+    if isinstance(tracks, list):
+        return sum(1 for track in tracks if isinstance(track, dict) and track.get("class_name") == "person")
+    return 1 if evidence.get("person_detected") else 0
+
+
+def _vehicle_count(evidence: dict) -> int:
+    tracks = evidence.get("object_tracks")
+    if isinstance(tracks, list):
+        return sum(1 for track in tracks if isinstance(track, dict) and track.get("class_name") == "vehicle")
+    return 1 if evidence.get("vehicle_detected") else 0
+
+
 def incident_from_group(index: int, event_group: dict, evidence: dict, severity: dict, ai_review: dict) -> dict:
     primary_camera = severity.get("primary_camera") or "unknown"
     primary_clip = None
@@ -20,11 +71,24 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
         primary_clip = event_group["clips"][0]
 
     video_path = primary_clip.get("path") if isinstance(primary_clip, dict) else ""
+    source_filename = (
+        primary_clip.get("filename")
+        if isinstance(primary_clip, dict) and primary_clip.get("filename")
+        else event_group.get("source_filename", "")
+    )
+    source_stem = Path(str(source_filename)).stem if source_filename else event_group.get("source_stem", "")
+    display_timestamp = event_group.get("display_timestamp", "")
+    display_title = event_group.get("display_title") or source_stem or display_timestamp
 
-    return {
+    incident = {
         "id": f"incident_{index:04d}",
         "event_group_id": event_group.get("event_group_id", ""),
         "event_timestamp": event_group.get("event_timestamp", ""),
+        "display_title": display_title,
+        "display_timestamp": display_timestamp,
+        "source_filename": source_filename,
+        "source_stem": source_stem,
+        "filename_timestamp_detected": bool(event_group.get("filename_timestamp_detected")),
         "event_folder": event_group.get("event_folder", ""),
         "source_category": event_group.get("source_category", ""),
         "severity": severity.get("severity", "IGNORE"),
@@ -36,6 +100,7 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
         "primary_camera": primary_camera,
         "camera_clips": event_group.get("clips", []),
         "video_path": video_path or "",
+        "thumbnail": evidence.get("thumbnail"),
         "hero_thumbnail": evidence.get("hero_thumbnail", ""),
         "contact_sheet": evidence.get("contact_sheet", ""),
         "timeline_markers": evidence.get("timeline_markers", []),
@@ -52,6 +117,19 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
         "classification_debug": severity.get("classification_debug", {}),
         "warnings": evidence.get("evidence_warnings", []),
     }
+    for field in TOP_LEVEL_EVIDENCE_FIELDS:
+        if field in evidence:
+            incident[field] = evidence.get(field)
+    incident["persons"] = _person_count(evidence)
+    incident["vehicles"] = _vehicle_count(evidence)
+    incident["impact_reasons"] = evidence.get("impact_evidence_reasons", [])
+    incident["contact_reasons"] = evidence.get("contact_evidence_reasons", [])
+    incident["impact_evidence_level"] = evidence.get("impact_level", "NONE")
+    incident["contact_evidence_level"] = evidence.get("contact_level", "NONE")
+    incident["important_evidence_found"] = incident["classification_debug"].get("important_evidence_found")
+    incident["severity_cap_applied"] = incident["classification_debug"].get("severity_cap_applied")
+    incident["severity_cap_reason"] = incident["classification_debug"].get("severity_cap_reason")
+    return incident
 
 
 def build_session(selected_input: str, event_groups: list[dict], incidents: list[dict], warnings: list[str]) -> dict:
@@ -68,6 +146,8 @@ def build_session(selected_input: str, event_groups: list[dict], incidents: list
         "event_groups_found": len(event_groups),
         "multi_camera_groups": sum(1 for group in event_groups if int(group.get("camera_count") or 0) > 1),
         "single_camera_groups": sum(1 for group in event_groups if int(group.get("camera_count") or 0) == 1),
+        "generic_filename_groups": sum(1 for group in event_groups if group.get("generic_filename_group")),
+        "tesla_timestamp_groups": sum(1 for group in event_groups if group.get("tesla_timestamp_detected")),
         "incident_count": len(incidents),
         "important": important,
         "review": review,

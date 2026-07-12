@@ -1,11 +1,15 @@
 {
-  "grouping_version": "event_grouping_v2_0_1",
-  "input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
-  "mp4_files_found": 8,
-  "groups_found": 2,
+  "grouping_version": "event_grouping_v2_0_2",
+  "input": "C:\\Mimir\\Test",
+  "mp4_files_found": 6,
+  "groups_found": 6,
   "passes": [
-    "PASS: 2026-04-18_16-02-44 grouped into 1 incident with 4 cameras.",
-    "PASS: 2026-04-18_16-03-46 grouped into 1 incident with 4 cameras."
+    "PASS: 2026-06-04-21-33-05 grouped into 1 incident with 1 cameras.",
+    "PASS: 2026-06-05-00-33-32 grouped into 1 incident with 1 cameras.",
+    "PASS: 2026-06-05-04-59-11 grouped into 1 incident with 1 cameras.",
+    "PASS: Reddit 1.mp4,Important,door ding grouped into 1 incident with 1 cameras.",
+    "PASS: reddit 3 grouped into 1 incident with 1 cameras.",
+    "PASS: reddit 4.mp4,IMPORTANT, parked POV car is rear-ended grouped into 1 incident with 1 cameras."
   ],
   "problems": [],
   "warnings": [],

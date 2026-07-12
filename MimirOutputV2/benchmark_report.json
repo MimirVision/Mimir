@@ -1,8 +1,8 @@
 {
-  "labels_loaded": 3,
-  "labels_matched": 2,
-  "skipped_unmatched": 1,
-  "passed": 2,
+  "labels_loaded": 8,
+  "labels_matched": 5,
+  "skipped_unmatched": 3,
+  "passed": 5,
   "failed": 0,
   "critical_failures": 0,
   "false_importants": 0,
@@ -11,26 +11,26 @@
     {
       "filename_or_group": "2026-04-19_12-43-26",
       "expected_severity": "REVIEW",
-      "actual_severity": "REVIEW",
+      "actual_severity": "MISSING",
       "category": "person_near",
-      "matched_incident_id": "incident_0001",
+      "matched_incident_id": "",
       "notes": "person near vehicle with no clear contact should be review at most and never important",
-      "passed": true,
+      "passed": false,
       "critical": false,
-      "skipped": false,
-      "reason": "matched expected severity"
+      "skipped": true,
+      "reason": "not present in current scan"
     },
     {
       "filename_or_group": "2026-04-19_12-44-29",
       "expected_severity": "IGNORE",
-      "actual_severity": "IGNORE",
+      "actual_severity": "MISSING",
       "category": "person_passby",
-      "matched_incident_id": "incident_0002",
+      "matched_incident_id": "",
       "notes": "person/pass-by with no contact should never be important",
-      "passed": true,
+      "passed": false,
       "critical": false,
-      "skipped": false,
-      "reason": "matched expected severity"
+      "skipped": true,
+      "reason": "not present in current scan"
     },
     {
       "filename_or_group": "2026-04-17_17-51-51",
@@ -43,6 +43,66 @@
       "critical": false,
       "skipped": true,
       "reason": "not present in current scan"
+    },
+    {
+      "filename_or_group": "2026-06-04-21-33-05",
+      "expected_severity": "IGNORE",
+      "actual_severity": "IGNORE",
+      "category": "person_passby",
+      "matched_incident_id": "incident_0001",
+      "notes": "same-folder person pass-by with no visible contact should stay ignore and never important",
+      "passed": true,
+      "critical": false,
+      "skipped": false,
+      "reason": "matched expected severity"
+    },
+    {
+      "filename_or_group": "2026-06-05-00-33-32",
+      "expected_severity": "IGNORE",
+      "actual_severity": "IGNORE",
+      "category": "normal_traffic",
+      "matched_incident_id": "incident_0002",
+      "notes": "same-folder normal activity/no contact should stay ignore",
+      "passed": true,
+      "critical": false,
+      "skipped": false,
+      "reason": "matched expected severity"
+    },
+    {
+      "filename_or_group": "2026-06-05-04-59-11",
+      "expected_severity": "IGNORE",
+      "actual_severity": "IGNORE",
+      "category": "normal_traffic",
+      "matched_incident_id": "incident_0003",
+      "notes": "same-folder normal activity/no contact should stay ignore",
+      "passed": true,
+      "critical": false,
+      "skipped": false,
+      "reason": "matched expected severity"
+    },
+    {
+      "filename_or_group": "Reddit 1.mp4,Important,door ding.mp4",
+      "expected_severity": "IMPORTANT",
+      "actual_severity": "IMPORTANT",
+      "category": "door_ding",
+      "matched_incident_id": "incident_0004",
+      "notes": "known door ding/contact clip should be important",
+      "passed": true,
+      "critical": false,
+      "skipped": false,
+      "reason": "matched expected severity"
+    },
+    {
+      "filename_or_group": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+      "expected_severity": "IMPORTANT",
+      "actual_severity": "IMPORTANT",
+      "category": "rear_impact",
+      "matched_incident_id": "incident_0006",
+      "notes": "hard rear-end crash should never be review or ignore",
+      "passed": true,
+      "critical": false,
+      "skipped": false,
+      "reason": "matched expected severity"
     }
   ]
 }

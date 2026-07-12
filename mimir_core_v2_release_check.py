@@ -25,11 +25,15 @@ COMPILE_TARGETS = [
     "mimir_core_v2\\event_grouping.py",
     "mimir_core_v2\\frame_sampler.py",
     "mimir_core_v2\\evidence_extractor.py",
+    "mimir_core_v2\\thumbnailer.py",
     "mimir_core_v2\\severity_resolver.py",
     "mimir_core_v2\\test_grouping.py",
     "mimir_core_v2\\test_evidence.py",
+    "mimir_core_v2\\test_thumbnails.py",
     "mimir_core_v2\\test_resolver.py",
+    "mimir_core_v2\\test_ai_guardrails.py",
     "mimir_core_v2\\benchmark.py",
+    "mimir_core_v2_audit.py",
 ]
 
 
@@ -102,6 +106,10 @@ def build_summary(input_folder: str, scan_runtime_sec: float, statuses: dict) ->
         "grouping_status": statuses.get("grouping", "not run"),
         "resolver_status": statuses.get("resolver", "not run"),
         "evidence_status": statuses.get("evidence", "not run"),
+        "thumbnails_status": statuses.get("thumbnails", "not run"),
+        "audit_status": statuses.get("audit", "not run"),
+        "thumbnails_generated": session.get("thumbnails_generated", "not available"),
+        "thumbnails_failed": session.get("thumbnails_failed", "not available"),
         "benchmark_status": statuses.get("benchmark", "not run"),
         "critical_failures": int(benchmark_report.get("critical_failures") or 0),
         "benchmark": {
@@ -140,6 +148,10 @@ def print_summary(summary: dict) -> None:
     print(f"grouping status: {summary.get('grouping_status')}")
     print(f"resolver status: {summary.get('resolver_status')}")
     print(f"evidence status: {summary.get('evidence_status')}")
+    print(f"thumbnails status: {summary.get('thumbnails_status')}")
+    print(f"audit status: {summary.get('audit_status')}")
+    print(f"thumbnails generated: {summary.get('thumbnails_generated')}")
+    print(f"thumbnails failed: {summary.get('thumbnails_failed')}")
     print(f"benchmark status: {summary.get('benchmark_status')}")
     print(f"critical failures: {summary.get('critical_failures')}")
     print(f"report: {RELEASE_REPORT_PATH}")
@@ -157,6 +169,8 @@ def main(argv: list[str] | None = None) -> int:
         "resolver": "not run",
         "grouping": "not run",
         "evidence": "not run",
+        "thumbnails": "not run",
+        "audit": "not run",
         "benchmark": "not run",
     }
     scan_runtime_sec = 0.0
@@ -190,6 +204,14 @@ def main(argv: list[str] | None = None) -> int:
 
         run_required([sys.executable, "-m", "mimir_core_v2.test_evidence", "--input", args.input], "evidence test")
         statuses["evidence"] = "passed"
+
+        run_required([sys.executable, "-m", "mimir_core_v2.test_thumbnails"], "thumbnail test")
+        statuses["thumbnails"] = "passed"
+
+        run_required([sys.executable, "mimir_core_v2_audit.py"], "detection audit")
+        statuses["audit"] = "passed"
+
+        run_required([sys.executable, "-m", "mimir_core_v2.test_ai_guardrails"], "AI guardrail tests")
 
         run_required([sys.executable, "-m", "mimir_core_v2.benchmark"], "benchmark")
         statuses["benchmark"], critical_failures = benchmark_status_from_report()
