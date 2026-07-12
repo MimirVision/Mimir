@@ -1,9 +1,11 @@
 {
   "session_path": "C:\\Mimir_Backend\\MimirOutputV2\\regression_runs\\current_crash_door_ding_set\\latest_session.json",
   "labels_path": "C:\\Mimir_Backend\\mimir_core_v2\\benchmark_labels.csv",
-  "labels_loaded": 8,
+  "source_set": "current_crash_door_ding_set",
+  "labels_loaded_total": 8,
+  "labels_loaded": 5,
   "labels_matched": 5,
-  "skipped_unmatched": 3,
+  "skipped_unmatched": 0,
   "passed": 5,
   "failed": 0,
   "critical_failures": 0,
@@ -11,48 +13,13 @@
   "false_ignores": 0,
   "results": [
     {
-      "filename_or_group": "2026-04-19_12-43-26",
-      "expected_severity": "REVIEW",
-      "actual_severity": "MISSING",
-      "category": "person_near",
-      "matched_incident_id": "",
-      "notes": "person near vehicle with no clear contact should be review at most and never important",
-      "passed": false,
-      "critical": false,
-      "skipped": true,
-      "reason": "not present in current scan"
-    },
-    {
-      "filename_or_group": "2026-04-19_12-44-29",
-      "expected_severity": "IGNORE",
-      "actual_severity": "MISSING",
-      "category": "person_passby",
-      "matched_incident_id": "",
-      "notes": "person/pass-by with no contact should never be important",
-      "passed": false,
-      "critical": false,
-      "skipped": true,
-      "reason": "not present in current scan"
-    },
-    {
-      "filename_or_group": "2026-04-17_17-51-51",
-      "expected_severity": "IGNORE",
-      "actual_severity": "MISSING",
-      "category": "person_passby",
-      "matched_incident_id": "",
-      "notes": "people walking by no contact should never be important",
-      "passed": false,
-      "critical": false,
-      "skipped": true,
-      "reason": "not present in current scan"
-    },
-    {
       "filename_or_group": "2026-06-04-21-33-05",
+      "source_set": "current_crash_door_ding_set",
       "expected_severity": "IGNORE",
       "actual_severity": "IGNORE",
       "category": "person_passby",
       "matched_incident_id": "incident_0001",
-      "notes": "same-folder person pass-by with no visible contact should stay ignore and never important",
+      "notes": "same-folder person pass-by with no visible contact should stay ignore",
       "passed": true,
       "critical": false,
       "skipped": false,
@@ -60,6 +27,7 @@
     },
     {
       "filename_or_group": "2026-06-05-00-33-32",
+      "source_set": "current_crash_door_ding_set",
       "expected_severity": "IGNORE",
       "actual_severity": "IGNORE",
       "category": "normal_traffic",
@@ -72,6 +40,7 @@
     },
     {
       "filename_or_group": "2026-06-05-04-59-11",
+      "source_set": "current_crash_door_ding_set",
       "expected_severity": "IGNORE",
       "actual_severity": "IGNORE",
       "category": "normal_traffic",
@@ -84,6 +53,7 @@
     },
     {
       "filename_or_group": "Reddit 1.mp4,Important,door ding.mp4",
+      "source_set": "current_crash_door_ding_set",
       "expected_severity": "IMPORTANT",
       "actual_severity": "IMPORTANT",
       "category": "door_ding",
@@ -96,6 +66,7 @@
     },
     {
       "filename_or_group": "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",
+      "source_set": "current_crash_door_ding_set",
       "expected_severity": "IMPORTANT",
       "actual_severity": "IMPORTANT",
       "category": "rear_impact",

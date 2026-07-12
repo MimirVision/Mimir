@@ -114,6 +114,8 @@ def scan_and_benchmark(entry: dict[str, Any]) -> dict[str, Any]:
         str(LABELS_PATH),
         "--report",
         str(benchmark_report_path),
+        "--source-set",
+        name,
     ]
     run_command(benchmark_args, f"benchmark {name}")
 

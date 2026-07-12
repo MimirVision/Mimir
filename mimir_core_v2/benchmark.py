@@ -46,6 +46,15 @@ def read_labels(path: Path) -> list[dict]:
         return list(csv.DictReader(file))
 
 
+def filter_labels_by_source_set(labels: list[dict], source_set: str) -> list[dict]:
+    requested = normalize_text(source_set)
+    if not requested:
+        return labels
+    if not any("source_set" in label for label in labels):
+        return labels
+    return [label for label in labels if normalize_text(label.get("source_set")) == requested]
+
+
 def write_report(report: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as file:
@@ -186,6 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Treat unmatched benchmark labels as failures instead of skips.",
     )
+    parser.add_argument("--source-set", default="", help="Only run labels matching this source_set.")
     return parser
 
 
@@ -212,9 +222,13 @@ def main(argv: list[str] | None = None) -> int:
         print("latest_session.json does not contain an incidents list")
         return 2
 
-    labels = read_labels(labels_path)
+    labels_loaded = read_labels(labels_path)
+    labels = filter_labels_by_source_set(labels_loaded, args.source_set)
     if not labels:
-        print("No benchmark labels found. Add rows to benchmark_labels.csv.")
+        if args.source_set:
+            print(f"No benchmark labels found for source_set: {args.source_set}")
+        else:
+            print("No benchmark labels found. Add rows to benchmark_labels.csv.")
         return 0
 
     results = [evaluate_label(label, incidents, require_all_labels=require_all_labels) for label in labels]
@@ -246,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         report_results.append(
             {
                 "filename_or_group": label.get("filename_or_group", ""),
+                "source_set": label.get("source_set", ""),
                 "expected_severity": result["expected"],
                 "actual_severity": result["actual"],
                 "category": label.get("category", ""),
@@ -261,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         "session_path": str(session_path),
         "labels_path": str(labels_path),
+        "source_set": args.source_set,
+        "labels_loaded_total": len(labels_loaded),
         "labels_loaded": len(labels),
         "labels_matched": matched_count,
         "skipped_unmatched": skipped_unmatched,
@@ -276,6 +293,8 @@ def main(argv: list[str] | None = None) -> int:
     print("Summary")
     print("=======")
     print(f"labels loaded: {len(labels)}")
+    if args.source_set:
+        print(f"source_set: {args.source_set}")
     print(f"labels matched: {matched_count}")
     print(f"skipped_unmatched: {skipped_unmatched}")
     print(f"passed: {passed}")
