@@ -6,6 +6,7 @@ import type { MimirCameraClip, MimirIncident, MimirSession, MimirTimelineMarker 
 
 interface IncidentViewerScreenProps {
   incident: MimirIncident
+  session?: MimirSession
   onBack: () => void
   onReloadSession: () => Promise<MimirSession | null>
   onIncidentUpdated: (incident: MimirIncident) => void
@@ -28,6 +29,7 @@ interface StorageActionResult {
   message: string
   updated_session: string
   report_json: string
+  backend_runner?: 'exe' | 'python_script' | string
   stdout?: string
   stderr?: string
 }
@@ -68,6 +70,7 @@ interface CameraFeed {
   label: string
   path: string
   filename: string
+  durationSec?: number | null
   exists: boolean | null
   isPrimary: boolean
 }
@@ -315,6 +318,7 @@ function cameraFeedsForIncident(incident: MimirIncident) {
       label: cameraLabel(rawCamera),
       path,
       filename: cleanPath(clip.filename) || sourceFilename(path),
+      durationSec: typeof clip.duration_sec === 'number' ? clip.duration_sec : null,
       exists: typeof clip.exists === 'boolean' ? clip.exists : null,
       isPrimary,
     })
@@ -328,6 +332,7 @@ function cameraFeedsForIncident(incident: MimirIncident) {
       label: cameraLabel(primaryLabel),
       path: primaryPath,
       filename: sourceFilename(primaryPath),
+      durationSec: null,
       exists: incident.video_exists === false ? false : null,
       isPrimary: true,
     })
@@ -433,6 +438,15 @@ function markerClass(severity?: string) {
   return 'border-white/40 bg-[var(--mimir-status-slate)]'
 }
 
+function markerVisualClass(marker: MimirTimelineMarker) {
+  const type = String(marker.type || '').toLowerCase()
+  if (type === 'impact_contact' || type.includes('impact') || type.includes('contact')) {
+    return 'border-red-100/70 bg-[var(--mimir-status-red)] shadow-[0_0_0_7px_rgba(185,101,97,0.16),0_0_28px_rgba(185,101,97,0.22)]'
+  }
+
+  return markerClass(marker.severity)
+}
+
 function markerAccentClass(severity?: string) {
   const value = normalizeSeverity(severity)
 
@@ -445,6 +459,15 @@ function markerAccentClass(severity?: string) {
   }
 
   return 'bg-white/32'
+}
+
+function markerAccentForMarker(marker: MimirTimelineMarker) {
+  const type = String(marker.type || '').toLowerCase()
+  if (type === 'impact_contact' || type.includes('impact') || type.includes('contact')) {
+    return 'bg-[var(--mimir-status-red)]'
+  }
+
+  return markerAccentClass(marker.severity)
 }
 
 function markerSeverityCopy(severity?: string) {
@@ -702,8 +725,13 @@ function aiModelName(incident: MimirIncident) {
 }
 
 function aiSceneType(incident: MimirIncident) {
-  const value = safeText(aiEvidence(incident).scene_type, '')
+  const value = safeText(incident.ai_scene_type || aiEvidence(incident).scene_type, '')
   return value ? formatEventType(value) : ''
+}
+
+function aiRecommendedSeverity(incident: MimirIncident) {
+  const value = safeText(incident.ai_recommended_severity || aiEvidence(incident).recommended_severity, '')
+  return value ? severityCopy(value) : 'Not provided'
 }
 
 function aiConfidenceCopy(incident: MimirIncident) {
@@ -716,15 +744,46 @@ function aiConfidenceCopy(incident: MimirIncident) {
 }
 
 function reviewBadgeCopy(incident: MimirIncident) {
-  return aiReviewed(incident) ? 'AI reviewed' : 'Local review'
+  return aiReviewed(incident) ? 'Experimental AI used' : 'Local review'
 }
 
 function reviewBadgeDescription(incident: MimirIncident) {
   if (aiReviewed(incident)) {
-    return 'Mimir used AI assistance for this uncertain event.'
+    return 'Mimir reviewed this locally, with an experimental AI second opinion kept separate from the final result.'
   }
 
   return 'Mimir reviewed this locally.'
+}
+
+function experimentalAiUsed(incident: MimirIncident) {
+  return Boolean(aiReviewed(incident) || aiModelName(incident) || Object.keys(aiEvidence(incident)).length > 0)
+}
+
+function aiQualityWarning(incident: MimirIncident) {
+  if (incident.ai_quality_warning) {
+    return incident.ai_quality_warning
+  }
+
+  const local = localEvidence(incident)
+  const debug = classificationDebug(incident)
+  const hasHardLocalEvidence = Boolean(
+    local.strong_impact_like_motion ||
+      local.hard_contact_candidate ||
+      local.rear_impact_candidate ||
+      debug.strong_impact_like_motion ||
+      debug.hard_contact_candidate ||
+      debug.rear_impact_candidate ||
+      contactEvidenceLevel(incident) === 'HIGH' ||
+      impactEvidenceLevel(incident) === 'HIGH',
+  )
+  const sceneType = safeText(aiEvidence(incident).scene_type, '').toLowerCase()
+  const recommendedSeverity = safeText(aiEvidence(incident).recommended_severity, '').toUpperCase()
+
+  if (hasHardLocalEvidence && (sceneType.includes('normal') || recommendedSeverity === 'IGNORE')) {
+    return 'AI may have underestimated hard local impact/contact evidence. Mimir kept the local safety result.'
+  }
+
+  return ''
 }
 
 function yesNo(value: unknown) {
@@ -770,6 +829,14 @@ function sourceFilename(value?: string) {
   return parts[parts.length - 1] || value
 }
 
+function readLocalSetting(key: string) {
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
 function originalVideoPath(incident: MimirIncident) {
   return cleanPath(incident.original_source_video) || cleanPath(incident.source_video) || cleanPath(incident.source_clip)
 }
@@ -787,6 +854,7 @@ function incidentFeedbackPayload(
   feedback: AiFeedbackChoice,
   notes: string,
   includeVideo: boolean,
+  session?: MimirSession,
 ) {
   const sourcePath = cleanPath(incident.source_video) || cleanPath(incident.original_source_video) || cleanPath(incident.source_clip) || attemptedVideoPathForIncident(incident)
 
@@ -799,6 +867,14 @@ function incidentFeedbackPayload(
     timestamp: new Date().toISOString(),
     ai_evidence_review: incident.ai_evidence_review ?? null,
     classification_debug: incident.classification_debug ?? null,
+    experimental_ai_enabled: readLocalSetting('experimental_ai_enabled'),
+    experimental_ai_model: readLocalSetting('experimental_ai_model'),
+    experimental_ai_budget: readLocalSetting('experimental_ai_budget'),
+    experimental_ai_timeout_sec: readLocalSetting('experimental_ai_timeout_sec'),
+    ai_enabled: session?.ai_enabled ?? aiReviewed(incident),
+    ai_model: session?.ai_model ?? (aiModelName(incident) || null),
+    ai_reviewed_groups: session?.ai_reviewed_groups ?? null,
+    ai_failed_groups: session?.ai_failed_groups ?? null,
     thumbnail_path: cleanPath(incident.thumbnail) || cleanPath(incident.hero_thumbnail),
     hero_thumbnail_path: cleanPath(incident.hero_thumbnail),
     contact_sheet_path: cleanPath(incident.contact_sheet),
@@ -1114,6 +1190,7 @@ function storageActionDetails(reportJson: string, result?: StorageActionResult) 
   const report = parseStorageActionReport(reportJson)
   const details = {
     report,
+    backend_runner: result?.backend_runner || '',
     stdout: result?.stdout || '',
     stderr: result?.stderr || '',
   }
@@ -1159,6 +1236,18 @@ function formatTimecode(value?: number | null) {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
+function readableMarkerLabel(marker: MimirTimelineMarker) {
+  const label = safeText(marker.label, '')
+  const typeLabel = markerTypeLabel(marker.type)
+  const normalizedLabel = label.toLowerCase().replace(/[_-]+/g, ' ').trim()
+
+  if (!label || normalizedLabel === String(marker.type || '').toLowerCase().replace(/[_-]+/g, ' ').trim()) {
+    return typeLabel
+  }
+
+  return label
+}
+
 function markerLabel(marker: MimirTimelineMarker, incident?: MimirIncident) {
   if (incident && marker.type === 'possible_contact' && !hasSupportedContactEvidence(incident)) {
     return calmerPersonNearWording(incident) ? 'Person nearby' : 'Activity near vehicle'
@@ -1173,7 +1262,7 @@ function markerLabel(marker: MimirTimelineMarker, incident?: MimirIncident) {
     return 'Activity near vehicle'
   }
 
-  return marker.label || marker.type || 'Timeline marker'
+  return readableMarkerLabel(marker)
 }
 
 function markerDescription(marker: MimirTimelineMarker, incident?: MimirIncident) {
@@ -1187,7 +1276,7 @@ function markerDescription(marker: MimirTimelineMarker, incident?: MimirIncident
     return 'Mimir saw nearby activity, but no clear contact or tampering was detected.'
   }
 
-  return marker.description || 'No marker description was included.'
+  return marker.reason || marker.description || 'Jump to this point in the clip.'
 }
 
 function validTimelineMarkers(markers?: MimirIncident['timeline_markers']) {
@@ -1198,6 +1287,238 @@ function timedMarkers(markers: MimirTimelineMarker[]) {
   return markers
     .filter(marker => markerTime(marker) !== null)
     .sort((left, right) => (markerTime(left) ?? 0) - (markerTime(right) ?? 0))
+}
+
+function finiteNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
+}
+
+function incidentDurationSeconds(incident: MimirIncident) {
+  const directDuration = finiteNumber(incident.duration)
+  if (directDuration !== null && directDuration > 0) {
+    return directDuration
+  }
+
+  if (typeof incident.duration === 'string') {
+    const text = incident.duration.trim()
+    const numeric = Number(text)
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric
+    }
+
+    const parts = text.split(':').map(part => Number(part))
+    if (parts.length === 2 && parts.every(part => Number.isFinite(part))) {
+      return Math.max(0, parts[0] * 60 + parts[1])
+    }
+  }
+
+  const cameraDurations = cameraFeedsForIncident(incident)
+    .map(feed => finiteNumber(feed.durationSec))
+    .filter((value): value is number => value !== null && value > 0)
+  if (cameraDurations.length > 0) {
+    return Math.max(...cameraDurations)
+  }
+
+  const localDuration = finiteNumber(localEvidence(incident).total_duration_sec)
+  if (localDuration !== null && localDuration > 0) {
+    return localDuration
+  }
+
+  return null
+}
+
+function reviewTimelineDuration(incident: MimirIncident, videoDuration = 0) {
+  if (Number.isFinite(videoDuration) && videoDuration > 0) {
+    return videoDuration
+  }
+
+  return incidentDurationSeconds(incident) ?? 0
+}
+
+function localNumberEvidence(incident: MimirIncident, key: string) {
+  const local = localEvidence(incident)
+  const value = local[key]
+  return finiteNumber(value)
+}
+
+function localBooleanEvidence(incident: MimirIncident, key: string) {
+  const local = localEvidence(incident)
+  return local[key] === true
+}
+
+function markerTypeLabel(type?: string) {
+  const value = String(type || '').toLowerCase()
+
+  if (value === 'impact_contact' || (value.includes('impact') && value.includes('contact'))) {
+    return 'Impact/contact'
+  }
+
+  if (value.includes('impact')) {
+    return 'Impact'
+  }
+
+  if (value.includes('contact')) {
+    return 'Possible contact'
+  }
+
+  if (value.includes('motion')) {
+    return 'Peak motion'
+  }
+
+  if (value.includes('person')) {
+    return 'Person nearby'
+  }
+
+  if (value.includes('start')) {
+    return 'Activity starts'
+  }
+
+  if (value.includes('vehicle')) {
+    return 'Vehicle nearby'
+  }
+
+  if (value.includes('middle')) {
+    return 'Middle'
+  }
+
+  if (value.includes('review')) {
+    return 'Review point'
+  }
+
+  return 'Key moment'
+}
+
+function markerTimeFromEvidence(marker: MimirTimelineMarker) {
+  const directTime = markerTime(marker)
+  if (directTime !== null) {
+    return directTime
+  }
+
+  const record = marker as Record<string, unknown>
+  const possibleTime =
+    finiteNumber(record.timestamp_sec) ??
+    finiteNumber(record.time_seconds) ??
+    finiteNumber(record.seconds) ??
+    finiteNumber(record.second) ??
+    finiteNumber(record.time)
+
+  return possibleTime !== null && possibleTime >= 0 ? possibleTime : null
+}
+
+function hasImpactOrContactSignal(incident: MimirIncident) {
+  return (
+    Boolean(incident.possible_impact) ||
+    Boolean(incident.possible_contact) ||
+    localBooleanEvidence(incident, 'possible_impact') ||
+    localBooleanEvidence(incident, 'possible_contact')
+  )
+}
+
+function markerIsNear(markers: MimirTimelineMarker[], time: number, tolerance = 0.75) {
+  return markers.some(marker => {
+    const markerValue = markerTime(marker)
+    return markerValue !== null && Math.abs(markerValue - time) <= tolerance
+  })
+}
+
+function keyMomentSeverity(marker: MimirTimelineMarker, incident: MimirIncident) {
+  const type = String(marker.type || '').toLowerCase()
+  if (type === 'impact_contact' || type.includes('impact') || type.includes('contact')) {
+    return normalizeSeverity(incident.final_severity || incident.severity) === 'IMPORTANT' ? 'IMPORTANT' : 'REVIEW'
+  }
+
+  if (type.includes('motion') || type.includes('person') || type.includes('vehicle')) {
+    return 'REVIEW'
+  }
+
+  return 'NEUTRAL'
+}
+
+function normalizeReviewMarker(marker: MimirTimelineMarker, incident: MimirIncident): MimirTimelineMarker | null {
+  const time = markerTimeFromEvidence(marker)
+  if (time === null) {
+    return null
+  }
+
+  const readableLabel = readableMarkerLabel(marker)
+  return {
+    ...marker,
+    time_sec: time,
+    label: readableLabel,
+    severity: marker.severity || keyMomentSeverity(marker, incident),
+    description: marker.reason || marker.description || 'Jump to this point in the clip.',
+  }
+}
+
+function deriveReviewTimelineMarkers(incident: MimirIncident, videoDuration = 0) {
+  const markers: MimirTimelineMarker[] = []
+  const duration = reviewTimelineDuration(incident, videoDuration)
+  const addMarker = (marker: MimirTimelineMarker) => {
+    const normalized = normalizeReviewMarker(marker, incident)
+    if (!normalized) {
+      return
+    }
+
+    const time = markerTime(normalized)
+    if (time === null || markerIsNear(markers, time)) {
+      return
+    }
+
+    markers.push(normalized)
+  }
+
+  for (const marker of validTimelineMarkers(incident.key_moments)) {
+    addMarker(marker)
+  }
+
+  if (markers.length === 0) {
+    const primaryTime = finiteNumber(incident.primary_key_moment_sec)
+    if (primaryTime !== null && primaryTime >= 0) {
+      const isImpactContact = hasImpactOrContactSignal(incident)
+      addMarker({
+        type: isImpactContact ? 'impact_contact' : 'review_point',
+        severity: isImpactContact ? keyMomentSeverity({ type: 'impact_contact' }, incident) : 'REVIEW',
+        label: incident.primary_key_moment_label || (isImpactContact ? 'Impact/contact' : 'Review point'),
+        reason: 'Primary key moment from Mimir.',
+        time_sec: primaryTime,
+      })
+    }
+  }
+
+  if (markers.length === 0) {
+    const motionSpikeTime = localNumberEvidence(incident, 'motion_spike_time_sec')
+    if (motionSpikeTime !== null && motionSpikeTime >= 0) {
+      const isImpactContact = normalizeSeverity(incident.final_severity || incident.severity) === 'IMPORTANT' && hasImpactOrContactSignal(incident)
+      addMarker({
+        type: isImpactContact ? 'impact_contact' : 'motion_spike',
+        severity: isImpactContact ? 'IMPORTANT' : normalizeSeverity(incident.final_severity || incident.severity),
+        label: isImpactContact ? 'Impact/contact' : 'Peak motion',
+        reason: isImpactContact ? 'Mimir found the strongest impact/contact evidence here.' : 'Mimir found the strongest local motion here.',
+        time_sec: motionSpikeTime,
+      })
+    }
+  }
+
+  if (markers.length === 0 && duration > 0) {
+    addMarker({
+      type: 'review_point',
+      severity: 'REVIEW',
+      label: 'Review point',
+      reason: 'No timed local evidence was available; start from the middle of the clip.',
+      time_sec: duration / 2,
+    })
+  }
+
+  return timedMarkers(markers)
 }
 
 function timelineDuration(markers: MimirTimelineMarker[], incident: MimirIncident, videoDuration = 0) {
@@ -1961,8 +2282,9 @@ function IncidentTimelineMarkers({
 }) {
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null)
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<number | null>(null)
-  const effectiveDuration = timelineDuration(markers, incident, duration)
-  const canSeekRail = Number.isFinite(duration) && duration > 0
+  const knownDuration = reviewTimelineDuration(incident, duration)
+  const canSeekRail = Number.isFinite(knownDuration) && knownDuration > 0
+  const effectiveDuration = canSeekRail ? knownDuration : 0
   const progressPercent =
     effectiveDuration > 0 ? Math.max(0, Math.min(100, (currentTime / effectiveDuration) * 100)) : 0
   const selectedMarker = selectedMarkerIndex === null ? null : markers[selectedMarkerIndex]
@@ -1994,12 +2316,18 @@ function IncidentTimelineMarkers({
     setSelectedMarkerIndex(markers.length > 0 ? 0 : null)
   }, [incident.id, markers.length])
 
+  if (!canSeekRail) {
+    return (
+      <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.016] p-5">
+        <div className="text-[13px] text-[var(--mimir-text-muted)]">Loading key moments...</div>
+      </div>
+    )
+  }
+
   if (markers.length === 0) {
     return (
       <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.016] p-5">
-        <div className="text-[13px] text-[var(--mimir-text-muted)]">
-          No timeline markers available for this incident.
-        </div>
+        <div className="text-[13px] text-[var(--mimir-text-muted)]">No key moments found.</div>
       </div>
     )
   }
@@ -2015,7 +2343,7 @@ function IncidentTimelineMarkers({
     }
 
     const ratio = (event.clientX - bounds.left) / bounds.width
-    const seekTime = Math.max(0, Math.min(duration, ratio * duration))
+    const seekTime = Math.max(0, Math.min(knownDuration, ratio * knownDuration))
 
     onSeek(seekTime)
   }
@@ -2024,8 +2352,9 @@ function IncidentTimelineMarkers({
     <div className="rounded-[18px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.022),rgba(255,255,255,0.01))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-[13px] font-semibold text-[var(--mimir-text)]">Markers</h2>
-          <p className="mt-1 text-[12px] text-[var(--mimir-text-subtle)]">Jump to notable moments when needed.</p>
+          <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--mimir-text-subtle)]">
+            {markers.length} {markers.length === 1 ? 'moment' : 'moments'}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -2054,16 +2383,16 @@ function IncidentTimelineMarkers({
       <div
         role="presentation"
         onClick={handleRailClick}
-        className={`relative mx-2 h-[92px] ${canSeekRail ? 'cursor-pointer' : 'cursor-default'}`}
+        className={`relative mx-2 h-[138px] ${canSeekRail ? 'cursor-pointer' : 'cursor-default'}`}
       >
-        <div className="absolute left-0 right-0 top-10 h-px bg-white/[0.08]" />
-        <div className="absolute left-0 right-0 top-[39px] h-2 rounded-full bg-black/24 shadow-[inset_0_1px_1px_rgba(0,0,0,0.32)]" />
+        <div className="absolute left-0 right-0 top-[48px] h-px bg-white/[0.08]" />
+        <div className="absolute left-0 right-0 top-[46px] h-3 rounded-full bg-black/24 shadow-[inset_0_1px_1px_rgba(0,0,0,0.32)]" />
         <div
-          className="absolute left-0 top-[39px] h-2 rounded-full bg-white/20 transition-[width]"
+          className="absolute left-0 top-[46px] h-3 rounded-full bg-white/20 transition-[width]"
           style={{ width: `${progressPercent}%` }}
         />
         <div
-          className="absolute top-[30px] h-10 w-px bg-white/42"
+          className="absolute top-[34px] h-12 w-px bg-white/42"
           style={{ left: `${progressPercent}%` }}
         />
         {markers.map((marker, index) => {
@@ -2085,29 +2414,41 @@ function IncidentTimelineMarkers({
                 selectMarker(index)
               }}
               onMouseLeave={() => setHoveredMarkerIndex(null)}
-              className="group absolute top-[29px] -translate-x-1/2 cursor-pointer rounded-full outline-none"
+              title={`${markerLabel(marker, incident)} · ${isTimed ? formatTime(time) : 'time unavailable'}${markerDescription(marker, incident) ? `\n${markerDescription(marker, incident)}` : ''}`}
+              className="group absolute top-[22px] flex -translate-x-1/2 cursor-pointer flex-col items-center rounded-full outline-none"
               style={{ left: `${position}%` }}
               aria-label={`${markerLabel(marker, incident)} ${isTimed ? formatTime(time) : 'time unavailable'}`}
             >
-              <span className="absolute left-1/2 top-7 h-5 w-px -translate-x-1/2 bg-white/[0.08]" />
+              <span className="absolute left-1/2 top-9 h-6 w-px -translate-x-1/2 bg-white/[0.08]" />
               <span
-                className={`relative z-[1] block rounded-full border transition duration-150 group-focus-visible:ring-2 group-focus-visible:ring-white/28 ${markerClass(marker.severity)} ${
+                className={`relative z-[1] block rounded-full border transition duration-150 group-focus-visible:ring-2 group-focus-visible:ring-white/28 ${markerVisualClass(marker)} ${
                   isSelected
-                    ? 'h-7 w-7 scale-110 ring-2 ring-white/24 brightness-110'
+                    ? 'h-10 w-10 scale-110 ring-2 ring-white/24 brightness-110'
                     : isHovered
-                      ? 'h-6 w-6 scale-110'
-                      : 'h-5 w-5'
+                      ? 'h-9 w-9 scale-110'
+                      : String(marker.type || '').toLowerCase() === 'impact_contact'
+                        ? 'h-8 w-8'
+                        : 'h-7 w-7'
                 }`}
               />
+              <span
+                className={`mt-7 max-w-[132px] truncate rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-[0_10px_26px_rgba(0,0,0,0.22)] transition ${
+                  isSelected
+                    ? 'border-white/20 bg-white/[0.12] text-[var(--mimir-text)]'
+                    : 'border-white/[0.08] bg-black/26 text-[var(--mimir-text-muted)] group-hover:bg-white/[0.075] group-hover:text-[var(--mimir-text)]'
+                }`}
+              >
+                {markerLabel(marker, incident)}
+              </span>
+              <span className="mt-1 text-[11px] font-medium text-[var(--mimir-text-subtle)]">
+                {isTimed ? formatTime(time) : '--:--'}
+              </span>
               <span className="sr-only">{markerLabel(marker, incident)}</span>
 
               {isHovered && (
-                <span className="pointer-events-none absolute bottom-10 left-1/2 z-10 block w-56 -translate-x-1/2 rounded-lg bg-[var(--mimir-surface-soft)] p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
+                <span className="pointer-events-none absolute bottom-[108px] left-1/2 z-10 block w-56 -translate-x-1/2 rounded-lg bg-[var(--mimir-surface-soft)] p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
                   <span className="block text-[11px] uppercase tracking-[0.16em] text-[var(--mimir-text-subtle)]">
-                    {time === null ? 'time unavailable' : formatTime(time)}
-                  </span>
-                  <span className="mt-1 block text-[13px] font-semibold text-[var(--mimir-text)]">
-                    {markerLabel(marker, incident)}
+                    {markerLabel(marker, incident)} · {time === null ? 'time unavailable' : formatTime(time)}
                   </span>
                   <span className="mt-2 block text-[12px] leading-5 text-[var(--mimir-text-muted)]">
                     {markerDescription(marker, incident)}
@@ -2118,15 +2459,13 @@ function IncidentTimelineMarkers({
           )
         })}
         <div className="absolute bottom-0 left-0 text-[11px] text-[var(--mimir-text-subtle)]">0:00</div>
-        <div className="absolute bottom-0 right-0 text-[11px] text-[var(--mimir-text-subtle)]">
-          {formatTime(effectiveDuration)}
-        </div>
+        <div className="absolute bottom-0 right-0 text-[11px] text-[var(--mimir-text-subtle)]">{formatTime(knownDuration)}</div>
       </div>
 
       <div className="mt-3 rounded-xl border border-white/[0.055] bg-black/16 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
         {selectedMarker ? (
           <div className="relative flex flex-wrap items-start gap-4 pl-4">
-            <div className={`absolute bottom-1 left-0 top-1 w-1 rounded-full ${markerAccentClass(selectedMarker.severity)}`} />
+            <div className={`absolute bottom-1 left-0 top-1 w-1 rounded-full ${markerAccentForMarker(selectedMarker)}`} />
             <div className="min-w-[74px]">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--mimir-text-subtle)]">Marker</div>
               <div className="mt-1 text-[18px] font-semibold text-[var(--mimir-text)]">
@@ -2165,7 +2504,8 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
   const ai = aiEvidence(incident)
   const debug = classificationDebug(incident)
   const aiEvidenceItems = safeTextList(ai.evidence)
-  const aiConcernItems = safeTextList(ai.concerns)
+  const aiConcernItems = safeTextList(ai.concerns).concat(safeTextList(incident.ai_concerns))
+  const aiWarning = aiQualityWarning(incident)
   const resolverReasons = severityReasonList(incident)
   const severityCapReason = safeText(debug.severity_cap_reason || incident.severity_cap_reason, '')
   const severityFloorReason = safeText(debug.severity_floor_reason, '')
@@ -2221,45 +2561,6 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
             <DetailMetric label="Normal traffic evidence" value={evidenceMetricValue(local, 'normal_traffic_evidence')} />
           </div>
 
-          <div className="rounded-lg border border-white/[0.045] bg-white/[0.012] px-3">
-            <DetailMetric label="Mimir review" value={aiReviewed(incident) ? 'AI assistance used' : 'Local review only'} />
-            <DetailMetric label="AI model" value={aiModelName(incident) || 'Not used'} />
-            <DetailMetric label="AI scene type" value={aiSceneType(incident) || 'Not provided'} />
-            <DetailMetric label="AI confidence" value={aiConfidenceCopy(incident)} />
-          </div>
-
-          {aiEvidenceItems.length > 0 && (
-            <div>
-              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-                AI evidence
-              </div>
-              <ul className="space-y-2">
-                {aiEvidenceItems.map((item, index) => (
-                  <li key={`${incident.id}-ai-evidence-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-200/45" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {aiConcernItems.length > 0 && (
-            <div>
-              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-                AI concerns
-              </div>
-              <ul className="space-y-2">
-                {aiConcernItems.map((item, index) => (
-                  <li key={`${incident.id}-ai-concern-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-200/45" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           {resolverReasons.length > 0 && (
             <div>
               <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
@@ -2284,6 +2585,60 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
           )}
         </div>
       </details>
+
+      {experimentalAiUsed(incident) && (
+        <details className="mt-5 rounded-xl border border-sky-200/10 bg-sky-300/[0.035] p-4">
+          <summary className="cursor-pointer text-[13px] font-semibold text-sky-50/85">
+            Experimental AI second opinion
+          </summary>
+          <div className="mt-4 grid gap-4">
+            <div className="rounded-lg border border-white/[0.045] bg-black/14 px-3">
+              <DetailMetric label="Model" value={aiModelName(incident) || 'Not provided'} />
+              <DetailMetric label="Scene type" value={aiSceneType(incident) || 'Not provided'} />
+              <DetailMetric label="Recommended severity" value={aiRecommendedSeverity(incident)} />
+              <DetailMetric label="Confidence" value={aiConfidenceCopy(incident)} />
+            </div>
+
+            {aiWarning && (
+              <div className="rounded-lg border border-amber-200/16 bg-amber-300/8 p-3 text-[12px] leading-5 text-amber-50/78">
+                {aiWarning}
+              </div>
+            )}
+
+            {aiEvidenceItems.length > 0 && (
+              <div>
+                <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
+                  Evidence
+                </div>
+                <ul className="space-y-2">
+                  {aiEvidenceItems.map((item, index) => (
+                    <li key={`${incident.id}-ai-evidence-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-200/45" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {aiConcernItems.length > 0 && (
+              <div>
+                <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
+                  Concerns
+                </div>
+                <ul className="space-y-2">
+                  {aiConcernItems.map((item, index) => (
+                    <li key={`${incident.id}-ai-concern-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-200/45" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
 
       <div className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
         <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
@@ -2363,7 +2718,6 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
           <DetailMetric label="Incident ID" value={safeText(incident.id, 'Not provided')} />
           <DetailMetric label="AI parse error" value={yesNo(incident.ai_parse_error)} />
           <DetailMetric label="AI skipped reason" value={safeText(incident.ai_review_skipped_reason, 'Not provided')} />
-          <DetailMetric label="AI decision" value={safeText(incident.ai_decision, 'Not provided')} />
           <DetailMetric label="Score" value={formatNumber(incident.score)} />
           <DetailMetric label="Persons" value={formatNumber(incident.persons)} />
           <DetailMetric label="Vehicles" value={formatNumber(incident.vehicles)} />
@@ -2375,7 +2729,6 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
             value={formatDateTime(sourceEventTimestamp(incident)) || 'Not provided'}
           />
           <TechnicalJsonBlock label="Classification debug" value={incident.classification_debug} />
-          <TechnicalJsonBlock label="AI raw response" value={incident.ai_raw_response} />
           <TechnicalJsonBlock label="Local evidence JSON" value={incident.local_evidence ?? incident.local_evidence_summary} />
         </div>
       </details>
@@ -2728,11 +3081,11 @@ function ReviewActionsPanel({
 
 export function IncidentViewerScreen({
   incident,
+  session,
   onBack,
   onReloadSession,
   onIncidentUpdated,
 }: IncidentViewerScreenProps) {
-  const markers = validTimelineMarkers(incident.timeline_markers)
   const title = eventDisplayTitle(incident)
   const timestamp = formatDateTime(sourceEventTimestamp(incident))
   const sourceLabel =
@@ -2758,6 +3111,8 @@ export function IncidentViewerScreen({
   const [feedbackIncludeVideo, setFeedbackIncludeVideo] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackError, setFeedbackError] = useState('')
+  const [showKeyMoments, setShowKeyMoments] = useState(true)
+  const markers = useMemo(() => deriveReviewTimelineMarkers(incident, duration), [incident, duration])
 
   useEffect(() => {
     setCurrentTime(0)
@@ -2777,6 +3132,7 @@ export function IncidentViewerScreen({
     setFeedbackIncludeVideo(false)
     setFeedbackMessage('')
     setFeedbackError('')
+    setShowKeyMoments(true)
     viewerRef.current?.focus()
   }, [incident.id])
 
@@ -2913,7 +3269,7 @@ export function IncidentViewerScreen({
     try {
       const videoPath = currentVideoPath(incident)
       const result = await invoke<IncidentFeedbackResult>('save_incident_feedback', {
-        feedback: incidentFeedbackPayload(incident, feedbackChoice, feedbackNotes, feedbackIncludeVideo),
+        feedback: incidentFeedbackPayload(incident, feedbackChoice, feedbackNotes, feedbackIncludeVideo, session),
         includeVideo: feedbackIncludeVideo,
         videoPath: feedbackIncludeVideo ? videoPath : null,
       })
@@ -3118,30 +3474,40 @@ export function IncidentViewerScreen({
                   onDurationChange={value => setDuration(Number.isFinite(value) ? value : 0)}
                 />
               </CrashSafeBoundary>
-              {markers.length > 0 && (
-                <details className="mt-3 rounded-[18px] border border-white/[0.055] bg-white/[0.014] p-3">
-                  <summary className="cursor-pointer px-1 text-[13px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
-                    Markers ({markers.length})
-                  </summary>
-                  <div className="mt-3">
-                    <CrashSafeBoundary
-                      title="Markers error"
-                      incidentId={incidentActionId(incident)}
-                      attemptedVideoPath={attemptedVideoPath}
-                      onBack={onBack}
-                      onOpenFolder={path => void openContainingFolder(path, 'Video path is not available.')}
-                    >
-                      <IncidentTimelineMarkers
-                        markers={markers}
-                        incident={incident}
-                        currentTime={currentTime}
-                        duration={duration}
-                        onSeek={handleSeek}
-                      />
-                    </CrashSafeBoundary>
+              <section className="mt-3 rounded-[18px] border border-white/[0.055] bg-white/[0.014] p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
+                  <div>
+                    <h2 className="text-[15px] font-semibold text-[var(--mimir-text)]">Key moments</h2>
+                    <p className="mt-1 text-[12px] text-[var(--mimir-text-subtle)]">
+                      Jump to moments Mimir found in this clip.
+                    </p>
                   </div>
-                </details>
-              )}
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyMoments(value => !value)}
+                    className="h-8 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.055] hover:text-[var(--mimir-text)]"
+                  >
+                    {showKeyMoments ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {showKeyMoments && (
+                  <CrashSafeBoundary
+                    title="Key moments error"
+                    incidentId={incidentActionId(incident)}
+                    attemptedVideoPath={attemptedVideoPath}
+                    onBack={onBack}
+                    onOpenFolder={path => void openContainingFolder(path, 'Video path is not available.')}
+                  >
+                    <IncidentTimelineMarkers
+                      markers={markers}
+                      incident={incident}
+                      currentTime={currentTime}
+                      duration={duration}
+                      onSeek={handleSeek}
+                    />
+                  </CrashSafeBoundary>
+                )}
+              </section>
             </section>
           </div>
 

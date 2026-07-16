@@ -8,6 +8,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
+    time::UNIX_EPOCH,
 };
 
 #[allow(dead_code)]
@@ -23,6 +24,10 @@ const DEV_CORE_V2_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_scan.py";
 #[allow(dead_code)]
 const DEV_CORE_V2_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_actions.py";
 #[allow(dead_code)]
+const DEV_CORE_V2_SCAN_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe";
+#[allow(dead_code)]
+const DEV_CORE_V2_ACTIONS_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe";
+#[allow(dead_code)]
 const DEV_CLIP_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_clip_actions.py";
 #[allow(dead_code)]
 const DEV_LATEST_SESSION_JSON: &str = r"C:\Mimir_Backend\MimirOutput\latest_session.json";
@@ -34,6 +39,8 @@ const DEV_CORE_V2_ACTION_REPORT_JSON: &str =
 const USE_MIMIR_CORE_V2: bool = true;
 const BACKEND_RESOURCE_FOLDER: &str = "mimir-backend";
 const BACKEND_EXE_NAME: &str = "mimir-backend.exe";
+const CORE_V2_SCAN_EXE_NAME: &str = "mimir-core-v2-scan.exe";
+const CORE_V2_ACTIONS_EXE_NAME: &str = "mimir-core-v2-actions.exe";
 const DEFAULT_VISION_MODEL: &str = "qwen2.5vl:7b";
 const OLLAMA_DOWNLOAD_URL: &str = "https://ollama.com/download";
 
@@ -42,7 +49,13 @@ struct ScanResult {
     stdout: String,
     stderr: String,
     session_path: String,
+    latest_session_path: String,
+    latest_session_modified_time: String,
+    active_output_dir: String,
+    output_argument_used: String,
     backend_mode: String,
+    backend_runner: String,
+    backend_command: String,
 }
 
 #[derive(Serialize)]
@@ -64,6 +77,7 @@ struct StorageActionResult {
     message: String,
     updated_session: String,
     report_json: String,
+    backend_runner: String,
     stdout: String,
     stderr: String,
 }
@@ -140,6 +154,8 @@ enum BackendMode {
     DevelopmentPythonFallback,
     #[allow(dead_code)]
     CoreV2Python,
+    #[allow(dead_code)]
+    CoreV2Exe,
 }
 
 #[derive(Clone)]
@@ -157,6 +173,7 @@ impl BackendRuntime {
             BackendMode::DevelopmentResource => "development_resource_backend",
             BackendMode::DevelopmentPythonFallback => "development_backend",
             BackendMode::CoreV2Python => "mimir_core_v2",
+            BackendMode::CoreV2Exe => "mimir_core_v2_exe",
         }
     }
 
@@ -165,6 +182,24 @@ impl BackendRuntime {
             self.mode,
             BackendMode::DevelopmentPythonFallback | BackendMode::CoreV2Python
         )
+    }
+
+    fn runner_label(&self) -> &'static str {
+        match self.mode {
+            BackendMode::CoreV2Exe => {
+                if self.executable.starts_with(Path::new(DEV_BACKEND_ROOT)) {
+                    "dev_exe"
+                } else {
+                    "sidecar"
+                }
+            }
+            BackendMode::Bundled | BackendMode::DevelopmentResource => "sidecar",
+            BackendMode::DevelopmentPythonFallback | BackendMode::CoreV2Python => "python_script",
+        }
+    }
+
+    fn is_core_v2_direct_exe(&self) -> bool {
+        matches!(self.mode, BackendMode::CoreV2Exe)
     }
 }
 
@@ -217,10 +252,127 @@ fn bundled_backend_runtime_from_dir(
     })
 }
 
-fn resolve_backend_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
+fn backend_missing_failure(kind: &str, candidates: &[&str]) -> ScanFailure {
+    let details = candidates
+        .iter()
+        .map(|candidate| {
+            let path = Path::new(candidate);
+            format!(
+                "{}: {}",
+                candidate,
+                if path.exists() { "found" } else { "missing" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    ScanFailure::with_output(
+        "Mimir backend was not found.",
+        format!("Could not resolve {} backend command.", kind),
+        details,
+    )
+}
+
+fn resource_core_v2_exe(app: &tauri::AppHandle, exe_name: &str) -> Option<PathBuf> {
+    app.path_resolver()
+        .resource_dir()
+        .map(|resource_dir| resource_dir.join(BACKEND_RESOURCE_FOLDER).join(exe_name))
+        .filter(|path| path.exists())
+}
+
+fn resource_core_v2_runtime(app: &tauri::AppHandle, exe_name: &str) -> Option<BackendRuntime> {
+    let executable = resource_core_v2_exe(app, exe_name)?;
+    let current_dir = executable
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(DEV_BACKEND_ROOT));
+
+    Some(BackendRuntime {
+        executable,
+        current_dir,
+        session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+        mode: BackendMode::CoreV2Exe,
+    })
+}
+
+fn resolve_core_v2_scan_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
+    #[cfg(debug_assertions)]
+    {
+        if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_SCRIPT).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_BACKEND_PYTHON),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+                mode: BackendMode::CoreV2Python,
+            });
+        }
+    }
+
+    if Path::new(DEV_CORE_V2_SCAN_EXE).exists() {
+        return Ok(BackendRuntime {
+            executable: PathBuf::from(DEV_CORE_V2_SCAN_EXE),
+            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+            mode: BackendMode::CoreV2Exe,
+        });
+    }
+
+    if let Some(runtime) = resource_core_v2_runtime(app, CORE_V2_SCAN_EXE_NAME) {
+        return Ok(runtime);
+    }
+
+    if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_SCRIPT).exists() {
+        return Ok(BackendRuntime {
+            executable: PathBuf::from(DEV_BACKEND_PYTHON),
+            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+            mode: BackendMode::CoreV2Python,
+        });
+    }
+
+    Err(backend_missing_failure(
+        "scan",
+        &[DEV_CORE_V2_SCAN_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_SCRIPT],
+    ))
+}
+
+fn resolve_core_v2_actions_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
+    if Path::new(DEV_CORE_V2_ACTIONS_EXE).exists() {
+        return Ok(BackendRuntime {
+            executable: PathBuf::from(DEV_CORE_V2_ACTIONS_EXE),
+            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+            mode: BackendMode::CoreV2Exe,
+        });
+    }
+
+    if let Some(runtime) = resource_core_v2_runtime(app, CORE_V2_ACTIONS_EXE_NAME) {
+        return Ok(runtime);
+    }
+
+    if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_ACTION_SCRIPT).exists() {
+        return Ok(BackendRuntime {
+            executable: PathBuf::from(DEV_BACKEND_PYTHON),
+            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+            mode: BackendMode::CoreV2Python,
+        });
+    }
+
+    Err(backend_missing_failure(
+        "storage action",
+        &[
+            DEV_CORE_V2_ACTIONS_EXE,
+            DEV_BACKEND_PYTHON,
+            DEV_CORE_V2_ACTION_SCRIPT,
+        ],
+    ))
+}
+
+fn resolve_clip_action_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
     if USE_MIMIR_CORE_V2
         && Path::new(DEV_BACKEND_PYTHON).exists()
-        && Path::new(DEV_CORE_V2_SCRIPT).exists()
+        && Path::new(DEV_CLIP_ACTION_SCRIPT).exists()
     {
         return Ok(BackendRuntime {
             executable: PathBuf::from(DEV_BACKEND_PYTHON),
@@ -228,6 +380,14 @@ fn resolve_backend_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, Sca
             session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
             mode: BackendMode::CoreV2Python,
         });
+    }
+
+    resolve_backend_runtime(app)
+}
+
+fn resolve_backend_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
+    if USE_MIMIR_CORE_V2 {
+        return resolve_core_v2_scan_runtime(app);
     }
 
     #[cfg(debug_assertions)]
@@ -271,7 +431,10 @@ fn resolve_backend_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, Sca
         }
     }
 
-    Err(ScanFailure::new("Mimir could not start the local scanner."))
+    Err(backend_missing_failure(
+        "scan",
+        &[DEV_BACKEND_DIST, DEV_BACKEND_PYTHON, DEV_BACKEND_SCRIPT],
+    ))
 }
 
 fn backend_command(runtime: &BackendRuntime) -> Command {
@@ -280,13 +443,69 @@ fn backend_command(runtime: &BackendRuntime) -> Command {
     command
 }
 
+fn active_output_dir(runtime: &BackendRuntime) -> PathBuf {
+    runtime
+        .session_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(DEV_BACKEND_ROOT).join("MimirOutputV2"))
+}
+
+fn should_pass_explicit_output_dir(runtime: &BackendRuntime) -> bool {
+    matches!(runtime.mode, BackendMode::CoreV2Exe | BackendMode::CoreV2Python)
+}
+
+fn output_argument_name(runtime: &BackendRuntime) -> &'static str {
+    if should_pass_explicit_output_dir(runtime) {
+        "--output"
+    } else {
+        ""
+    }
+}
+
+fn append_output_dir_arg(command: &mut Command, runtime: &BackendRuntime, output_dir: &Path) {
+    if should_pass_explicit_output_dir(runtime) {
+        command.arg(output_argument_name(runtime)).arg(output_dir);
+    }
+}
+
+fn quote_command_part(value: &str) -> String {
+    if value.contains(char::is_whitespace) || value.contains('"') {
+        format!("\"{}\"", value.replace('"', "\\\""))
+    } else {
+        value.to_string()
+    }
+}
+
+fn command_preview(command: &Command) -> String {
+    let mut parts = vec![quote_command_part(&command.get_program().to_string_lossy())];
+    parts.extend(
+        command
+            .get_args()
+            .map(|arg| quote_command_part(&arg.to_string_lossy())),
+    );
+    parts.join(" ")
+}
+
+fn file_modified_time(path: &Path) -> String {
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| format!("unix:{}", duration.as_secs()))
+        .unwrap_or_default()
+}
+
 fn append_backend_scan_args(
     command: &mut Command,
     runtime: &BackendRuntime,
     input_folder: &str,
     scan_mode: &str,
+    output_dir: &Path,
     use_enhanced_ai: bool,
     vision_model: &str,
+    ai_review_budget: Option<u32>,
+    ai_timeout_sec: Option<u32>,
 ) {
     let backend_scan_mode = if USE_MIMIR_CORE_V2 && scan_mode == "quality" {
         "thorough"
@@ -294,7 +513,22 @@ fn append_backend_scan_args(
         scan_mode
     };
 
-    if runtime.is_python_fallback() {
+    if runtime.is_core_v2_direct_exe() {
+        command
+            .arg("--input")
+            .arg(input_folder)
+            .arg("--mode")
+            .arg(backend_scan_mode);
+        append_output_dir_arg(command, runtime, output_dir);
+
+        append_experimental_ai_scan_args(
+            command,
+            use_enhanced_ai,
+            vision_model,
+            ai_review_budget,
+            ai_timeout_sec,
+        );
+    } else if runtime.is_python_fallback() {
         let script = if matches!(runtime.mode, BackendMode::CoreV2Python) {
             DEV_CORE_V2_SCRIPT
         } else {
@@ -307,10 +541,15 @@ fn append_backend_scan_args(
             .arg(input_folder)
             .arg("--mode")
             .arg(backend_scan_mode);
+        append_output_dir_arg(command, runtime, output_dir);
 
-        if use_enhanced_ai && !matches!(runtime.mode, BackendMode::CoreV2Python) {
-            command.arg("--vlm").arg(vision_model);
-        }
+        append_experimental_ai_scan_args(
+            command,
+            use_enhanced_ai,
+            vision_model,
+            ai_review_budget,
+            ai_timeout_sec,
+        );
     } else {
         command
             .arg("scan")
@@ -318,11 +557,35 @@ fn append_backend_scan_args(
             .arg(input_folder)
             .arg("--mode")
             .arg(backend_scan_mode);
+        append_output_dir_arg(command, runtime, output_dir);
 
-        if use_enhanced_ai {
-            command.arg("--vlm").arg(vision_model);
-        }
+        append_experimental_ai_scan_args(
+            command,
+            use_enhanced_ai,
+            vision_model,
+            ai_review_budget,
+            ai_timeout_sec,
+        );
     }
+}
+
+fn append_experimental_ai_scan_args(
+    command: &mut Command,
+    use_enhanced_ai: bool,
+    vision_model: &str,
+    ai_review_budget: Option<u32>,
+    ai_timeout_sec: Option<u32>,
+) {
+    if !use_enhanced_ai {
+        return;
+    }
+
+    command.arg("--vlm").arg(vision_model);
+    command
+        .arg("--ai-review-budget")
+        .arg(ai_review_budget.unwrap_or(5).to_string())
+        .arg("--ai-timeout-sec")
+        .arg(ai_timeout_sec.unwrap_or(60).to_string());
 }
 
 fn append_backend_action_args(
@@ -641,7 +904,11 @@ fn save_incident_feedback_sync(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("incident");
     let submitted_at = chrono_like_now();
-    let folder_name = format!("{}_{}", safe_filename(incident_id), safe_filename(&submitted_at));
+    let folder_name = format!(
+        "{}_{}",
+        safe_filename(incident_id),
+        safe_filename(&submitted_at)
+    );
     let feedback_folder = feedback_root.join(folder_name);
     fs::create_dir_all(&feedback_folder).map_err(|error| ScanFailure::new(error.to_string()))?;
 
@@ -677,7 +944,9 @@ fn save_incident_feedback_sync(
             let destination = feedback_folder.join(file_name);
             fs::copy(&source, &destination).map_err(|error| error.to_string())?;
 
-            if !destination.exists() || destination.metadata().map(|meta| meta.len()).unwrap_or(0) == 0 {
+            if !destination.exists()
+                || destination.metadata().map(|meta| meta.len()).unwrap_or(0) == 0
+            {
                 return Err("Video copy verification failed.".to_string());
             }
 
@@ -744,123 +1013,239 @@ fn command_details(stdout: &[u8], stderr: &[u8]) -> String {
     }
 }
 
+fn path_check_details(candidates: &[&str]) -> String {
+    candidates
+        .iter()
+        .map(|candidate| {
+            let path = Path::new(candidate);
+            format!(
+                "{}: {}",
+                candidate,
+                if path.exists() { "found" } else { "missing" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn runtime_details(runtime: &BackendRuntime, candidates: &[&str]) -> String {
+    [
+        format!("backend_runner: {}", runtime.runner_label()),
+        format!("resolved_command: {}", runtime.executable.to_string_lossy()),
+        format!(
+            "working_directory: {}",
+            runtime.current_dir.to_string_lossy()
+        ),
+        path_check_details(candidates),
+    ]
+    .into_iter()
+    .filter(|value| !value.trim().is_empty())
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+fn folder_check_item(
+    id: &str,
+    label: &str,
+    folder: Result<PathBuf, ScanFailure>,
+    ready_message: &str,
+    missing_message: &str,
+) -> SystemCheckItem {
+    match folder {
+        Ok(path) => {
+            let create_result = fs::create_dir_all(&path);
+            let ok = create_result.is_ok() && path.is_dir();
+            let details = match create_result {
+                Ok(_) => format!("folder: {}\nstatus: accessible", path.to_string_lossy()),
+                Err(error) => format!("folder: {}\nerror: {}", path.to_string_lossy(), error),
+            };
+
+            check_item(
+                id,
+                label,
+                ok,
+                if ok { ready_message } else { missing_message },
+                "Mimir needs this folder to save scan results and reviewed clips.",
+                "Check folder permissions, then click Recheck.",
+                details,
+            )
+        }
+        Err(error) => check_item(
+            id,
+            label,
+            false,
+            missing_message,
+            "Mimir needs this folder to save scan results and reviewed clips.",
+            "Check folder permissions, then click Recheck.",
+            error.message,
+        ),
+    }
+}
+
 fn run_system_check_sync(app: tauri::AppHandle) -> SystemCheckResult {
     let mut items = Vec::new();
-    let runtime = resolve_backend_runtime(&app);
 
-    let runtime = match runtime {
-        Ok(runtime) => runtime,
-        Err(error) => {
+    let scanner_candidates = if USE_MIMIR_CORE_V2 {
+        vec![DEV_CORE_V2_SCAN_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_SCRIPT]
+    } else {
+        vec![DEV_BACKEND_DIST, DEV_BACKEND_PYTHON, DEV_BACKEND_SCRIPT]
+    };
+    let scanner_runtime = resolve_backend_runtime(&app);
+
+    if let Ok(runtime) = &scanner_runtime {
+        if runtime.is_core_v2_direct_exe() || runtime.is_python_fallback() {
             items.push(check_item(
                 "local_scanner",
                 "Local scanner",
-                false,
-                "Mimir could not start the local scanner.",
+                true,
+                "Mimir is ready to scan.",
                 "The scanner is required before Mimir can analyze footage.",
                 "Try reinstalling Mimir. Technical details are available below.",
-                error.message,
+                runtime_details(runtime, &scanner_candidates),
             ));
+        } else {
+            let mut command = backend_command(runtime);
+            command.arg("health");
 
-            return SystemCheckResult {
-                ok: false,
-                checked_at: chrono_like_now(),
-                items,
-            };
+            match command.output() {
+                Ok(output) => {
+                    let ok = output.status.success();
+                    let details = command_details(&output.stdout, &output.stderr);
+
+                    items.push(check_item(
+                        "local_scanner",
+                        "Local scanner",
+                        ok,
+                        if ok {
+                            "Mimir is ready to scan.".to_string()
+                        } else {
+                            "Mimir could not start the local scanner.".to_string()
+                        },
+                        "The scanner is required before Mimir can analyze footage.",
+                        "Try reinstalling Mimir. Technical details are available below.",
+                        [
+                            runtime_details(runtime, &scanner_candidates),
+                            details.clone(),
+                        ]
+                        .join("\n\n"),
+                    ));
+
+                    let details_lower = details.to_lowercase();
+                    let enhanced_ready = details_lower.contains("\"enhanced_ai_available\": true");
+
+                    items.push(check_item(
+                        "enhanced_ai_review",
+                        "Enhanced AI review",
+                        enhanced_ready,
+                        if enhanced_ready {
+                            "Enhanced AI review ready.".to_string()
+                        } else {
+                            "Enhanced AI review is not set up.".to_string()
+                        },
+                        "Local AI setup is checked separately from the scanner.",
+                        "Use Repair setup or Recheck if AI review is required.",
+                        details,
+                    ));
+                }
+                Err(error) => items.push(check_item(
+                    "local_scanner",
+                    "Local scanner",
+                    false,
+                    "Mimir could not start the local scanner.",
+                    "The scanner is required before Mimir can analyze footage.",
+                    "Try reinstalling Mimir. Technical details are available below.",
+                    [
+                        runtime_details(runtime, &scanner_candidates),
+                        error.to_string(),
+                    ]
+                    .join("\n\n"),
+                )),
+            }
         }
-    };
+    } else if let Err(error) = scanner_runtime {
+        let technical_details = [
+            error.message.clone(),
+            error.stdout.clone(),
+            error.stderr.clone(),
+        ]
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
 
-    let mut command = backend_command(&runtime);
-
-    if runtime.is_python_fallback() {
-        let scanner_script = if matches!(runtime.mode, BackendMode::CoreV2Python) {
-            DEV_CORE_V2_SCRIPT
-        } else {
-            DEV_BACKEND_SCRIPT
-        };
-        let scanner_label = if matches!(runtime.mode, BackendMode::CoreV2Python) {
-            "Mimir Core v2"
-        } else {
-            "Development scanner"
-        };
-
-        items.push(check_item(
-            "development_backend_mode",
-            "Development backend mode",
-            true,
-            "Development backend mode is active.",
-            "This is only used while running Mimir from the development workspace.",
-            "Packaged builds use the bundled local scanner.",
-            format!(
-                "Development fallback command: {} {}",
-                DEV_BACKEND_PYTHON, scanner_script
-            ),
-        ));
-
-        let python_exists = Path::new(DEV_BACKEND_PYTHON).exists();
-        let scanner_exists = Path::new(scanner_script).exists();
         items.push(check_item(
             "local_scanner",
             "Local scanner",
-            python_exists && scanner_exists,
-            if python_exists && scanner_exists {
-                format!("{} is available.", scanner_label)
-            } else {
-                format!("{} is not available.", scanner_label)
-            },
+            false,
+            "Mimir cannot find the local scanner.",
             "The scanner is required before Mimir can analyze footage.",
-            "Build the bundled backend or restore the development backend.",
-            String::from("Development backend mode"),
+            "Try reinstalling Mimir. Technical details are available below.",
+            technical_details,
         ));
-    } else {
-        command.arg("health");
+    }
 
-        match command.output() {
-            Ok(output) => {
-                let ok = output.status.success();
-                let details = command_details(&output.stdout, &output.stderr);
-
-                items.push(check_item(
-                    "local_scanner",
-                    "Local scanner",
-                    ok,
-                    if ok {
-                        "Mimir is ready to scan.".to_string()
-                    } else {
-                        "Mimir could not start the local scanner.".to_string()
-                    },
-                    "The scanner is required before Mimir can analyze footage.",
-                    "Try reinstalling Mimir. Technical details are available below.",
-                    details.clone(),
-                ));
-
-                let details_lower = details.to_lowercase();
-                let enhanced_ready = details_lower.contains("\"enhanced_ai_available\": true");
-
-                items.push(check_item(
-          "enhanced_ai_review",
-          "Enhanced AI review",
-          enhanced_ready,
-          if enhanced_ready {
-            "Enhanced AI review ready.".to_string()
-          } else {
-            "Enhanced AI review is not set up.".to_string()
-          },
-          "Local AI setup is checked separately from the scanner.",
-          "Use Repair setup or Recheck if AI review is required.",
-          details,
-        ));
-            }
+    if USE_MIMIR_CORE_V2 {
+        match resolve_core_v2_actions_runtime(&app) {
+            Ok(runtime) => items.push(check_item(
+                "local_actions",
+                "Storage actions",
+                true,
+                "Mimir storage actions are ready.",
+                "These actions move reviewed clips only when you choose a storage action.",
+                "Restore the packaged action executable or development action script, then click Recheck.",
+                runtime_details(
+                    &runtime,
+                    &[
+                        DEV_CORE_V2_ACTIONS_EXE,
+                        DEV_BACKEND_PYTHON,
+                        DEV_CORE_V2_ACTION_SCRIPT,
+                    ],
+                ),
+            )),
             Err(error) => items.push(check_item(
-                "local_scanner",
-                "Local scanner",
+                "local_actions",
+                "Storage actions",
                 false,
-                "Mimir could not start the local scanner.",
-                "The scanner is required before Mimir can analyze footage.",
-                "Try reinstalling Mimir. Technical details are available below.",
-                error.to_string(),
+                "Mimir cannot find the local storage actions.",
+                "Storage actions are required for Move to Library and Move to Mimir Trash.",
+                "Restore the packaged action executable or development action script, then click Recheck.",
+                [
+                    error.message,
+                    error.stdout,
+                    error.stderr,
+                    path_check_details(&[
+                        DEV_CORE_V2_ACTIONS_EXE,
+                        DEV_BACKEND_PYTHON,
+                        DEV_CORE_V2_ACTION_SCRIPT,
+                    ]),
+                ]
+                .into_iter()
+                .filter(|value| !value.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n"),
             )),
         }
     }
+
+    let output_folder = Path::new(DEV_CORE_V2_LATEST_SESSION_JSON)
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| ScanFailure::new("Could not resolve the Core v2 output folder."));
+    items.push(folder_check_item(
+        "core_v2_output_folder",
+        "Scan output folder",
+        output_folder,
+        "Mimir scan output is ready.",
+        "Mimir scan output is not ready.",
+    ));
+
+    items.push(folder_check_item(
+        "mimir_library_folder",
+        "Mimir Library",
+        default_mimir_library_root(),
+        "Mimir Library is ready.",
+        "Mimir Library is not ready.",
+    ));
 
     let ok = items
         .iter()
@@ -960,6 +1345,8 @@ fn run_scan_sync(
     scan_mode: String,
     use_enhanced_ai: bool,
     vision_model: Option<String>,
+    ai_review_budget: Option<u32>,
+    ai_timeout_sec: Option<u32>,
 ) -> Result<ScanResult, ScanFailure> {
     let source_folder = PathBuf::from(selected_folder);
 
@@ -981,6 +1368,8 @@ fn run_scan_sync(
     let vision_model = vision_model
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_VISION_MODEL.to_string());
+    let output_dir = active_output_dir(&runtime);
+    fs::create_dir_all(&output_dir).map_err(|error| ScanFailure::new(error.to_string()))?;
 
     let mut command = backend_command(&runtime);
     append_backend_scan_args(
@@ -988,9 +1377,13 @@ fn run_scan_sync(
         &runtime,
         &input_folder,
         &scan_mode,
+        &output_dir,
         use_enhanced_ai,
         &vision_model,
+        ai_review_budget,
+        ai_timeout_sec,
     );
+    let backend_command = command_preview(&command);
 
     let mut child = command
         .stdout(Stdio::piped())
@@ -1054,7 +1447,13 @@ fn run_scan_sync(
         stdout,
         stderr,
         session_path: runtime.session_path.to_string_lossy().to_string(),
+        latest_session_path: runtime.session_path.to_string_lossy().to_string(),
+        latest_session_modified_time: file_modified_time(&runtime.session_path),
+        active_output_dir: output_dir.to_string_lossy().to_string(),
+        output_argument_used: output_argument_name(&runtime).to_string(),
         backend_mode: runtime.mode_label().to_string(),
+        backend_runner: runtime.runner_label().to_string(),
+        backend_command,
     })
 }
 
@@ -1107,6 +1506,8 @@ async fn run_local_scan(
     scan_mode: String,
     use_enhanced_ai: bool,
     vision_model: Option<String>,
+    ai_review_budget: Option<u32>,
+    ai_timeout_sec: Option<u32>,
 ) -> Result<ScanResult, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
         run_scan_sync(
@@ -1116,6 +1517,8 @@ async fn run_local_scan(
             scan_mode,
             use_enhanced_ai,
             vision_model,
+            ai_review_budget,
+            ai_timeout_sec,
         )
     })
     .await
@@ -1128,7 +1531,7 @@ fn run_clip_action_sync(
     action: String,
     status: Option<String>,
 ) -> Result<ClipActionResult, ScanFailure> {
-    let runtime = resolve_backend_runtime(&app)?;
+    let runtime = resolve_clip_action_runtime(&app)?;
     let mut command = backend_command(&runtime);
     append_backend_action_args(
         &mut command,
@@ -1221,29 +1624,14 @@ fn run_core_v2_storage_action_sync(
         return Err(ScanFailure::new("Unsupported storage action."));
     }
 
-    let runtime = resolve_backend_runtime(&app)?;
-    let python = if matches!(runtime.mode, BackendMode::CoreV2Python) {
-        runtime.executable.clone()
-    } else if Path::new(DEV_BACKEND_PYTHON).exists() {
-        PathBuf::from(DEV_BACKEND_PYTHON)
-    } else {
-        return Err(ScanFailure::new(
-            "Mimir could not find the Core v2 storage action runtime.",
-        ));
-    };
+    let runtime = resolve_core_v2_actions_runtime(&app)?;
+    let mut command = backend_command(&runtime);
 
-    if !Path::new(DEV_CORE_V2_ACTION_SCRIPT).exists() {
-        return Err(ScanFailure::new(
-            "Mimir could not find the Core v2 storage action script.",
-        ));
+    if runtime.is_python_fallback() {
+        command.arg(DEV_CORE_V2_ACTION_SCRIPT);
     }
 
-    let mut command = Command::new(python);
-    command
-        .current_dir(DEV_BACKEND_ROOT)
-        .arg(DEV_CORE_V2_ACTION_SCRIPT)
-        .arg("--incident-id")
-        .arg(&incident_id);
+    command.arg("--incident-id").arg(&incident_id);
 
     if action == "move_to_library" {
         command.arg("--move-to-library");
@@ -1298,6 +1686,7 @@ fn run_core_v2_storage_action_sync(
         message,
         updated_session: DEV_CORE_V2_LATEST_SESSION_JSON.to_string(),
         report_json,
+        backend_runner: runtime.runner_label().to_string(),
         stdout,
         stderr,
     })
@@ -1449,11 +1838,21 @@ async fn open_local_ai_download_page() -> Result<(), ScanFailure> {
 }
 
 #[tauri::command]
-async fn load_latest_session_json(app: tauri::AppHandle) -> Result<String, ScanFailure> {
+async fn load_latest_session_json(
+    app: tauri::AppHandle,
+    session_path: Option<String>,
+) -> Result<String, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
-        let runtime = resolve_backend_runtime(&app)?;
-        fs::read_to_string(&runtime.session_path)
-            .map_err(|error| ScanFailure::new(error.to_string()))
+        let path = session_path
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                resolve_backend_runtime(&app)
+                    .map(|runtime| runtime.session_path)
+                    .unwrap_or_else(|_| PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON))
+            });
+
+        fs::read_to_string(&path).map_err(|error| ScanFailure::new(error.to_string()))
     })
     .await
     .map_err(|error| ScanFailure::new(error.to_string()))?
