@@ -1,28 +1,45 @@
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
-$Python = Join-Path $Root ".venv\Scripts\python.exe"
-$Binaries = Join-Path $Root "src-tauri\binaries"
-$DistExe = Join-Path $Root "dist-backend\mimir-api.exe"
-$SidecarExe = Join-Path $Binaries "mimir-api-x86_64-pc-windows-msvc.exe"
+$BackendRoot = "C:\Mimir_Backend"
+$BackendPython = Join-Path $BackendRoot ".venv\Scripts\python.exe"
+$BackendBuildScript = Join-Path $BackendRoot "build_backend_exe.py"
+$BackendDist = Join-Path $BackendRoot "dist_backend"
+$ResourceBackend = Join-Path $Root "src-tauri\resources\mimir-backend"
 
-if (!(Test-Path $Python)) {
-  throw "Python environment not found. Run: python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirements.txt"
+if (!(Test-Path $BackendRoot)) {
+  throw "Backend workspace not found: $BackendRoot"
 }
 
-& $Python -m pip install pyinstaller==6.11.1
+if (!(Test-Path $BackendBuildScript)) {
+  throw "Backend build script not found: $BackendBuildScript"
+}
 
-New-Item -ItemType Directory -Force -Path $Binaries | Out-Null
+if (!(Test-Path $BackendPython)) {
+  $BackendPython = "python"
+}
 
-& $Python -m PyInstaller `
-  --noconfirm `
-  --clean `
-  --onefile `
-  --name mimir-api `
-  --distpath (Join-Path $Root "dist-backend") `
-  --workpath (Join-Path $Root "build-backend") `
-  --add-data "$Root\yolov8n.pt;." `
-  "$Root\backend_entry.py"
+& $BackendPython -m pip install --upgrade "pyinstaller>=6.21.0"
+& $BackendPython $BackendBuildScript
 
-Copy-Item -Force $DistExe $SidecarExe
-Write-Host "Built sidecar: $SidecarExe"
+New-Item -ItemType Directory -Force -Path $ResourceBackend | Out-Null
+
+$RequiredExecutables = @(
+  "mimir-core-v2-scan.exe",
+  "mimir-core-v2-actions.exe"
+)
+
+foreach ($ExecutableName in $RequiredExecutables) {
+  $Source = Join-Path $BackendDist $ExecutableName
+  if (!(Test-Path $Source)) {
+    throw "Expected backend executable was not built: $Source"
+  }
+  Copy-Item -Force $Source (Join-Path $ResourceBackend $ExecutableName)
+}
+
+$ReleaseCheck = Join-Path $BackendDist "mimir-core-v2-release-check.exe"
+if (Test-Path $ReleaseCheck) {
+  Copy-Item -Force $ReleaseCheck (Join-Path $ResourceBackend "mimir-core-v2-release-check.exe")
+}
+
+Write-Host "Built Core v2 backend resources: $ResourceBackend"

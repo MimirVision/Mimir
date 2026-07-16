@@ -6,7 +6,13 @@ import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
-import type { MimirCameraClip, MimirIncident, MimirSession, SessionLoadState } from '../types'
+import type {
+  FrontendScanDiagnostics,
+  MimirCameraClip,
+  MimirIncident,
+  MimirSession,
+  SessionLoadState,
+} from '../types'
 
 type LibraryFilter = 'IMPORTANT' | 'REVIEW' | 'IGNORE' | 'ALL' | 'TRASH'
 type SeverityGroup = 'IMPORTANT' | 'REVIEW' | 'IGNORE'
@@ -18,6 +24,7 @@ interface IncidentLibraryViewProps {
   onImportNew: () => void
   onLoadLatest: () => void
   onReloadSession: () => Promise<MimirSession | null>
+  scanDiagnostics?: FrontendScanDiagnostics | null
 }
 
 const severityRank: Record<SeverityGroup, number> = {
@@ -161,7 +168,7 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
 
 function scanResultCopy(session: MimirSession) {
   const incidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
-  const clipCount = session.clips_processed ?? 0
+  const clipCount = session.scan_summary?.clips_scanned ?? session.clips_scanned ?? session.clips_processed ?? 0
 
   if (incidentCount === 0) {
     return 'No reviewable incidents found.'
@@ -171,6 +178,10 @@ function scanResultCopy(session: MimirSession) {
     clipCount,
     'clip',
   )} scanned.`
+}
+
+function reviewModeCopy(session: MimirSession) {
+  return session.ai_enabled ? 'Experimental AI used' : 'Local review'
 }
 
 function scanAccountingCopy(session: MimirSession) {
@@ -187,6 +198,33 @@ function scanAccountingCopy(session: MimirSession) {
     ignoredCount,
     'clip',
   )} in this scan. Only Mimir-created incident cards are shown below.`
+}
+
+function sessionClipsScanned(session: MimirSession) {
+  return session.scan_summary?.clips_scanned ?? session.clips_scanned ?? session.clips_processed ?? null
+}
+
+function sessionMayBeStale(session: MimirSession) {
+  const incidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
+  const clipsScanned = sessionClipsScanned(session)
+
+  return incidentCount > 0 && (!session.scan_summary || clipsScanned === null || clipsScanned === 0)
+}
+
+function formatTechnicalValue(value?: string | number | null) {
+  if (value === undefined || value === null || value === '') {
+    return 'Not reported'
+  }
+
+  return String(value)
+}
+
+function technicalJson(value: unknown) {
+  try {
+    return JSON.stringify(value ?? null, null, 2)
+  } catch {
+    return String(value)
+  }
 }
 
 function sourceEventReason(incident: MimirIncident) {
@@ -221,7 +259,7 @@ function sessionCounts(session: MimirSession) {
   const scanMode = formatScanMode(session.scan_mode)
   const activeIncidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
   return [
-    { label: 'Clips scanned', value: session.clips_processed },
+    { label: 'Clips scanned', value: session.scan_summary?.clips_scanned ?? session.clips_scanned ?? session.clips_processed },
     { label: 'Incidents found', value: activeIncidentCount },
     { label: 'Important', value: session.important },
     { label: 'Review', value: session.review },
@@ -438,18 +476,18 @@ function cameraClips(incident: MimirIncident) {
   } else if (raw && typeof raw === 'object') {
     clips.push(
       ...Object.entries(raw)
-        .map(([camera, value]) => {
-        if (!value) {
-          return null
-        }
+        .map(([camera, value]): MimirCameraClip | null => {
+          if (!value) {
+            return null
+          }
 
-        if (typeof value === 'string') {
-          return { camera, path: value }
-        }
+          if (typeof value === 'string') {
+            return { camera, path: value }
+          }
 
-        return { camera: value.camera || camera, ...value }
-      })
-        .filter((value): value is MimirCameraClip => Boolean(value)),
+          return { ...value, camera: value.camera || camera }
+        })
+        .filter((value): value is MimirCameraClip => value !== null),
     )
   }
 
@@ -976,6 +1014,7 @@ export function IncidentLibraryView({
   onImportNew,
   onLoadLatest,
   onReloadSession,
+  scanDiagnostics,
 }: IncidentLibraryViewProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<LibraryFilter>('ALL')
@@ -986,6 +1025,7 @@ export function IncidentLibraryView({
   const [filesIncident, setFilesIncident] = useState<MimirIncident | null>(null)
   const [showFreeUpModal, setShowFreeUpModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState('')
@@ -1185,6 +1225,7 @@ export function IncidentLibraryView({
       >
         <IncidentViewerScreen
           incident={selectedIncident}
+          session={session}
           onBack={() => setSelectedIncident(null)}
           onReloadSession={onReloadSession}
           onIncidentUpdated={updatedIncident => {
@@ -1310,6 +1351,16 @@ export function IncidentLibraryView({
                   type="button"
                   onClick={() => {
                     setMoreOpen(false)
+                    setShowTechnicalDetails(true)
+                  }}
+                  className="block h-9 w-full rounded-lg px-3 text-left text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.055] hover:text-[var(--mimir-text)]"
+                >
+                  Technical details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false)
                     void onLoadLatest()
                   }}
                   disabled={isLoading}
@@ -1378,6 +1429,9 @@ export function IncidentLibraryView({
             <p className="mt-2 max-w-[780px] text-[14px] leading-6 text-[var(--mimir-text-muted)]">
               {scanResultCopy(session)}
             </p>
+            <div className="mt-3 inline-flex rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
+              {reviewModeCopy(session)}
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <SummaryMetric label="Important" value={counts.important} />
@@ -1544,7 +1598,110 @@ export function IncidentLibraryView({
           </section>
         </div>
       )}
+
+      {showTechnicalDetails && (
+        <TechnicalDetailsModal
+          session={session}
+          diagnostics={scanDiagnostics}
+          onClose={() => setShowTechnicalDetails(false)}
+        />
+      )}
     </main>
     </CrashSafeBoundary>
+  )
+}
+
+function TechnicalDetailsModal({
+  session,
+  diagnostics,
+  onClose,
+}: {
+  session: MimirSession
+  diagnostics?: FrontendScanDiagnostics | null
+  onClose: () => void
+}) {
+  const featureFlags = {
+    schema_version: session.schema_version,
+    scanner_version: session.scanner_version,
+    core_version: session.core_version,
+    evidence_version: session.evidence_version,
+    thumbnail_version: session.thumbnail_version,
+    key_moment_version: session.key_moment_version,
+    ai_enabled: session.ai_enabled,
+    ai_model: session.ai_model,
+  }
+  const staleWarning = sessionMayBeStale(session)
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+      <section className="max-h-[86vh] w-full max-w-[760px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
+        <div className="border-b border-white/[0.06] p-5">
+          <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
+            Diagnostics
+          </div>
+          <h2 className="mt-2 text-[24px] font-semibold text-[var(--mimir-text)]">Technical details</h2>
+          {staleWarning && (
+            <div className="mt-4 rounded-lg border border-amber-300/18 bg-amber-400/10 p-3 text-[12px] leading-5 text-amber-100/90">
+              Session may be stale or from an older backend.
+            </div>
+          )}
+        </div>
+
+        <div className="max-h-[calc(86vh-132px)] overflow-y-auto p-5">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <TechnicalDetailRow label="backend_runner" value={diagnostics?.backend_runner} />
+            <TechnicalDetailRow label="backend_mode" value={diagnostics?.backend_mode} />
+            <TechnicalDetailRow label="output argument used" value={diagnostics?.output_argument_used} />
+            <TechnicalDetailRow label="active_output_dir" value={diagnostics?.active_output_dir} />
+            <TechnicalDetailRow label="latest_session_path" value={diagnostics?.latest_session_path} />
+            <TechnicalDetailRow
+              label="latest_session modified time"
+              value={diagnostics?.latest_session_modified_time}
+            />
+            <TechnicalDetailRow label="core_version" value={session.core_version || session.scanner_version} />
+          </div>
+
+          <TechnicalBlock label="backend_command" value={diagnostics?.backend_command || 'Not reported'} />
+          <TechnicalBlock label="scan_summary" value={technicalJson(session.scan_summary ?? null)} />
+          <TechnicalBlock label="feature flags" value={technicalJson(featureFlags)} />
+        </div>
+
+        <div className="flex justify-end border-t border-white/[0.06] p-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 rounded-lg bg-[var(--mimir-text)] px-4 text-[13px] font-semibold text-black transition hover:bg-white"
+          >
+            Close
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function TechnicalDetailRow({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+      <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--mimir-text-subtle)]">
+        {label}
+      </div>
+      <div className="mt-1 break-words text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+        {formatTechnicalValue(value)}
+      </div>
+    </div>
+  )
+}
+
+function TechnicalBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/20 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--mimir-text-subtle)]">
+        {label}
+      </div>
+      <pre className="mt-2 max-h-[180px] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[var(--mimir-text-muted)]">
+        {value}
+      </pre>
+    </div>
   )
 }

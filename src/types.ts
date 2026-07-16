@@ -46,6 +46,10 @@ export interface MimirTimelineMarker {
   severity?: string
   label?: string
   description?: string
+  confidence?: number | null
+  source?: string | null
+  reason?: string | null
+  camera?: string | null
 }
 
 export interface MimirCameraClip {
@@ -99,6 +103,10 @@ export interface MimirIncident {
   user_note_updated_at?: string
   user_action_log?: Array<Record<string, unknown>>
   ai_confidence?: number
+  ai_scene_type?: string | null
+  ai_recommended_severity?: string | null
+  ai_concerns?: string[] | null
+  ai_quality_warning?: string | null
   event_type?: string
   summary?: string
   evidence?: string[]
@@ -141,6 +149,10 @@ export interface MimirIncident {
   tesla_event_reason?: string | null
   tesla_event_city?: string | null
   timeline_markers?: MimirTimelineMarker[] | null
+  key_moments?: MimirTimelineMarker[] | null
+  primary_key_moment_sec?: number | null
+  primary_key_moment_label?: string | null
+  key_moment_version?: string | null
   ai_reviewed?: boolean | null
   ai_evidence?: unknown
   ai_evidence_review?: unknown
@@ -158,6 +170,11 @@ export interface MimirIncident {
 export interface MimirSession {
   schema_version?: string
   scanner_version?: string
+  core_version?: string
+  evidence_version?: string
+  thumbnail_version?: string
+  key_moment_version?: string
+  ai_review_version?: string
   status: string
   started_at: string
   finished_at: string | null
@@ -196,6 +213,24 @@ export interface MimirSession {
   source_files_removed?: number
   storage_warnings?: string[]
   clips_processed: number
+  videos_found?: number | null
+  clips_scanned?: number | null
+  event_groups_count?: number | null
+  incidents_count?: number | null
+  scan_summary?: {
+    videos_found?: number | null
+    clips_scanned?: number | null
+    event_groups?: number | null
+    incidents?: number | null
+    important_count?: number | null
+    review_count?: number | null
+    ignore_count?: number | null
+    source_path?: string | null
+    source_name?: string | null
+    scan_started_at?: string | null
+    scan_completed_at?: string | null
+    scan_duration_sec?: number | null
+  }
   important: number
   review: number
   ignore: number
@@ -209,10 +244,25 @@ export interface MimirSession {
     ai_calls?: number
     incidents_created?: number
   }
+  ai_enabled?: boolean | null
+  ai_model?: string | null
+  ai_reviewed_groups?: number | null
+  ai_skipped_groups?: number | null
+  ai_failed_groups?: number | null
   event_json_files_found?: number
   source_events_found?: number
   tesla_events_found?: number
   incidents: MimirIncident[]
+}
+
+export interface FrontendScanDiagnostics {
+  backend_runner?: string
+  backend_mode?: string
+  backend_command?: string
+  output_argument_used?: string
+  active_output_dir?: string
+  latest_session_path?: string
+  latest_session_modified_time?: string
 }
 
 export type SessionLoadState = 'idle' | 'loading' | 'loaded' | 'missing' | 'error'

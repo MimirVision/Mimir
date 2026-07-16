@@ -11,6 +11,7 @@ import { OnboardingFlow } from './components/OnboardingFlow'
 import { FULL_AI_BETA, USE_MIMIR_CORE_V2 } from './config'
 import type {
   BackendProgress,
+  FrontendScanDiagnostics,
   LocalAiInstallResult,
   LocalAiStatus,
   MimirSession,
@@ -23,13 +24,25 @@ const onboardingCompletedKey = 'mimir_onboarding_completed'
 const defaultScanModeKey = 'mimir_default_scan_mode'
 const betaNoticeAcceptedKey = 'mimir_beta_privacy_notice_accepted'
 const selectedVisionModelKey = 'mimir_selected_vision_model'
+const experimentalAiEnabledKey = 'experimental_ai_enabled'
+const experimentalAiModelKey = 'experimental_ai_model'
+const experimentalAiBudgetKey = 'experimental_ai_budget'
+const experimentalAiTimeoutSecKey = 'experimental_ai_timeout_sec'
 const defaultVisionModel = 'qwen2.5vl:7b'
+const defaultAiReviewBudget = 5
+const defaultAiTimeoutSec = 60
 
 interface LocalScanResult {
   stdout: string
   stderr: string
   session_path?: string
+  latest_session_path?: string
+  latest_session_modified_time?: string
+  active_output_dir?: string
+  output_argument_used?: string
   backend_mode?: string
+  backend_runner?: 'sidecar' | 'dev_exe' | 'python_script' | string
+  backend_command?: string
 }
 
 interface LocalScanFailure {
@@ -43,6 +56,33 @@ interface ScanOutput {
   stderr: string
 }
 
+function appendBackendRunnerDetails(stderr: string, diagnostics?: FrontendScanDiagnostics | null) {
+  if (!diagnostics) {
+    return stderr
+  }
+
+  return [
+    stderr,
+    diagnostics.backend_runner ? `backend_runner: ${diagnostics.backend_runner}` : '',
+    diagnostics.backend_command ? `backend_command: ${diagnostics.backend_command}` : '',
+    diagnostics.output_argument_used ? `output_argument_used: ${diagnostics.output_argument_used}` : '',
+    diagnostics.active_output_dir ? `active_output_dir: ${diagnostics.active_output_dir}` : '',
+    diagnostics.latest_session_path ? `latest_session_path: ${diagnostics.latest_session_path}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+function diagnosticsFromScanResult(result: LocalScanResult): FrontendScanDiagnostics {
+  return {
+    backend_runner: result.backend_runner,
+    backend_mode: result.backend_mode,
+    backend_command: result.backend_command,
+    output_argument_used: result.output_argument_used,
+    active_output_dir: result.active_output_dir,
+    latest_session_path: result.latest_session_path || result.session_path,
+    latest_session_modified_time: result.latest_session_modified_time,
+  }
+}
+
 interface ProgressLineEvent {
   line: string
 }
@@ -53,6 +93,8 @@ interface LocalAiInstallLineEvent {
 
 type AppView = 'import' | 'library'
 type ScanMode = 'fast' | 'balanced' | 'quality'
+type AiReviewBudget = 3 | 5 | 10
+type AiTimeoutSec = 30 | 60 | 120
 
 const progressPrefix = 'MIMIR_PROGRESS'
 
@@ -93,6 +135,31 @@ function readSelectedVisionModel() {
   }
 }
 
+function readStoredExperimentalAiEnabled() {
+  try {
+    return window.localStorage.getItem(experimentalAiEnabledKey) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function readStoredExperimentalAiModel() {
+  try {
+    return window.localStorage.getItem(experimentalAiModelKey) || defaultVisionModel
+  } catch {
+    return defaultVisionModel
+  }
+}
+
+function readStoredNumberOption<T extends number>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const value = Number(window.localStorage.getItem(key))
+    return allowed.includes(value as T) ? value as T : fallback
+  } catch {
+    return fallback
+  }
+}
+
 function isLocalScanFailure(error: unknown): error is LocalScanFailure {
   return (
     typeof error === 'object' &&
@@ -124,11 +191,20 @@ export default function App() {
   const [localAiStatus, setLocalAiStatus] = useState<LocalAiStatus | null>(null)
   const [isCheckingLocalAi, setIsCheckingLocalAi] = useState(true)
   const [selectedVisionModel] = useState(() => readSelectedVisionModel())
+  const [experimentalAiEnabled, setExperimentalAiEnabled] = useState(() => readStoredExperimentalAiEnabled())
+  const [experimentalAiModel, setExperimentalAiModel] = useState(() => readStoredExperimentalAiModel())
+  const [experimentalAiBudget, setExperimentalAiBudget] = useState<AiReviewBudget>(() =>
+    readStoredNumberOption(experimentalAiBudgetKey, [3, 5, 10] as const, defaultAiReviewBudget),
+  )
+  const [experimentalAiTimeoutSec, setExperimentalAiTimeoutSec] = useState<AiTimeoutSec>(() =>
+    readStoredNumberOption(experimentalAiTimeoutSecKey, [30, 60, 120] as const, defaultAiTimeoutSec),
+  )
   const [isLocalAiSetupOpen, setIsLocalAiSetupOpen] = useState(false)
   const [isPullingLocalAiModel, setIsPullingLocalAiModel] = useState(false)
   const [localAiInstallLine, setLocalAiInstallLine] = useState('')
   const [localAiInstallResult, setLocalAiInstallResult] = useState<LocalAiInstallResult | null>(null)
   const [localAiSetupError, setLocalAiSetupError] = useState('')
+  const [scanDiagnostics, setScanDiagnostics] = useState<FrontendScanDiagnostics | null>(null)
 
   const selectFolder = async (folderPath: string) => {
     setSelectedFolder(folderPath)
@@ -180,49 +256,39 @@ export default function App() {
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
+  const runSystemCheck = useCallback(async () => {
+    setIsCheckingSystem(true)
 
-    async function runSystemCheck() {
-      setIsCheckingSystem(true)
-
-      try {
-        const result = await invoke<SystemCheckResult>('check_system_requirements')
-
-        if (!cancelled) {
-          setSystemCheck(result)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSystemCheck({
+    try {
+      const result = await invoke<SystemCheckResult>('check_system_requirements')
+      setSystemCheck(result)
+      return result
+    } catch (error) {
+      const fallbackCheck = {
+        ok: false,
+        checked_at: '',
+        items: [
+          {
+            id: 'system_check',
+            label: 'System check',
             ok: false,
-            checked_at: '',
-            items: [
-              {
-                id: 'system_check',
-                label: 'System check',
-                ok: false,
-                message: 'System check could not run.',
-                why_it_matters: 'Mimir checks local requirements before scanning so setup problems are easier to fix.',
-                suggested_fix: 'Restart Mimir. If this continues, reinstall the app or check the local scanner setup.',
-                technical_details: error instanceof Error ? error.message : String(error),
-              },
-            ],
-          })
-        }
-      } finally {
-        if (!cancelled) {
-          setIsCheckingSystem(false)
-        }
+            message: 'System check could not run.',
+            why_it_matters: 'Mimir checks local requirements before scanning so setup problems are easier to fix.',
+            suggested_fix: 'Restart Mimir. If this continues, reinstall the app or check the local scanner setup.',
+            technical_details: error instanceof Error ? error.message : String(error),
+          },
+        ],
       }
-    }
-
-    void runSystemCheck()
-
-    return () => {
-      cancelled = true
+      setSystemCheck(fallbackCheck)
+      return fallbackCheck
+    } finally {
+      setIsCheckingSystem(false)
     }
   }, [])
+
+  useEffect(() => {
+    void runSystemCheck()
+  }, [runSystemCheck])
 
   const recheckLocalAi = useCallback(async () => {
     setIsCheckingLocalAi(true)
@@ -357,7 +423,8 @@ export default function App() {
     }
   }
 
-  const loadLatestSession = useCallback(async (clearExisting = true): Promise<MimirSession | null> => {
+  const loadLatestSession = useCallback(
+    async (clearExisting = true, sessionPath?: string): Promise<MimirSession | null> => {
     setSessionLoadState('loading')
 
     if (clearExisting) {
@@ -365,7 +432,9 @@ export default function App() {
     }
 
     try {
-      const contents = await invoke<string>('load_latest_session_json')
+      const contents = await invoke<string>('load_latest_session_json', {
+        sessionPath: sessionPath || scanDiagnostics?.latest_session_path || null,
+      })
 
       try {
         const parsed = JSON.parse(contents) as MimirSession
@@ -386,10 +455,12 @@ export default function App() {
         return null
       }
     } catch {
-      setSessionLoadState('missing')
-      return null
-    }
-  }, [])
+        setSessionLoadState('missing')
+        return null
+      }
+    },
+    [scanDiagnostics?.latest_session_path],
+  )
 
   const runScan = async (useEnhancedAi: boolean) => {
     if (!selectedFolder || scanState === 'running') {
@@ -401,23 +472,30 @@ export default function App() {
     setScanOutput(null)
     setScanProgress(null)
     setLastProgressMessage('')
+    setScanDiagnostics(null)
     setLatestSession(null)
     setSessionLoadState('loading')
+
+    const effectiveVisionModel = experimentalAiModel.trim() || defaultVisionModel
 
     try {
       const result = await invoke<LocalScanResult>('run_local_scan', {
         selectedFolder,
         scanMode,
         useEnhancedAi,
-        visionModel: selectedVisionModel,
+        visionModel: useEnhancedAi ? effectiveVisionModel : selectedVisionModel,
+        aiReviewBudget: experimentalAiBudget,
+        aiTimeoutSec: experimentalAiTimeoutSec,
       })
+      const diagnostics = diagnosticsFromScanResult(result)
+      setScanDiagnostics(diagnostics)
 
       setScanOutput({
         stdout: result.stdout,
-        stderr: result.stderr,
+        stderr: appendBackendRunnerDetails(result.stderr, diagnostics),
       })
 
-      const loadedSession = await loadLatestSession()
+      const loadedSession = await loadLatestSession(true, diagnostics.latest_session_path)
       const unsupportedSource = loadedSession?.source_report?.is_supported === false
 
       setScanState(loadedSession && !unsupportedSource ? 'complete' : 'error')
@@ -427,8 +505,8 @@ export default function App() {
         setScanOutput({
           stdout: result.stdout,
           stderr: [
-            result.stderr,
-            result.session_path ? `Expected result path: ${result.session_path}` : '',
+            appendBackendRunnerDetails(result.stderr, diagnostics),
+            diagnostics.latest_session_path ? `Expected result path: ${diagnostics.latest_session_path}` : '',
           ].filter(Boolean).join('\n'),
         })
       } else if (unsupportedSource) {
@@ -437,7 +515,7 @@ export default function App() {
         )
         setScanOutput({
           stdout: result.stdout,
-          stderr: result.stderr,
+          stderr: appendBackendRunnerDetails(result.stderr, diagnostics),
         })
       } else {
         setScanProgress(null)
@@ -472,7 +550,7 @@ export default function App() {
       return
     }
 
-    await runScan(USE_MIMIR_CORE_V2 ? false : FULL_AI_BETA ? true : localAiStatus?.ok === true)
+    await runScan(USE_MIMIR_CORE_V2 ? experimentalAiEnabled : FULL_AI_BETA ? true : localAiStatus?.ok === true)
   }
 
   const pullLocalAiModel = async () => {
@@ -524,6 +602,7 @@ export default function App() {
     setScanOutput(null)
     setScanProgress(null)
     setLastProgressMessage('')
+    setScanDiagnostics(null)
   }
 
   const updateScanMode = (mode: ScanMode) => {
@@ -533,6 +612,46 @@ export default function App() {
       window.localStorage.setItem(defaultScanModeKey, mode)
     } catch {
       // Persisting the default is optional; scanning still works without local storage.
+    }
+  }
+
+  const updateExperimentalAiEnabled = (enabled: boolean) => {
+    setExperimentalAiEnabled(enabled)
+
+    try {
+      window.localStorage.setItem(experimentalAiEnabledKey, enabled ? 'true' : 'false')
+    } catch {
+      // Local AI settings are optional; scans still default to local-only if persistence is unavailable.
+    }
+  }
+
+  const updateExperimentalAiModel = (model: string) => {
+    setExperimentalAiModel(model)
+
+    try {
+      window.localStorage.setItem(experimentalAiModelKey, model)
+    } catch {
+      // Optional preference.
+    }
+  }
+
+  const updateExperimentalAiBudget = (budget: AiReviewBudget) => {
+    setExperimentalAiBudget(budget)
+
+    try {
+      window.localStorage.setItem(experimentalAiBudgetKey, String(budget))
+    } catch {
+      // Optional preference.
+    }
+  }
+
+  const updateExperimentalAiTimeoutSec = (timeoutSec: AiTimeoutSec) => {
+    setExperimentalAiTimeoutSec(timeoutSec)
+
+    try {
+      window.localStorage.setItem(experimentalAiTimeoutSecKey, String(timeoutSec))
+    } catch {
+      // Optional preference.
     }
   }
 
@@ -579,6 +698,7 @@ export default function App() {
                 void loadLatestSession(false)
               }}
               onReloadSession={() => loadLatestSession(false)}
+              scanDiagnostics={scanDiagnostics}
             />
           </CrashSafeBoundary>
         </div>
@@ -611,9 +731,20 @@ export default function App() {
           localAiStatus={localAiStatus}
           isCheckingLocalAi={isCheckingLocalAi}
           selectedVisionModel={selectedVisionModel}
+          experimentalAiEnabled={experimentalAiEnabled}
+          experimentalAiModel={experimentalAiModel}
+          experimentalAiBudget={experimentalAiBudget}
+          experimentalAiTimeoutSec={experimentalAiTimeoutSec}
+          onExperimentalAiEnabledChange={updateExperimentalAiEnabled}
+          onExperimentalAiModelChange={updateExperimentalAiModel}
+          onExperimentalAiBudgetChange={updateExperimentalAiBudget}
+          onExperimentalAiTimeoutSecChange={updateExperimentalAiTimeoutSec}
           isLocalAiSetupOpen={isLocalAiSetupOpen}
           onOpenLocalAiSetup={() => setIsLocalAiSetupOpen(true)}
           onCloseLocalAiSetup={() => setIsLocalAiSetupOpen(false)}
+          onRecheckSystem={() => {
+            void runSystemCheck()
+          }}
           onRecheckLocalAi={() => {
             void recheckLocalAi()
           }}

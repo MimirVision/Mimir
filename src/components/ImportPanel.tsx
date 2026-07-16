@@ -36,9 +36,18 @@ interface ImportPanelProps {
   localAiStatus: LocalAiStatus | null
   isCheckingLocalAi: boolean
   selectedVisionModel: string
+  experimentalAiEnabled: boolean
+  experimentalAiModel: string
+  experimentalAiBudget: AiReviewBudget
+  experimentalAiTimeoutSec: AiTimeoutSec
+  onExperimentalAiEnabledChange: (enabled: boolean) => void
+  onExperimentalAiModelChange: (model: string) => void
+  onExperimentalAiBudgetChange: (budget: AiReviewBudget) => void
+  onExperimentalAiTimeoutSecChange: (timeoutSec: AiTimeoutSec) => void
   isLocalAiSetupOpen: boolean
   onOpenLocalAiSetup: () => void
   onCloseLocalAiSetup: () => void
+  onRecheckSystem: () => void | Promise<void>
   onRecheckLocalAi: () => void | Promise<void>
   onOpenLocalAiDownloadPage: () => void | Promise<void>
   onPullLocalAiModel: () => void | Promise<void>
@@ -49,6 +58,12 @@ interface ImportPanelProps {
 }
 
 type ScanMode = 'fast' | 'balanced' | 'quality'
+type AiReviewBudget = 3 | 5 | 10
+type AiTimeoutSec = 30 | 60 | 120
+
+const aiModelOptions = ['qwen2.5vl:7b', 'llava:7b'] as const
+const aiReviewBudgetOptions: AiReviewBudget[] = [3, 5, 10]
+const aiTimeoutOptions: AiTimeoutSec[] = [30, 60, 120]
 
 const scanStages = [
   { label: 'Reading clips', keys: ['initializing', 'reading_clips', 'preparing_clips', 'discovering_clips'] },
@@ -297,6 +312,138 @@ function SystemStatusPill({
       <span className="h-2 w-2 rounded-full bg-amber-200/80" />
       Setup needed
     </div>
+  )
+}
+
+function ExperimentalAiSettings({
+  enabled,
+  model,
+  budget,
+  timeoutSec,
+  onEnabledChange,
+  onModelChange,
+  onBudgetChange,
+  onTimeoutSecChange,
+}: {
+  enabled: boolean
+  model: string
+  budget: AiReviewBudget
+  timeoutSec: AiTimeoutSec
+  onEnabledChange: (enabled: boolean) => void
+  onModelChange: (model: string) => void
+  onBudgetChange: (budget: AiReviewBudget) => void
+  onTimeoutSecChange: (timeoutSec: AiTimeoutSec) => void
+}) {
+  const modelPreset = aiModelOptions.includes(model as typeof aiModelOptions[number]) ? model : 'custom'
+
+  return (
+    <details className="mt-4 rounded-lg border border-white/[0.055] bg-black/16 p-4">
+      <summary className="cursor-pointer text-[13px] font-semibold text-[var(--mimir-text-muted)]">
+        Settings / More / Advanced
+      </summary>
+
+      <div className="mt-4 rounded-lg border border-white/[0.055] bg-white/[0.014] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[14px] font-semibold text-[var(--mimir-text)]">
+              Experimental AI
+            </div>
+            <p className="mt-1 max-w-[520px] text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
+              Uses a local vision model as a second opinion. Mimir's local evidence still controls the final result.
+            </p>
+          </div>
+
+          <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-white/[0.08] bg-black/20 px-3 py-2 text-[12px] font-medium text-[var(--mimir-text-muted)]">
+            <span>{enabled ? 'On' : 'Off'}</span>
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={enabled}
+              onChange={event => onEnabledChange(event.currentTarget.checked)}
+            />
+            <span
+              className={`relative h-5 w-9 rounded-full transition ${
+                enabled ? 'bg-sky-300/45' : 'bg-white/[0.14]'
+              }`}
+            >
+              <span
+                className={`absolute top-1 h-3 w-3 rounded-full bg-white transition ${
+                  enabled ? 'left-5' : 'left-1'
+                }`}
+              />
+            </span>
+          </label>
+        </div>
+
+        {enabled && (
+          <div className="mt-4 grid gap-4">
+            <div className="rounded-lg border border-amber-200/14 bg-amber-300/8 p-3 text-[12px] leading-5 text-amber-50/78">
+              Experimental: current local AI models may misread impact/contact clips. AI does not override Mimir's safety rules.
+            </div>
+
+            <label className="grid gap-2">
+              <span className="text-[12px] font-medium text-[var(--mimir-text)]">AI model</span>
+              <select
+                value={modelPreset}
+                onChange={event => {
+                  const value = event.currentTarget.value
+                  onModelChange(value === 'custom' ? '' : value)
+                }}
+                className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
+              >
+                {aiModelOptions.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+                <option value="custom">Custom...</option>
+              </select>
+            </label>
+
+            {modelPreset === 'custom' && (
+              <label className="grid gap-2">
+                <span className="text-[12px] font-medium text-[var(--mimir-text)]">Custom model name</span>
+                <input
+                  value={model}
+                  onChange={event => onModelChange(event.currentTarget.value)}
+                  placeholder="example: qwen2.5vl:7b"
+                  className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/24"
+                />
+              </label>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-2">
+                <span className="text-[12px] font-medium text-[var(--mimir-text)]">AI review budget</span>
+                <select
+                  value={budget}
+                  onChange={event => onBudgetChange(Number(event.currentTarget.value) as AiReviewBudget)}
+                  className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
+                >
+                  {aiReviewBudgetOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <span className="text-[11px] leading-4 text-[var(--mimir-text-subtle)]">
+                  Maximum number of incidents AI may review per scan.
+                </span>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-[12px] font-medium text-[var(--mimir-text)]">AI timeout</span>
+                <select
+                  value={timeoutSec}
+                  onChange={event => onTimeoutSecChange(Number(event.currentTarget.value) as AiTimeoutSec)}
+                  className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
+                >
+                  {aiTimeoutOptions.map(option => (
+                    <option key={option} value={option}>{option} seconds</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+    </details>
   )
 }
 
@@ -559,6 +706,7 @@ function ReadinessPanel({
   localAiStatus,
   isCheckingLocalAi,
   onOpenLocalAiSetup,
+  onRecheckSystem,
   onRecheckLocalAi,
   selectedVisionModel,
   localAiSetupError,
@@ -568,6 +716,7 @@ function ReadinessPanel({
   localAiStatus: LocalAiStatus | null
   isCheckingLocalAi: boolean
   onOpenLocalAiSetup: () => void
+  onRecheckSystem: () => void | Promise<void>
   onRecheckLocalAi: () => void | Promise<void>
   selectedVisionModel: string
   localAiSetupError: string
@@ -591,26 +740,59 @@ function ReadinessPanel({
   }
 
   if (systemCheck && !systemCheck.ok) {
-    const details = systemCheck.items
+    const failedItems = systemCheck.items.filter(item => !item.ok && item.id !== 'enhanced_ai_review')
+    const backendMissing = failedItems.some(item => item.id === 'local_scanner' || item.id === 'local_actions')
+    const libraryIssue = failedItems.some(item => item.id === 'mimir_library_folder')
+    const outputIssue = failedItems.some(item => item.id === 'core_v2_output_folder')
+    const title = libraryIssue && !backendMissing && !outputIssue
+      ? 'Mimir Library is not ready.'
+      : 'Mimir setup is incomplete.'
+    const description = backendMissing
+      ? 'Mimir cannot find the local scanner.'
+      : libraryIssue
+        ? 'Mimir cannot access the local library folder.'
+        : outputIssue
+          ? 'Mimir cannot prepare the scan output folder.'
+          : 'Mimir needs setup attention before scanning.'
+    const details = failedItems
       .filter(item => !item.ok && item.id !== 'enhanced_ai_review')
       .map(item => `${item.label}: ${item.technical_details || item.message}`)
       .join('\n\n')
 
     return (
       <div className="mb-4 rounded-lg border border-red-300/20 bg-red-500/10 p-4">
-        <div className="text-[15px] font-semibold text-red-50">Mimir could not start the local scanner.</div>
-        <p className="mt-2 text-[13px] leading-6 text-red-100/78">
-          Try reinstalling Mimir. Technical details are available below.
-        </p>
-        {details && (
-          <details className="mt-3 rounded-md border border-red-200/14 bg-black/22 p-3">
-            <summary className="cursor-pointer text-[12px] font-medium text-red-100/85">
-              Technical details
-            </summary>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-[15px] font-semibold text-red-50">{title}</div>
+            <p className="mt-2 text-[13px] leading-6 text-red-100/78">
+              {description}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onRecheckSystem}
+              className="rounded-lg border border-red-100/16 bg-black/18 px-4 py-2.5 text-[13px] font-semibold text-red-50 transition hover:bg-white/[0.045]"
+            >
+              Recheck
+            </button>
+            {details && (
+              <button
+                type="button"
+                onClick={() => setShowDetails(value => !value)}
+                className="rounded-lg border border-red-100/16 bg-black/18 px-4 py-2.5 text-[13px] font-semibold text-red-100/80 transition hover:bg-white/[0.045]"
+              >
+                Show details
+              </button>
+            )}
+          </div>
+        </div>
+        {details && showDetails && (
+          <div className="mt-3 rounded-md border border-red-200/14 bg-black/22 p-3">
             <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-red-50/70">
               {details}
             </pre>
-          </details>
+          </div>
         )}
       </div>
     )
@@ -713,9 +895,18 @@ export function ImportPanel({
   localAiStatus,
   isCheckingLocalAi,
   selectedVisionModel,
+  experimentalAiEnabled,
+  experimentalAiModel,
+  experimentalAiBudget,
+  experimentalAiTimeoutSec,
+  onExperimentalAiEnabledChange,
+  onExperimentalAiModelChange,
+  onExperimentalAiBudgetChange,
+  onExperimentalAiTimeoutSecChange,
   isLocalAiSetupOpen,
   onOpenLocalAiSetup,
   onCloseLocalAiSetup,
+  onRecheckSystem,
   onRecheckLocalAi,
   onOpenLocalAiDownloadPage,
   onPullLocalAiModel,
@@ -800,6 +991,7 @@ export function ImportPanel({
                 localAiStatus={localAiStatus}
                 isCheckingLocalAi={isCheckingLocalAi}
                 onOpenLocalAiSetup={onOpenLocalAiSetup}
+                onRecheckSystem={onRecheckSystem}
                 onRecheckLocalAi={onRecheckLocalAi}
                 selectedVisionModel={selectedVisionModel}
                 localAiSetupError={localAiSetupError}
@@ -942,6 +1134,17 @@ export function ImportPanel({
                   </div>
                 </div>
               )}
+
+              <ExperimentalAiSettings
+                enabled={experimentalAiEnabled}
+                model={experimentalAiModel}
+                budget={experimentalAiBudget}
+                timeoutSec={experimentalAiTimeoutSec}
+                onEnabledChange={onExperimentalAiEnabledChange}
+                onModelChange={onExperimentalAiModelChange}
+                onBudgetChange={onExperimentalAiBudgetChange}
+                onTimeoutSecChange={onExperimentalAiTimeoutSecChange}
+              />
             </>
           )}
 
