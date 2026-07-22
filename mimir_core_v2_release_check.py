@@ -30,6 +30,9 @@ COMPILE_TARGETS = [
     "mimir_core_v2_actions.py",
     "mimir_core_v2_dataset.py",
     "mimir_core_v2_training.py",
+    "mimir_core_v2_cvat.py",
+    "mimir_core_v2_evaluate.py",
+    "mimir_core_v2_reliability.py",
     "export_rfdetr_model.py",
     "mimir_core_v2/cli.py",
     "mimir_core_v2/progress.py",
@@ -43,6 +46,11 @@ COMPILE_TARGETS = [
     "mimir_core_v2/thumbnailer.py",
     "mimir_core_v2/severity_resolver.py",
     "mimir_core_v2/output_writer.py",
+    "mimir_core_v2/cvat_client.py",
+    "mimir_core_v2/dataset_package.py",
+    "mimir_core_v2/temporal_training.py",
+    "mimir_core_v2/candidate_perception.py",
+    "mimir_core_v2/test_data_pipeline.py",
     "mimir_core_v2/test_grouping.py",
     "mimir_core_v2/test_evidence.py",
     "mimir_core_v2/test_thumbnails.py",
@@ -216,10 +224,14 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
         str(license_path),
     )
 
-    inventory = benchmark_inventory(ROOT / "mimir_core_v2" / "benchmark_labels.csv")
-    add_check(checks, "locked_evaluation_size", inventory["total"] >= MIN_LOCKED_LABELS, f"{inventory['total']} / {MIN_LOCKED_LABELS} labels")
-    add_check(checks, "locked_positive_coverage", inventory["positive"] >= MIN_POSITIVE_LABELS, f"{inventory['positive']} / {MIN_POSITIVE_LABELS} positives")
-    add_check(checks, "locked_hard_negative_coverage", inventory["hard_negative"] >= MIN_HARD_NEGATIVES, f"{inventory['hard_negative']} / {MIN_HARD_NEGATIVES} hard negatives")
+    evaluation = read_json(frontend_root / "release_assets" / "evaluation_report.json")
+    locked_counts = evaluation.get("locked_test_counts") if isinstance(evaluation.get("locked_test_counts"), dict) else {}
+    locked_groups = int(locked_counts.get("groups") or 0)
+    locked_positives = int(locked_counts.get("positives") or 0)
+    locked_negatives = int(locked_counts.get("hard_negatives") or 0)
+    add_check(checks, "locked_evaluation_size", locked_groups >= MIN_LOCKED_LABELS, f"{locked_groups} / {MIN_LOCKED_LABELS} groups")
+    add_check(checks, "locked_positive_coverage", locked_positives >= MIN_POSITIVE_LABELS, f"{locked_positives} / {MIN_POSITIVE_LABELS} positives")
+    add_check(checks, "locked_hard_negative_coverage", locked_negatives >= MIN_HARD_NEGATIVES, f"{locked_negatives} / {MIN_HARD_NEGATIVES} hard negatives")
 
     backend_findings = forbidden_tracked(git_tracked_files(ROOT))
     frontend_findings = forbidden_tracked(git_tracked_files(frontend_root))
@@ -246,6 +258,9 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
     executables = [
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-scan.exe",
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-actions.exe",
+        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-dataset.exe",
+        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-release-check.exe",
+        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "age.exe",
     ]
     installer_path = locate_installer(frontend_root, installer)
     if installer_path is not None:
@@ -255,7 +270,18 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
     add_check(checks, "signed_release_artifacts", signed, json.dumps(signature_results, sort_keys=True))
 
     clean_vm_report = read_json(frontend_root / "release_assets" / "clean_vm_report.json")
+    clean_vm_checks = clean_vm_report.get("checks") if isinstance(clean_vm_report.get("checks"), dict) else {}
+    required_vm_stages = {"install", "scan", "upgrade", "rollback", "uninstall"}
     clean_vm_ok = bool(clean_vm_report.get("windows_10_passed")) and bool(clean_vm_report.get("windows_11_passed"))
+    for platform in ("windows_10", "windows_11"):
+        platform_checks = clean_vm_checks.get(platform) if isinstance(clean_vm_checks.get(platform), dict) else {}
+        for stage in required_vm_stages:
+            stage_record = platform_checks.get(stage) if isinstance(platform_checks.get(stage), dict) else {}
+            clean_vm_ok = clean_vm_ok and bool(stage_record.get("passed"))
+            clean_vm_ok = clean_vm_ok and stage_record.get("python_on_path") is False
+            clean_vm_ok = clean_vm_ok and bool(stage_record.get("os_matches_requested"))
+            clean_vm_ok = clean_vm_ok and str(stage_record.get("authenticode_status") or "") == "Valid"
+            clean_vm_ok = clean_vm_ok and len(str(stage_record.get("artifact_sha256") or "")) == 64
     add_check(checks, "clean_vm_installation", clean_vm_ok, "Windows 10 and Windows 11 required")
 
     security_report = read_json(frontend_root / "release_assets" / "security_scan_report.json")
@@ -264,23 +290,30 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
     add_check(checks, "accessibility", bool(accessibility_report.get("passed")), str(accessibility_report.get("summary") or "report missing"))
 
     update_report = read_json(frontend_root / "release_assets" / "update_rollback_report.json")
-    update_ok = bool(update_report.get("signed_update_passed")) and bool(update_report.get("rollback_passed")) and bool(update_report.get("sessions_preserved"))
+    update_ok = (
+        bool(update_report.get("signed_update_passed"))
+        and bool(update_report.get("rollback_passed"))
+        and bool(update_report.get("corrupt_update_rejected"))
+        and bool(update_report.get("failed_update_recovery_passed"))
+        and bool(update_report.get("sessions_preserved"))
+    )
     add_check(checks, "signed_update_and_rollback", update_ok, str(update_report.get("summary") or "report missing"))
 
-    evaluation = read_json(frontend_root / "release_assets" / "evaluation_report.json")
-    metrics = evaluation.get("metrics") if isinstance(evaluation.get("metrics"), dict) else {}
+    candidate_metrics = evaluation.get("candidate") if isinstance(evaluation.get("candidate"), dict) else {}
+    timing_metrics = candidate_metrics.get("timing_error_distribution_sec") if isinstance(candidate_metrics.get("timing_error_distribution_sec"), dict) else {}
+    reliability = read_json(frontend_root / "release_assets" / "reliability_report.json")
     evaluation_requirements = {
-        "critical_impact_recall": float(metrics.get("critical_impact_recall") or 0) >= 0.99,
-        "critical_false_ignores": int(metrics.get("critical_false_ignores") or 0) == 0,
-        "door_contact_recall": float(metrics.get("door_contact_recall") or 0) >= 0.97,
-        "false_important_rate": float(metrics.get("false_important_rate") or 1) <= 0.005,
-        "key_moment_median_error_sec": float(metrics.get("key_moment_median_error_sec") or 999) <= 0.5,
-        "key_moment_p95_error_sec": float(metrics.get("key_moment_p95_error_sec") or 999) <= 1.0,
-        "automated_e2e_scans": int(metrics.get("automated_e2e_scans") or 0) >= 500,
-        "media_availability": float(metrics.get("media_availability") or 0) >= 0.995,
-        "hour_scan_runtime_sec": float(metrics.get("hour_scan_runtime_sec") or 99999) <= 900,
-        "source_byte_identical": bool(metrics.get("source_byte_identical")),
-        "interrupted_action_data_loss": int(metrics.get("interrupted_action_data_loss") or 1) == 0,
+        "candidate_promotion_allowed": bool(evaluation.get("promotion_allowed")),
+        "critical_impact_recall": float(candidate_metrics.get("critical_recall") or 0) >= 0.99,
+        "critical_false_ignores": int(candidate_metrics.get("false_ignores") or 0) == 0,
+        "door_contact_recall": float(candidate_metrics.get("door_contact_recall") or 0) >= 0.97,
+        "false_important_rate": float(candidate_metrics.get("false_important_rate") if candidate_metrics.get("false_important_rate") is not None else 1) <= 0.005,
+        "key_moment_median_error_sec": float(timing_metrics.get("median") if timing_metrics.get("median") is not None else 999) <= 0.5,
+        "key_moment_p95_error_sec": float(timing_metrics.get("p95") if timing_metrics.get("p95") is not None else 999) <= 1.0,
+        "automated_e2e_scans": int(reliability.get("completed_runs") or 0) >= 500,
+        "media_availability": float(reliability.get("thumbnail_video_availability") or 0) >= 0.995,
+        "source_byte_identical": bool(reliability.get("source_byte_identical")),
+        "reliability_gate": bool(reliability.get("release_gate_passed")),
     }
     failed_metrics = [name for name, passed in evaluation_requirements.items() if not passed]
     add_check(checks, "release_metrics", not failed_metrics, "complete" if not failed_metrics else f"missing/failing: {', '.join(failed_metrics)}")
@@ -298,6 +331,7 @@ def run_operational_checks(args: argparse.Namespace, output_dir: Path) -> dict[s
         "mimir_core_v2.test_storage_actions",
         "mimir_core_v2.test_resolver",
         "mimir_core_v2.test_ai_guardrails",
+        "mimir_core_v2.test_data_pipeline",
     ):
         run_required([sys.executable, "-m", module], module)
 

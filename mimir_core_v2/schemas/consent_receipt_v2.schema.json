@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/consent_receipt_v2.schema.json",
+  "title": "Mimir clip-by-clip consent receipt",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "recorded_at",
+    "recorded_by",
+    "rights_confirmed",
+    "rights_basis",
+    "permission_reference",
+    "incident_ids",
+    "clips",
+    "automatic_upload"
+  ],
+  "properties": {
+    "schema_version": {"const": "mimir_dataset_consent_v2"},
+    "receipt_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "recorded_by": {"type": "string", "minLength": 1},
+    "rights_confirmed": {"const": true},
+    "rights_basis": {"enum": ["owned", "explicit_permission", "public_license"]},
+    "permission_reference": {"type": "string", "minLength": 1},
+    "license_id": {"type": "string"},
+    "incident_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "clips": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["incident_id", "source_filename", "sha256", "size_bytes", "rights_confirmed"],
+        "properties": {
+          "incident_id": {"type": "string"},
+          "source_filename": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "size_bytes": {"type": "integer", "minimum": 1},
+          "rights_confirmed": {"const": true}
+        }
+      }
+    },
+    "automatic_upload": {"const": false}
+  }
+}

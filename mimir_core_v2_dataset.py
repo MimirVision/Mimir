@@ -7,9 +7,18 @@ import hashlib
 import json
 import shutil
 import sys
+import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from mimir_core_v2.dataset_package import (
+    DatasetPackageError,
+    encrypt_collection,
+    exclusion_hashes,
+    intake_package,
+)
 
 
 DATASET_SCHEMA = "mimir_contact_dataset_v1"
@@ -119,6 +128,9 @@ def export_dataset(args: argparse.Namespace) -> int:
         raise ValueError("At least one --consent-incident is required. Consent is never inferred.")
 
     output = Path(args.output)
+    package_id = str(getattr(args, "package_id", "") or uuid.uuid4().hex)
+    if len(package_id) != 32 or any(char not in "0123456789abcdef" for char in package_id.lower()):
+        raise ValueError("package_id must be a 32-character hexadecimal identifier")
     annotations_dir = output / "annotations"
     media_dir = output / "media"
     selected = [
@@ -132,14 +144,42 @@ def export_dataset(args: argparse.Namespace) -> int:
         raise ValueError(f"Consented incident ids were not found: {', '.join(missing)}")
 
     manifest_items: list[dict[str, Any]] = []
+    consent_clips: list[dict[str, Any]] = []
+    excluded = exclusion_hashes()
+    permission_record_value = str(getattr(args, "independent_permission_record", "") or "").strip()
+    permission_record = Path(permission_record_value).resolve() if permission_record_value else None
+    if permission_record is not None and not permission_record.is_file():
+        raise ValueError(f"Independent permission record does not exist: {permission_record}")
     for incident in selected:
-        incident_id = str(incident.get("id") or incident.get("event_group_id"))
+        source_incident_id = str(incident.get("id") or incident.get("event_group_id"))
+        incident_id = f"{package_id}_{clean_name(source_incident_id)}"
         source_hash = hash_text(source_group_key(incident, session, args.source_group))
         media_records: list[dict[str, Any]] = []
+        sources = incident_media_sources(incident)
+        for media_source in sources:
+            source = Path(media_source["path"])
+            if not source.exists() or not source.is_file():
+                continue
+            digest = sha256_file(source)
+            if digest in excluded and permission_record is None:
+                raise ValueError(
+                    "Excluded regression footage cannot enter training without an independently "
+                    f"verified permission record: {source.name} ({excluded[digest]})"
+                )
+            consent_clips.append(
+                {
+                    "incident_id": incident_id,
+                    "source_incident_id": source_incident_id,
+                    "source_filename": source.name,
+                    "sha256": digest,
+                    "size_bytes": source.stat().st_size,
+                    "rights_confirmed": True,
+                }
+            )
         if args.include_video:
             incident_media = media_dir / clean_name(incident_id)
             incident_media.mkdir(parents=True, exist_ok=True)
-            for index, media_source in enumerate(incident_media_sources(incident), start=1):
+            for index, media_source in enumerate(sources, start=1):
                 source = Path(media_source["path"])
                 if not source.exists() or not source.is_file():
                     continue
@@ -159,6 +199,7 @@ def export_dataset(args: argparse.Namespace) -> int:
         annotation = {
             "schema_version": DATASET_SCHEMA,
             "incident_id": incident_id,
+            "source_incident_id": source_incident_id,
             "source_group_hash": source_hash,
             "split": assigned_split(source_hash),
             "source_filename": Path(str(incident.get("source_filename") or incident.get("video_path") or "")).name,
@@ -175,6 +216,7 @@ def export_dataset(args: argparse.Namespace) -> int:
         manifest_items.append(
             {
                 "incident_id": incident_id,
+                "source_incident_id": source_incident_id,
                 "source_group_hash": source_hash,
                 "split": annotation["split"],
                 "annotation": str(annotation_path.relative_to(output)),
@@ -182,22 +224,37 @@ def export_dataset(args: argparse.Namespace) -> int:
             }
         )
 
+    permission_reference = str(getattr(args, "permission_reference", "") or "").strip()
+    if not permission_reference:
+        permission_reference = str(args.license_id or f"{args.rights_basis}:{args.source_group or session.get('session_id') or 'session'}")
     consent = {
-        "schema_version": "mimir_dataset_consent_v1",
+        "schema_version": "mimir_dataset_consent_v2",
+        "receipt_id": uuid.uuid4().hex,
         "recorded_at": now_iso(),
         "recorded_by": args.recorded_by,
         "session_id": session.get("session_id"),
-        "incident_ids": sorted(consented_ids),
+        "incident_ids": sorted(str(item["incident_id"]) for item in manifest_items),
+        "source_incident_ids": sorted(consented_ids),
         "video_copy_authorized": bool(args.include_video),
         "rights_confirmed": True,
         "rights_basis": args.rights_basis,
+        "permission_reference": permission_reference,
         "license_id": args.license_id,
+        "clips": consent_clips,
         "automatic_upload": False,
         "source_group": args.source_group or str(session.get("selected_input") or session.get("source_path") or "session"),
         "statement": "The recorder confirmed rights to use the listed incidents for local model development.",
     }
+    if permission_record is not None:
+        provenance_dir = output / "provenance"
+        provenance_dir.mkdir(parents=True, exist_ok=True)
+        copied_record = provenance_dir / clean_name(permission_record.name)
+        shutil.copy2(permission_record, copied_record)
+        consent["independent_permission_record"] = copied_record.relative_to(output).as_posix()
+        consent["independent_permission_record_sha256"] = sha256_file(copied_record)
     manifest = {
         "schema_version": DATASET_SCHEMA,
+        "package_id": package_id,
         "created_at": now_iso(),
         "source_session_id": session.get("session_id"),
         "source_session_basename": session_path.name,
@@ -208,6 +265,43 @@ def export_dataset(args: argparse.Namespace) -> int:
     write_json(output / "manifest.json", manifest)
     print(f"Exported {len(manifest_items)} consented incidents to {output}")
     print("No data was uploaded.")
+    return 0
+
+
+def export_encrypted_dataset(args: argparse.Namespace) -> int:
+    recipient = str(args.recipient or "").strip()
+    if args.recipient_file:
+        recipient = Path(args.recipient_file).read_text(encoding="utf-8").strip()
+    if not recipient:
+        raise ValueError("An age recipient or --recipient-file is required.")
+    output = Path(args.output)
+    with tempfile.TemporaryDirectory(prefix="mimir-contribution-") as temporary:
+        collection = Path(temporary) / "collection"
+        export_args = argparse.Namespace(**vars(args))
+        export_args.output = str(collection)
+        export_args.include_video = True
+        export_args.package_id = uuid.uuid4().hex
+        result = export_dataset(export_args)
+        if result != 0:
+            return result
+        package = encrypt_collection(collection, output, recipient, Path(args.session))
+    print(f"Encrypted contribution package: {package['output']}")
+    print(f"package id: {package['package_id']}")
+    print(f"sha256: {package['sha256']}")
+    print("No data was uploaded. Transfer the encrypted package manually.")
+    return 0
+
+
+def intake_encrypted_dataset(args: argparse.Namespace) -> int:
+    result = intake_package(
+        Path(args.package),
+        Path(args.identity),
+        Path(args.dataset_root),
+        cvat_url=args.cvat_url if args.create_cvat_tasks else "",
+        cvat_token=args.cvat_token,
+        cvat_token_file=args.cvat_token_file,
+    )
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -358,6 +452,56 @@ def annotate_incident(args: argparse.Namespace) -> int:
     return 0
 
 
+def record_blind_relabel(args: argparse.Namespace) -> int:
+    root = Path(args.dataset)
+    annotation_path = _annotation_path_for_incident(root, args.incident)
+    record = read_json(annotation_path)
+    original = record.get("annotation") if isinstance(record.get("annotation"), dict) else {}
+    if not original.get("human_severity") or not original.get("contact_outcome"):
+        raise ValueError("Blind re-labeling requires a complete original annotation.")
+    updated_at = str(record.get("annotation_updated_at") or "")
+    if updated_at:
+        try:
+            original_time = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            elapsed_hours = (datetime.now(timezone.utc) - original_time).total_seconds() / 3600.0
+        except ValueError as exc:
+            raise ValueError("Original annotation timestamp is malformed.") from exc
+        if elapsed_hours < args.minimum_delay_hours:
+            raise ValueError(
+                f"Blind re-label delay is {elapsed_hours:.1f} hours; "
+                f"minimum is {args.minimum_delay_hours:.1f} hours."
+            )
+    timing = {
+        "closest_approach_time_sec": args.closest_approach_time_sec,
+        "apparent_contact_time_sec": args.apparent_contact_time_sec,
+        "impact_time_sec": args.impact_time_sec,
+    }
+    relabel: dict[str, Any] = {
+        "schema_version": "mimir_blind_reannotation_v1",
+        "recorded_at": now_iso(),
+        "annotated_by": args.annotated_by,
+        "human_severity": args.human_severity,
+        "contact_outcome": args.contact_outcome,
+        "door_state": args.door_state,
+        "notes": args.notes or "",
+    }
+    for name, value in timing.items():
+        if value is not None:
+            if value < 0:
+                raise ValueError(f"{name} must not be negative")
+            relabel[name] = round(float(value), 4)
+    if args.contact_outcome in {"contact", "impact"} and not (
+        relabel.get("apparent_contact_time_sec") is not None or relabel.get("impact_time_sec") is not None
+    ):
+        raise ValueError("A contact or impact re-label requires a human contact/impact time.")
+    history = record.get("blind_reannotations") if isinstance(record.get("blind_reannotations"), list) else []
+    history.append(relabel)
+    record["blind_reannotations"] = history
+    write_json(annotation_path, record)
+    print(f"Blind re-label recorded for {args.incident} without changing the original annotation.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Consent-first Mimir dataset tooling.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -378,8 +522,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Legal/provenance basis for model-development use.",
     )
     export.add_argument("--license-id", default="", help="License name or permission record when applicable.")
+    export.add_argument("--permission-reference", default="", help="Auditable ownership, permission, or license reference.")
+    export.add_argument("--independent-permission-record", default="", help="File proving permission for otherwise excluded footage.")
     export.add_argument("--source-group", default="", help="Physical collection/event id used to keep related clips in one split.")
     export.add_argument("--include-video", action="store_true", help="Copy video only for the explicitly consented incidents.")
+    encrypted = subparsers.add_parser("export-encrypted", help="Create an age-encrypted, manually transferable contribution package.")
+    encrypted.add_argument("--session", required=True)
+    encrypted.add_argument("--output", required=True, help="Destination ending in .mimir-dataset.age")
+    encrypted.add_argument("--consent-incident", action="append", default=[], required=True)
+    encrypted.add_argument("--recorded-by", required=True)
+    encrypted.add_argument("--rights-confirmed", action="store_true", required=True)
+    encrypted.add_argument("--rights-basis", choices=("owned", "explicit_permission", "public_license"), required=True)
+    encrypted.add_argument("--permission-reference", required=True)
+    encrypted.add_argument("--license-id", default="")
+    encrypted.add_argument("--independent-permission-record", default="")
+    encrypted.add_argument("--source-group", default="")
+    encrypted.add_argument("--recipient", default="")
+    encrypted.add_argument("--recipient-file", default="")
+    intake = subparsers.add_parser("intake", help="Decrypt, validate, deduplicate, split, and optionally send a package to local CVAT.")
+    intake.add_argument("--package", required=True)
+    intake.add_argument("--identity", required=True)
+    intake.add_argument("--dataset-root", required=True)
+    intake.add_argument("--create-cvat-tasks", action="store_true")
+    intake.add_argument("--cvat-url", default="http://localhost:8080")
+    intake.add_argument("--cvat-token", default="")
+    intake.add_argument("--cvat-token-file", default="")
     validate = subparsers.add_parser("validate", help="Validate consent and source-isolated splits.")
     validate.add_argument("--dataset", required=True)
     queue = subparsers.add_parser("list", help="List the human annotation state of consented incidents.")
@@ -396,6 +563,18 @@ def build_parser() -> argparse.ArgumentParser:
     annotate.add_argument("--door-state", choices=("closed", "opening", "open", "closing", "not_visible", "not_applicable"))
     annotate.add_argument("--notes")
     annotate.add_argument("--objects", help="JSON list of real frame-level object boxes/masks for this incident.")
+    relabel = subparsers.add_parser("blind-relabel", help="Record a delayed intra-annotator re-label without replacing the original.")
+    relabel.add_argument("--dataset", required=True)
+    relabel.add_argument("--incident", required=True)
+    relabel.add_argument("--annotated-by", required=True)
+    relabel.add_argument("--human-severity", choices=("IGNORE", "REVIEW", "IMPORTANT"), required=True)
+    relabel.add_argument("--contact-outcome", choices=("contact", "impact", "no_contact", "uncertain"), required=True)
+    relabel.add_argument("--closest-approach-time-sec", type=float)
+    relabel.add_argument("--apparent-contact-time-sec", type=float)
+    relabel.add_argument("--impact-time-sec", type=float)
+    relabel.add_argument("--door-state", choices=("closed", "opening", "open", "closing", "not_visible", "not_applicable"))
+    relabel.add_argument("--notes")
+    relabel.add_argument("--minimum-delay-hours", type=float, default=24.0)
     return parser
 
 
@@ -404,12 +583,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "export":
             return export_dataset(args)
+        if args.command == "export-encrypted":
+            return export_encrypted_dataset(args)
+        if args.command == "intake":
+            return intake_encrypted_dataset(args)
+        if args.command == "blind-relabel":
+            return record_blind_relabel(args)
         if args.command == "validate":
             return validate_dataset(args)
         if args.command == "list":
             return list_annotations(args)
         return annotate_incident(args)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, json.JSONDecodeError, DatasetPackageError) as exc:
         print(f"Dataset error: {exc}", file=sys.stderr)
         return 1
 

@@ -1,0 +1,31 @@
+{
+  "schema_version": "mimir_cvat_project_v1",
+  "name": "Mimir Contact Dataset v1",
+  "version": 1,
+  "labels": [
+    {"name": "ego_vehicle", "color": "#4c78a8", "type": "any", "attributes": [{"name": "camera", "mutable": true, "input_type": "select", "default_value": "unknown", "values": ["front", "rear", "left_repeater", "right_repeater", "unknown"]}]},
+    {"name": "person", "color": "#72b7b2", "type": "any", "attributes": [{"name": "track_role", "mutable": true, "input_type": "select", "default_value": "nearby", "values": ["nearby", "approaching", "departing", "unknown"]}]},
+    {"name": "vehicle", "color": "#f2cf5b", "type": "any", "attributes": [{"name": "track_role", "mutable": true, "input_type": "select", "default_value": "nearby", "values": ["nearby", "approaching", "departing", "unknown"]}]},
+    {"name": "vehicle_door", "color": "#e45756", "type": "any", "attributes": [{"name": "door_state", "mutable": true, "input_type": "select", "default_value": "not_visible", "values": ["closed", "opening", "open", "closing", "not_visible"]}]},
+    {
+      "name": "event_outcome",
+      "color": "#b279a2",
+      "type": "tag",
+      "attributes": [
+        {"name": "contact_outcome", "mutable": false, "input_type": "select", "default_value": "uncertain", "values": ["contact", "impact", "no_contact", "uncertain"]},
+        {"name": "human_severity", "mutable": false, "input_type": "select", "default_value": "REVIEW", "values": ["IGNORE", "REVIEW", "IMPORTANT"]},
+        {"name": "closest_approach_frame", "mutable": false, "input_type": "number", "default_value": "0", "values": ["0", "1000000", "1"]},
+        {"name": "apparent_contact_frame", "mutable": false, "input_type": "number", "default_value": "0", "values": ["0", "1000000", "1"]},
+        {"name": "impact_frame", "mutable": false, "input_type": "number", "default_value": "0", "values": ["0", "1000000", "1"]},
+        {"name": "timing_confirmed", "mutable": false, "input_type": "checkbox", "default_value": "false", "values": []}
+      ]
+    }
+  ],
+  "annotation_policy": {
+    "positive_requires_timing": true,
+    "pixel_overlap_is_not_physical_proof": true,
+    "uncertain_is_preferred_over_guessing": true,
+    "blind_relabel_fraction": 0.1,
+    "source_isolated_splits": true
+  }
+}
