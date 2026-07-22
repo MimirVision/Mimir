@@ -29,11 +29,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 & $BackendPython $BackendBuildScript
 
-New-Item -ItemType Directory -Force -Path $ResourceBackend | Out-Null
+$ResolvedRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+$ResolvedResourceBackend = [System.IO.Path]::GetFullPath($ResourceBackend)
+if (-not $ResolvedResourceBackend.StartsWith($ResolvedRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "Refusing to clean backend resources outside the workspace: $ResolvedResourceBackend"
+}
+if (Test-Path -LiteralPath $ResolvedResourceBackend) {
+  Get-ChildItem -LiteralPath $ResolvedResourceBackend -Force | Remove-Item -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $ResolvedResourceBackend | Out-Null
 
 $RequiredExecutables = @(
   "mimir-core-v2-scan.exe",
   "mimir-core-v2-actions.exe",
+  "mimir-core-v2-dataset.exe",
   "mimir-core-v2-release-check.exe"
 )
 
@@ -42,7 +51,20 @@ foreach ($ExecutableName in $RequiredExecutables) {
   if (!(Test-Path $Source)) {
     throw "Expected backend executable was not built: $Source"
   }
-  Copy-Item -Force $Source (Join-Path $ResourceBackend $ExecutableName)
+  Copy-Item -Force $Source (Join-Path $ResolvedResourceBackend $ExecutableName)
 }
 
-Write-Host "Built Core v2 backend resources: $ResourceBackend"
+$AgePackageRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\FiloSottile.age_Microsoft.Winget.Source_8wekyb3d8bbwe\age"
+$AgeExecutable = Join-Path $AgePackageRoot "age.exe"
+$AgeLicense = Join-Path $AgePackageRoot "LICENSE"
+if (-not (Test-Path -LiteralPath $AgeExecutable) -or -not (Test-Path -LiteralPath $AgeLicense)) {
+  throw "Official age 1.3.1 is required. Install with: winget install --id FiloSottile.age --exact"
+}
+$AgeVersion = (& $AgeExecutable --version).Trim()
+if ($AgeVersion -ne "v1.3.1" -and $AgeVersion -ne "1.3.1") {
+  throw "Pinned age version mismatch. Expected 1.3.1, found $AgeVersion."
+}
+Copy-Item -Force -LiteralPath $AgeExecutable -Destination (Join-Path $ResolvedResourceBackend "age.exe")
+Copy-Item -Force -LiteralPath $AgeLicense -Destination (Join-Path $ResolvedResourceBackend "AGE-LICENSE.txt")
+
+Write-Host "Built Core v2 backend resources: $ResolvedResourceBackend"

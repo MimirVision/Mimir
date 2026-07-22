@@ -22,12 +22,19 @@ const DEV_CORE_V2_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_scan.py";
 #[allow(dead_code)]
 const DEV_CORE_V2_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_actions.py";
 #[allow(dead_code)]
+const DEV_CORE_V2_DATASET_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_dataset.py";
+#[allow(dead_code)]
 const DEV_CORE_V2_SCAN_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe";
 #[allow(dead_code)]
 const DEV_CORE_V2_ACTIONS_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe";
+#[allow(dead_code)]
+const DEV_CORE_V2_DATASET_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-dataset.exe";
 const BACKEND_RESOURCE_FOLDER: &str = "mimir-backend";
 const CORE_V2_SCAN_EXE_NAME: &str = "mimir-core-v2-scan.exe";
 const CORE_V2_ACTIONS_EXE_NAME: &str = "mimir-core-v2-actions.exe";
+const CORE_V2_DATASET_EXE_NAME: &str = "mimir-core-v2-dataset.exe";
+const AGE_EXE_NAME: &str = "age.exe";
+const TRAINING_AGE_RECIPIENT: &str = "age1ahsfxe3vh8u86cvrknya8pjg8nhydlw0jxw72h68s886qsp8lu2sxq942n";
 const DEFAULT_VISION_MODEL: &str = "qwen2.5vl:7b";
 const OLLAMA_DOWNLOAD_URL: &str = "https://ollama.com/download";
 
@@ -89,6 +96,15 @@ struct IncidentFeedbackResult {
     feedback_folder: String,
     feedback_file: String,
     video_copied: bool,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct TrainingContributionResult {
+    ok: bool,
+    output_path: String,
+    backend_runner: String,
+    backend_command: String,
     message: String,
 }
 
@@ -369,6 +385,50 @@ fn resolve_core_v2_actions_runtime(app: &tauri::AppHandle) -> Result<BackendRunt
             DEV_CORE_V2_ACTION_SCRIPT,
         ],
     ))
+}
+
+fn resolve_core_v2_dataset_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
+    #[cfg(debug_assertions)]
+    {
+        let session_path = configured_output_dir(app).join("latest_session.json");
+        if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_DATASET_SCRIPT).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_BACKEND_PYTHON),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path,
+                mode: BackendMode::CoreV2Python,
+            });
+        }
+        if Path::new(DEV_CORE_V2_DATASET_EXE).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_CORE_V2_DATASET_EXE),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path,
+                mode: BackendMode::CoreV2Exe,
+            });
+        }
+    }
+    if let Some(runtime) = resource_core_v2_runtime(app, CORE_V2_DATASET_EXE_NAME) {
+        return Ok(runtime);
+    }
+    Err(backend_missing_failure(
+        "training contribution",
+        &[DEV_CORE_V2_DATASET_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_DATASET_SCRIPT],
+    ))
+}
+
+fn age_executable_for_runtime(app: &tauri::AppHandle, runtime: &BackendRuntime) -> Option<PathBuf> {
+    if let Some(parent) = runtime.executable.parent() {
+        let adjacent = parent.join(AGE_EXE_NAME);
+        if adjacent.exists() {
+            return Some(adjacent);
+        }
+    }
+    app.path()
+        .resource_dir()
+        .ok()
+        .map(|root| root.join(BACKEND_RESOURCE_FOLDER).join(AGE_EXE_NAME))
+        .filter(|path| path.exists())
 }
 
 fn resolve_backend_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
@@ -2009,6 +2069,131 @@ async fn list_session_history(
         .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+fn export_training_contribution_sync(
+    app: tauri::AppHandle,
+    session_path: Option<String>,
+    incident_id: String,
+    output_path: String,
+    recorded_by: String,
+    rights_basis: String,
+    permission_reference: String,
+    independent_permission_record: Option<String>,
+) -> Result<TrainingContributionResult, ScanFailure> {
+    let session = validated_session_path(&app, session_path)?;
+    let incident = incident_id.trim();
+    if incident.is_empty()
+        || incident.len() > 160
+        || !incident.chars().all(|value| value.is_ascii_alphanumeric() || matches!(value, '_' | '-'))
+    {
+        return Err(ScanFailure::new("The selected incident id is invalid."));
+    }
+    if !matches!(rights_basis.as_str(), "owned" | "explicit_permission" | "public_license") {
+        return Err(ScanFailure::new("Choose a valid rights basis."));
+    }
+    let recorder = recorded_by.trim();
+    let permission = permission_reference.trim();
+    if recorder.is_empty() || recorder.len() > 200 {
+        return Err(ScanFailure::new("Enter the person recording this consent."));
+    }
+    if permission.is_empty() || permission.len() > 500 {
+        return Err(ScanFailure::new("Enter an auditable ownership, permission, or license reference."));
+    }
+    let output = PathBuf::from(output_path);
+    let output_name = output.file_name().and_then(|value| value.to_str()).unwrap_or_default();
+    if !output.is_absolute() || !output_name.to_ascii_lowercase().ends_with(".mimir-dataset.age") {
+        return Err(ScanFailure::new("Contribution destination must end with .mimir-dataset.age."));
+    }
+    if output.exists() {
+        return Err(ScanFailure::new("Choose a new contribution package filename."));
+    }
+    let parent = output.parent().ok_or_else(|| ScanFailure::new("Contribution destination is invalid."))?;
+    if !parent.exists() || !parent.is_dir() {
+        return Err(ScanFailure::new("Contribution destination folder does not exist."));
+    }
+    let permission_record = independent_permission_record
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from);
+    if permission_record.as_ref().is_some_and(|path| !path.is_absolute() || !path.is_file()) {
+        return Err(ScanFailure::new("Independent permission record could not be read."));
+    }
+
+    let runtime = resolve_core_v2_dataset_runtime(&app)?;
+    let mut command = backend_command(&runtime);
+    if runtime.is_python_fallback() {
+        command.arg(DEV_CORE_V2_DATASET_SCRIPT);
+    }
+    command
+        .arg("export-encrypted")
+        .arg("--session")
+        .arg(&session)
+        .arg("--output")
+        .arg(&output)
+        .arg("--consent-incident")
+        .arg(incident)
+        .arg("--recorded-by")
+        .arg(recorder)
+        .arg("--rights-confirmed")
+        .arg("--rights-basis")
+        .arg(&rights_basis)
+        .arg("--permission-reference")
+        .arg(permission)
+        .arg("--recipient")
+        .arg(TRAINING_AGE_RECIPIENT);
+    if let Some(path) = permission_record {
+        command.arg("--independent-permission-record").arg(path);
+    }
+    if let Some(age_executable) = age_executable_for_runtime(&app, &runtime) {
+        command.env("MIMIR_AGE_EXE", age_executable);
+    }
+    let preview = command_preview(&command);
+    let result = command
+        .output()
+        .map_err(|error| ScanFailure::new(format!("Could not start the contribution exporter: {error}")))?;
+    let stdout = String::from_utf8_lossy(&result.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+    if !result.status.success() || !output.is_file() {
+        return Err(ScanFailure::with_output(
+            "The encrypted contribution package could not be created.",
+            stdout,
+            stderr,
+        ));
+    }
+    Ok(TrainingContributionResult {
+        ok: true,
+        output_path: output.to_string_lossy().to_string(),
+        backend_runner: runtime.runner_label().to_string(),
+        backend_command: preview,
+        message: "Encrypted package created. Nothing was uploaded; transfer it manually when ready.".to_string(),
+    })
+}
+
+#[tauri::command]
+async fn export_training_contribution(
+    app: tauri::AppHandle,
+    session_path: Option<String>,
+    incident_id: String,
+    output_path: String,
+    recorded_by: String,
+    rights_basis: String,
+    permission_reference: String,
+    independent_permission_record: Option<String>,
+) -> Result<TrainingContributionResult, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export_training_contribution_sync(
+            app,
+            session_path,
+            incident_id,
+            output_path,
+            recorded_by,
+            rights_basis,
+            permission_reference,
+            independent_permission_record,
+        )
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
 #[tauri::command]
 async fn open_containing_folder(path: String) -> Result<(), ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -2117,6 +2302,7 @@ mod tests {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ActiveScanProcess::default())
         .invoke_handler(tauri::generate_handler![
             check_system_requirements,
@@ -2133,6 +2319,7 @@ fn main() {
             open_local_ai_download_page,
             load_latest_session_json,
             list_session_history,
+            export_training_contribution,
             open_containing_folder,
             open_mimir_storage_folder,
             log_incident_diagnostic

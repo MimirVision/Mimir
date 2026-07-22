@@ -15,15 +15,19 @@
     "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
     "build": "vite build",
     "test": "vitest run",
+    "test:accessibility": "playwright test tests/e2e/accessibility.spec.ts",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/cli": "^2.11.4",
     "@types/react": "^18.2.0",

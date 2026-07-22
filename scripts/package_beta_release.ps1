@@ -63,8 +63,11 @@ try {
 
   npm run build
 
-  Write-Step "Building Tauri Windows installer"
-  npm run tauri build
+  Write-Step "Building and verifying signed Tauri Windows installer and updater"
+  & (Join-Path $PSScriptRoot "sign_release.ps1")
+  if ($LASTEXITCODE -ne 0) {
+    throw "Signed release build failed. Internal unsigned builds must not be packaged for invitations."
+  }
 }
 finally {
   Pop-Location

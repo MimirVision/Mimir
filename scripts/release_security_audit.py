@@ -76,8 +76,14 @@ def scan_packaged_runtimes(frontend: Path) -> list[dict[str, str]]:
     packaged_names = (
         "mimir-core-v2-scan.exe",
         "mimir-core-v2-actions.exe",
+        "mimir-core-v2-dataset.exe",
         "mimir-core-v2-release-check.exe",
     )
+    allowed_names = {*packaged_names, "age.exe", "AGE-LICENSE.txt"}
+    if runtime_dir.exists():
+        for item in runtime_dir.iterdir():
+            if item.name not in allowed_names:
+                findings.append({"file": str(item), "marker": "unexpected_packaged_runtime"})
     for name in packaged_names:
         path = runtime_dir / name
         if not path.exists():
@@ -90,6 +96,10 @@ def scan_packaged_runtimes(frontend: Path) -> list[dict[str, str]]:
         for marker in markers:
             if marker in payload:
                 findings.append({"file": str(path), "marker": marker.decode("ascii")})
+    for name in ("age.exe", "AGE-LICENSE.txt"):
+        path = runtime_dir / name
+        if not path.exists():
+            findings.append({"file": str(path), "marker": "missing_encrypted_export_dependency"})
     return findings
 
 
