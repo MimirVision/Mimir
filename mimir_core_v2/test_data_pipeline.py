@@ -9,8 +9,8 @@ import zipfile
 from pathlib import Path
 
 from mimir_core_v2.dataset_package import DatasetPackageError, _safe_extract, exclusion_hashes
-from mimir_core_v2.temporal_training import FEATURE_NAMES, probability_timing
-from mimir_core_v2_training import audit_dataset
+from mimir_core_v2.temporal_training import ExtractedSequence, FEATURE_NAMES, probability_timing
+from mimir_core_v2_training import audit_dataset, build_parser
 
 
 ROOT = Path(__file__).resolve().parent
@@ -26,6 +26,7 @@ class DataPipelineTests(unittest.TestCase):
             "training_run_v1.schema.json",
             "candidate_model_manifest_v1.schema.json",
             "evaluation_report_v1.schema.json",
+            "external_dataset_receipt_v1.schema.json",
         }
         actual = {path.name for path in (ROOT / "schemas").glob("*.schema.json")}
         self.assertTrue(expected.issubset(actual))
@@ -70,6 +71,32 @@ class DataPipelineTests(unittest.TestCase):
         self.assertEqual(result["best_time_sec"], 0.5)
         self.assertEqual(result["probability"], 0.9)
         self.assertIsNotNone(result["timing_uncertainty_sec"])
+
+    def test_external_timing_has_separate_event_target(self) -> None:
+        self.assertIn("event_time_sec", ExtractedSequence.__annotations__)
+        self.assertIn("event_target", ExtractedSequence.__annotations__)
+        self.assertIn("alert_time_sec", ExtractedSequence.__annotations__)
+        self.assertIn("time_to_accident_sec", ExtractedSequence.__annotations__)
+        args = build_parser().parse_args(
+            [
+                "prepare-nexar",
+                "--source-root",
+                "C:/licensed-source",
+                "--output",
+                "C:/prepared",
+            ]
+        )
+        self.assertEqual(args.command, "prepare-nexar")
+        pretrain = build_parser().parse_args(
+            [
+                "pretrain-temporal",
+                "--features",
+                "C:/features",
+                "--prepared",
+                "C:/prepared",
+            ]
+        )
+        self.assertEqual(pretrain.command, "pretrain-temporal")
 
 
 if __name__ == "__main__":

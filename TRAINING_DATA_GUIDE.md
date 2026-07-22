@@ -9,9 +9,11 @@ media videos, or footage with uncertain rights in `training_data`.
 - `.venv-training`: dataset preparation and candidate training only.
 
 ```powershell
-python -m venv .venv-training
-.\.venv-training\Scripts\python.exe -m pip install -r requirements-training.txt
+powershell -ExecutionPolicy Bypass -File scripts\setup_training_env.ps1
 ```
+
+The setup script installs pinned CUDA-enabled PyTorch wheels from PyTorch's official
+wheel index, then verifies CUDA and ONNX before any training command is allowed.
 
 ## Source Policy
 
@@ -30,6 +32,47 @@ and explicitly accepts its terms. Metadata and license files may be retrieved fi
 
 Add `--include-footage --accept-license` only after that review. Mimir never accepts
 dataset terms automatically.
+
+The footage command also requires `--accepted-by` and should include an auditable
+`--acceptance-basis`, for example an explicit project-owner instruction.
+Use `--include-evaluation-footage` to retrieve Nexar's official public/private
+evaluation clips. Development may inspect the public split; the private split must
+remain a one-time auxiliary lockbox and is never a Tesla promotion set.
+
+### Nexar Auxiliary Timing Pretraining
+
+Nexar positives combine collisions and near-misses. They must never be imported as
+verified physical contact or used as Tesla release-evaluation labels. After licensed
+footage retrieval, build a content-hashed, class-balanced auxiliary manifest:
+
+```powershell
+python mimir_core_v2_training.py prepare-nexar `
+  --source-root C:\Mimir_Data\external_sources\nexar_collision_prediction `
+  --output C:\Mimir_Data\prepared\nexar_collision_prediction_v1 `
+  --workers 4
+
+python mimir_core_v2_training.py extract-temporal `
+  --prepared C:\Mimir_Data\prepared\nexar_collision_prediction_v1 `
+  --output C:\Mimir_Data\features\nexar_collision_prediction_v1_10fps `
+  --sample-fps 10 `
+  --workers 6
+
+python mimir_core_v2_training.py pretrain-temporal `
+  --prepared C:\Mimir_Data\prepared\nexar_collision_prediction_v1 `
+  --features C:\Mimir_Data\features\nexar_collision_prediction_v1_10fps `
+  --output C:\Mimir_Data\training_runs\nexar_event_pretraining
+```
+
+The resulting checkpoint is encoder initialization only. It is marked
+`promotion_eligible: false`, retains Nexar attribution and license conditions, and
+cannot satisfy the consented Tesla pilot or locked evaluation gates.
+
+The prepared source uses 1,350 training clips and 150 validation clips from
+Nexar's training partition. The official public test is development evidence only.
+The official private test is recorded as `test_private`, is never read by the
+pretraining command, and must remain sealed until a materially stronger semantic
+candidate has been frozen. Motion-only experiments that fail public evaluation are
+retained as negative results rather than being tuned against the private lockbox.
 
 ## Encrypted Contribution Export
 
@@ -136,12 +179,14 @@ python mimir_core_v2_dataset.py blind-relabel `
 .\.venv-training\Scripts\python.exe mimir_core_v2_training.py extract-temporal `
   --prepared training_runs\candidate_perception_v1 `
   --output training_runs\temporal_features_v1 `
-  --sample-fps 15
+  --sample-fps 15 `
+  --workers 6
 
 .\.venv-training\Scripts\python.exe mimir_core_v2_training.py train-temporal `
   --prepared training_runs\candidate_perception_v1 `
   --features training_runs\temporal_features_v1 `
-  --output training_runs\temporal_candidates
+  --output training_runs\temporal_candidates `
+  --pretrained-checkpoint C:\Mimir_Data\training_runs\nexar_event_pretraining\RUN\nexar_event_timing_pretrainer.pt
 ```
 
 Training refuses to start before 100 complete groups, 25 positives, 25 hard
