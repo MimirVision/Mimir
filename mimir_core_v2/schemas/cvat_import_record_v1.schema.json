@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/cvat_import_record_v1.schema.json",
+  "title": "Mimir CVAT intake record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "package_id", "imported_at", "collection_path", "split", "cvat_tasks"],
+  "properties": {
+    "schema_version": {"const": "mimir_cvat_import_record_v1"},
+    "package_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "imported_at": {"type": "string", "format": "date-time"},
+    "collection_path": {"type": "string"},
+    "split": {"enum": ["train", "validation", "test", "mixed"]},
+    "cvat_project_id": {"type": ["integer", "null"]},
+    "cvat_tasks": {"type": "array", "items": {"type": "object"}},
+    "cvat_status": {"enum": ["not_requested", "pending", "complete"]},
+    "cvat_error": {"type": ["string", "null"]},
+    "duplicate_media_rejected": {"type": "integer", "minimum": 0}
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/candidate_perception_v1.schema.json",
+  "title": "Mimir candidate perception report",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "created_at", "candidate_id", "candidate_manifest_sha256", "model_sha256", "event_groups", "detections", "errors"],
+  "properties": {
+    "schema_version": {"const": "mimir_candidate_perception_v1"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "candidate_id": {"type": "string"},
+    "candidate_manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "model_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "event_groups": {"type": "integer", "minimum": 0},
+    "detections": {"type": "integer", "minimum": 0},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  }
+}

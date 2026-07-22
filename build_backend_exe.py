@@ -23,6 +23,7 @@ WORK_DIR = BUILD_DIR / "work"
 REQUIRED_FILES = [
     ROOT / "mimir_core_v2_scan.py",
     ROOT / "mimir_core_v2_actions.py",
+    ROOT / "mimir_core_v2_dataset.py",
 ]
 
 OPTIONAL_FILES = [
@@ -47,6 +48,8 @@ CORE_MODULES = [
     ROOT / "mimir_core_v2" / "severity_resolver.py",
     ROOT / "mimir_core_v2" / "output_writer.py",
     ROOT / "mimir_core_v2" / "validators.py",
+    ROOT / "mimir_core_v2" / "dataset_package.py",
+    ROOT / "mimir_core_v2" / "cvat_client.py",
 ]
 
 
@@ -259,6 +262,7 @@ def main() -> int:
 
         build_executable("mimir-core-v2-scan", ROOT / "mimir_core_v2_scan.py")
         build_executable("mimir-core-v2-actions", ROOT / "mimir_core_v2_actions.py")
+        build_executable("mimir-core-v2-dataset", ROOT / "mimir_core_v2_dataset.py")
 
         release_check = ROOT / "mimir_core_v2_release_check.py"
         if release_check.exists():
@@ -269,6 +273,7 @@ def main() -> int:
         print(f"Output folder: {DIST_DIR}")
         print(f"- {DIST_DIR / 'mimir-core-v2-scan.exe'}")
         print(f"- {DIST_DIR / 'mimir-core-v2-actions.exe'}")
+        print(f"- {DIST_DIR / 'mimir-core-v2-dataset.exe'}")
         return 0
     except PackagingError as exc:
         print()

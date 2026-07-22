@@ -1,0 +1,32 @@
+{
+  "schema_version": "mimir_reliability_suite_v1",
+  "target_runs": 500,
+  "fixtures": [
+    {
+      "name": "current_crash_door_ding_set",
+      "input": "C:\\Mimir\\Test",
+      "source_set": "current_crash_door_ding_set",
+      "required": true
+    },
+    {
+      "name": "known_person_near_set",
+      "input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
+      "source_set": "known_person_near_set",
+      "required": false
+    },
+    {
+      "name": "known_grouping_set",
+      "input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+      "source_set": "known_grouping_set",
+      "required": false
+    }
+  ],
+  "scenarios": [
+    {"name": "local_normal", "weight": 12, "extra_args": []},
+    {"name": "no_object_detection", "weight": 4, "extra_args": ["--disable-yolo"]},
+    {"name": "corrupt_copy", "weight": 1, "temporary_copy": "corrupt"},
+    {"name": "removed_media_copy", "weight": 1, "temporary_copy": "remove_during_scan"},
+    {"name": "cancelled_scan", "weight": 1, "cancel_after_sec": 1.0},
+    {"name": "experimental_ai", "weight": 1, "extra_args": ["--vlm", "qwen2.5vl:7b", "--ai-review-budget", "5", "--ai-timeout-sec", "60"], "optional": true}
+  ]
+}
