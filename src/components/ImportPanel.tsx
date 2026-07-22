@@ -9,6 +9,7 @@ import type {
   SessionLoadState,
   SystemCheckItem,
   SystemCheckResult,
+  SessionHistoryEntry,
 } from '../types'
 
 interface ScanOutput {
@@ -21,6 +22,8 @@ interface ImportPanelProps {
   isDraggingFolder: boolean
   onChooseFolder: () => void
   onAnalyze: () => void
+  onCancelScan: () => void
+  isCancellingScan: boolean
   loadState: SessionLoadState
   scanState: ScanRunState
   scanError: string
@@ -38,11 +41,9 @@ interface ImportPanelProps {
   selectedVisionModel: string
   experimentalAiEnabled: boolean
   experimentalAiModel: string
-  experimentalAiBudget: AiReviewBudget
   experimentalAiTimeoutSec: AiTimeoutSec
   onExperimentalAiEnabledChange: (enabled: boolean) => void
   onExperimentalAiModelChange: (model: string) => void
-  onExperimentalAiBudgetChange: (budget: AiReviewBudget) => void
   onExperimentalAiTimeoutSecChange: (timeoutSec: AiTimeoutSec) => void
   isLocalAiSetupOpen: boolean
   onOpenLocalAiSetup: () => void
@@ -55,15 +56,17 @@ interface ImportPanelProps {
   localAiInstallLine: string
   localAiInstallResult: LocalAiInstallResult | null
   localAiSetupError: string
+  hasLatestSession: boolean
+  onReturnToLatestSession: () => void
+  sessionHistory: SessionHistoryEntry[]
+  onOpenSession: (sessionPath: string) => void
 }
 
 type ScanMode = 'fast' | 'balanced' | 'quality'
-type AiReviewBudget = 3 | 5 | 10
-type AiTimeoutSec = 30 | 60 | 120
+type AiTimeoutSec = 60 | 120 | 180
 
 const aiModelOptions = ['qwen2.5vl:7b', 'llava:7b'] as const
-const aiReviewBudgetOptions: AiReviewBudget[] = [3, 5, 10]
-const aiTimeoutOptions: AiTimeoutSec[] = [30, 60, 120]
+const aiTimeoutOptions: AiTimeoutSec[] = [60, 120, 180]
 
 const scanStages = [
   { label: 'Reading clips', keys: ['initializing', 'reading_clips', 'preparing_clips', 'discovering_clips'] },
@@ -191,30 +194,56 @@ function formatEtaSeconds(seconds: number) {
   return `About ${Math.max(1, Math.round(remaining / 60))} min left`
 }
 
-function formatEta(progress: BackendProgress | null, percent: number | null) {
+function formatEta(
+  progress: BackendProgress | null,
+  fallbackElapsedSec: number,
+) {
   const eta = progress?.eta_sec
 
   if (typeof eta === 'number' && !Number.isNaN(eta)) {
     return formatEtaSeconds(eta)
   }
 
-  const elapsed = progress?.elapsed_sec
+  if (fallbackElapsedSec < 4) {
+    return 'Starting...'
+  }
+  return 'Measuring...'
+}
 
-  if (
-    percent !== null &&
-    percent > 3 &&
-    typeof elapsed === 'number' &&
-    !Number.isNaN(elapsed) &&
-    elapsed > 3
-  ) {
-    const estimatedTotal = elapsed / (percent / 100)
-    return formatEtaSeconds(estimatedTotal - elapsed)
+function displayProgressPercent(
+  progress: BackendProgress | null,
+  percent: number | null,
+  stageIndex: number,
+  isAnalyzing: boolean,
+) {
+  if (percent !== null) {
+    return percent
   }
 
-  return 'Estimating…'
+  if (typeof progress?.current === 'number' && typeof progress?.total === 'number' && progress.total > 0) {
+    return Math.max(2, Math.min(96, (progress.current / progress.total) * 100))
+  }
+
+  if (!isAnalyzing) {
+    return null
+  }
+
+  return stageIndex >= 0 ? Math.max(2, (stageIndex / scanStages.length) * 100) : 2
+}
+
+function estimatedActiveStageIndex(
+  progress: BackendProgress | null,
+  isAnalyzing: boolean,
+) {
+  const reportedIndex = activeStageIndex(progress?.stage)
+  return isAnalyzing && reportedIndex < 0 ? 0 : reportedIndex
 }
 
 function stageStatus(index: number, currentIndex: number, scanState: ScanRunState) {
+  if (scanState === 'running' && currentIndex < 0) {
+    return index === 0 ? 'active' : 'idle'
+  }
+
   if (scanState === 'error' && index === Math.max(0, currentIndex)) {
     return 'error'
   }
@@ -233,16 +262,19 @@ function stageStatus(index: number, currentIndex: number, scanState: ScanRunStat
 function StageIcon({ status }: { status: string }) {
   if (status === 'complete') {
     return (
-      <span className="grid h-5 w-5 place-items-center rounded-full bg-white/14 text-[12px] font-semibold text-[var(--mimir-text)]">
-        ✓
+      <span aria-hidden="true" className="grid h-5 w-5 place-items-center rounded-full bg-white/14 text-[12px] font-semibold text-[var(--mimir-text)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--mimir-accent)]" />
       </span>
     )
   }
 
   if (status === 'active') {
     return (
-      <span className="grid h-5 w-5 place-items-center rounded-full border border-white/22">
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
+      <span aria-hidden="true" className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full">
+        <span className="absolute inset-0 rounded-full bg-[var(--mimir-accent-soft)] opacity-70 animate-ping" />
+        <span className="absolute inset-1 rounded-full border border-white/10" />
+        <span className="relative h-6 w-6 animate-spin rounded-full border-2 border-[rgba(157,183,170,0.18)] border-r-[var(--mimir-accent)] border-t-[var(--mimir-accent)] shadow-[0_0_18px_rgba(157,183,170,0.22)]" />
+        <span className="absolute h-2 w-2 rounded-full bg-[var(--mimir-accent)] shadow-[0_0_12px_rgba(157,183,170,0.6)]" />
       </span>
     )
   }
@@ -255,27 +287,11 @@ function StageIcon({ status }: { status: string }) {
     )
   }
 
-  return <span className="h-5 w-5 rounded-full border border-white/12 bg-black/18" />
+  return <span className="h-5 w-5 shrink-0 rounded-full border border-white/16 bg-black/20" />
 }
 
 function failedSystemChecks(systemCheck: SystemCheckResult | null) {
   return systemCheck?.items.filter(item => !item.ok && item.id !== 'enhanced_ai_review') ?? []
-}
-
-function localAiLabel(localAiStatus: LocalAiStatus | null, isCheckingLocalAi: boolean) {
-  if (USE_MIMIR_CORE_V2) {
-    return 'Ready to scan'
-  }
-
-  if (isCheckingLocalAi) {
-    return 'Checking AI review'
-  }
-
-  if (localAiStatus?.ok) {
-    return 'AI review ready'
-  }
-
-  return 'Setup needed'
 }
 
 function SystemStatusPill({
@@ -299,12 +315,7 @@ function SystemStatusPill({
   }
 
   if (systemCheck?.ok) {
-    return (
-      <div className="flex h-10 items-center gap-2 rounded-full bg-white/[0.035] px-4 text-[13px] text-[var(--mimir-text-muted)]">
-        <span className="h-2 w-2 rounded-full bg-[var(--mimir-status-green)]" />
-        {localAiLabel(localAiStatus, isCheckingLocalAi)}
-      </div>
-    )
+    return null
   }
 
   return (
@@ -318,71 +329,68 @@ function SystemStatusPill({
 function ExperimentalAiSettings({
   enabled,
   model,
-  budget,
   timeoutSec,
   onEnabledChange,
   onModelChange,
-  onBudgetChange,
   onTimeoutSecChange,
 }: {
   enabled: boolean
   model: string
-  budget: AiReviewBudget
   timeoutSec: AiTimeoutSec
   onEnabledChange: (enabled: boolean) => void
   onModelChange: (model: string) => void
-  onBudgetChange: (budget: AiReviewBudget) => void
   onTimeoutSecChange: (timeoutSec: AiTimeoutSec) => void
 }) {
   const modelPreset = aiModelOptions.includes(model as typeof aiModelOptions[number]) ? model : 'custom'
 
   return (
-    <details className="mt-4 rounded-lg border border-white/[0.055] bg-black/16 p-4">
-      <summary className="cursor-pointer text-[13px] font-semibold text-[var(--mimir-text-muted)]">
-        Settings / More / Advanced
-      </summary>
-
-      <div className="mt-4 rounded-lg border border-white/[0.055] bg-white/[0.014] p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-[14px] font-semibold text-[var(--mimir-text)]">
-              Experimental AI
-            </div>
-            <p className="mt-1 max-w-[520px] text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
-              Uses a local vision model as a second opinion. Mimir's local evidence still controls the final result.
-            </p>
+    <div className="mt-4 rounded-lg border border-white/[0.055] bg-black/16 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[14px] font-semibold text-[var(--mimir-text)]">
+            Use local AI second opinion
           </div>
-
-          <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-white/[0.08] bg-black/20 px-3 py-2 text-[12px] font-medium text-[var(--mimir-text-muted)]">
-            <span>{enabled ? 'On' : 'Off'}</span>
-            <input
-              type="checkbox"
-              className="sr-only"
-              checked={enabled}
-              onChange={event => onEnabledChange(event.currentTarget.checked)}
-            />
-            <span
-              className={`relative h-5 w-9 rounded-full transition ${
-                enabled ? 'bg-sky-300/45' : 'bg-white/[0.14]'
-              }`}
-            >
-              <span
-                className={`absolute top-1 h-3 w-3 rounded-full bg-white transition ${
-                  enabled ? 'left-5' : 'left-1'
-                }`}
-              />
-            </span>
-          </label>
+          <p className="mt-1 max-w-[560px] text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
+            Optional. Uses a local vision model to review selected clips. Mimir still keeps the final safety rules.
+          </p>
         </div>
 
-        {enabled && (
-          <div className="mt-4 grid gap-4">
-            <div className="rounded-lg border border-amber-200/14 bg-amber-300/8 p-3 text-[12px] leading-5 text-amber-50/78">
-              Experimental: current local AI models may misread impact/contact clips. AI does not override Mimir's safety rules.
-            </div>
+        <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-white/[0.08] bg-black/20 px-3 py-2 text-[12px] font-medium text-[var(--mimir-text-muted)]">
+          <span>{enabled ? 'On' : 'Off'}</span>
+          <input
+            type="checkbox"
+            className="sr-only"
+            checked={enabled}
+            onChange={event => onEnabledChange(event.currentTarget.checked)}
+          />
+          <span
+            className={`relative h-5 w-9 rounded-full transition ${
+              enabled ? 'bg-sky-300/45' : 'bg-white/[0.14]'
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-3 w-3 rounded-full bg-white transition ${
+                enabled ? 'left-5' : 'left-1'
+              }`}
+            />
+          </span>
+        </label>
+      </div>
 
+      {enabled && (
+        <div className="mt-4 grid gap-3">
+          <div className="rounded-lg border border-amber-200/14 bg-amber-300/8 p-3 text-[12px] leading-5 text-amber-50/78">
+            Experimental: current local AI models may misread impact/contact clips. AI does not override Mimir's safety rules.
+          </div>
+
+          <details className="rounded-lg border border-white/[0.055] bg-white/[0.014] p-3">
+            <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)]">
+              Advanced
+            </summary>
+
+            <div className="mt-4 grid gap-4">
             <label className="grid gap-2">
-              <span className="text-[12px] font-medium text-[var(--mimir-text)]">AI model</span>
+              <span className="text-[12px] font-medium text-[var(--mimir-text)]">Model</span>
               <select
                 value={modelPreset}
                 onChange={event => {
@@ -410,40 +418,23 @@ function ExperimentalAiSettings({
               </label>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-2">
-                <span className="text-[12px] font-medium text-[var(--mimir-text)]">AI review budget</span>
-                <select
-                  value={budget}
-                  onChange={event => onBudgetChange(Number(event.currentTarget.value) as AiReviewBudget)}
-                  className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
-                >
-                  {aiReviewBudgetOptions.map(option => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-                <span className="text-[11px] leading-4 text-[var(--mimir-text-subtle)]">
-                  Maximum number of incidents AI may review per scan.
-                </span>
-              </label>
-
-              <label className="grid gap-2">
-                <span className="text-[12px] font-medium text-[var(--mimir-text)]">AI timeout</span>
-                <select
-                  value={timeoutSec}
-                  onChange={event => onTimeoutSecChange(Number(event.currentTarget.value) as AiTimeoutSec)}
-                  className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
-                >
-                  {aiTimeoutOptions.map(option => (
-                    <option key={option} value={option}>{option} seconds</option>
-                  ))}
-                </select>
-              </label>
+            <label className="grid gap-2">
+              <span className="text-[12px] font-medium text-[var(--mimir-text)]">Timeout</span>
+              <select
+                value={timeoutSec}
+                onChange={event => onTimeoutSecChange(Number(event.currentTarget.value) as AiTimeoutSec)}
+                className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
+              >
+                {aiTimeoutOptions.map(option => (
+                  <option key={option} value={option}>{option} seconds</option>
+                ))}
+              </select>
+            </label>
             </div>
-          </div>
-        )}
-      </div>
-    </details>
+          </details>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -880,6 +871,8 @@ export function ImportPanel({
   isDraggingFolder,
   onChooseFolder,
   onAnalyze,
+  onCancelScan,
+  isCancellingScan,
   loadState,
   scanState,
   scanError,
@@ -897,11 +890,9 @@ export function ImportPanel({
   selectedVisionModel,
   experimentalAiEnabled,
   experimentalAiModel,
-  experimentalAiBudget,
   experimentalAiTimeoutSec,
   onExperimentalAiEnabledChange,
   onExperimentalAiModelChange,
-  onExperimentalAiBudgetChange,
   onExperimentalAiTimeoutSecChange,
   isLocalAiSetupOpen,
   onOpenLocalAiSetup,
@@ -914,15 +905,28 @@ export function ImportPanel({
   localAiInstallLine,
   localAiInstallResult,
   localAiSetupError,
+  hasLatestSession,
+  onReturnToLatestSession,
+  sessionHistory,
+  onOpenSession,
 }: ImportPanelProps) {
   const hasSelectedFolder = selectedFolder.length > 0
   const isAnalyzing = scanState === 'running'
   const isWorking = isAnalyzing || loadState === 'loading'
   const hasTechnicalDetails = Boolean(scanOutput?.stdout || scanOutput?.stderr)
-  const currentStageIndex = activeStageIndex(scanProgress?.stage)
+  const [fallbackElapsedSec, setFallbackElapsedSec] = useState(0)
+  const currentStageIndex = estimatedActiveStageIndex(scanProgress, isAnalyzing)
   const percent = clampPercent(scanProgress?.percent)
-  const elapsedText = formatElapsed(scanProgress?.elapsed_sec)
-  const etaText = formatEta(scanProgress, percent)
+  const displayPercent = displayProgressPercent(
+    scanProgress,
+    percent,
+    currentStageIndex,
+    isAnalyzing,
+  )
+  const elapsedText = formatElapsed(scanProgress?.elapsed_sec ?? fallbackElapsedSec)
+  const etaText = scanState === 'error'
+    ? 'Stopped'
+    : formatEta(scanProgress, fallbackElapsedSec)
   const progressMessage = scanProgress
     ? scanProgress.message || 'Scanner progress received.'
     : 'Starting local scanner...'
@@ -935,6 +939,24 @@ export function ImportPanel({
   const aiRequired = FULL_AI_BETA && !USE_MIMIR_CORE_V2
   const canAnalyze = hasSelectedFolder && scannerReady && (!aiRequired || aiReviewReady) && !isWorking
   const [showBackendLoadHelper, setShowBackendLoadHelper] = useState(false)
+
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setFallbackElapsedSec(0)
+      return
+    }
+
+    const startedAt = Date.now()
+    setFallbackElapsedSec(0)
+
+    const timer = window.setInterval(() => {
+      setFallbackElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
+    }, 1000)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [isAnalyzing])
 
   useEffect(() => {
     if (!isAnalyzing || scanProgress) {
@@ -952,7 +974,7 @@ export function ImportPanel({
   }, [isAnalyzing, scanProgress])
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1440px] flex-col overflow-hidden rounded-xl border border-[var(--mimir-border)] bg-[radial-gradient(circle_at_48%_0%,rgba(255,255,255,0.045),transparent_34%),var(--mimir-bg-depth)] shadow-[0_30px_100px_rgba(0,0,0,0.56)] sm:min-h-[calc(100vh-48px)]">
+    <main className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1480px] flex-col overflow-hidden rounded-2xl border border-white/[0.065] bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.10),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.038),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] shadow-[0_34px_110px_rgba(0,0,0,0.56)] sm:min-h-[calc(100vh-48px)]">
       <header className="flex min-h-[76px] shrink-0 items-center justify-between px-5 sm:px-7">
         <img src={mimirLockup} alt="Mimir" className="h-8 w-auto opacity-95" />
         <SystemStatusPill
@@ -963,28 +985,73 @@ export function ImportPanel({
         />
       </header>
 
-      <section className="grid flex-1 gap-10 px-5 pb-8 pt-5 sm:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-center lg:px-12 xl:px-16">
+      <section className="grid flex-1 gap-8 px-5 pb-8 pt-5 sm:px-8 lg:grid-cols-[minmax(0,0.86fr)_minmax(430px,1.14fr)] lg:items-center lg:px-12 xl:px-16">
         <div className="max-w-[650px]">
-          <div className="mb-5 text-[12px] font-medium uppercase tracking-[0.22em] text-[var(--mimir-text-subtle)]">
+          <div className="mb-5 inline-flex rounded-full border border-[rgba(157,183,170,0.15)] bg-[var(--mimir-accent-soft)] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
             Local incident review
           </div>
-          <h1 className="max-w-[680px] text-[46px] font-semibold leading-[1.01] text-[var(--mimir-text)] sm:text-[60px] xl:text-[72px]">
+          <h1 className="max-w-[680px] text-[44px] font-semibold leading-[1.02] text-[var(--mimir-text)] sm:text-[58px] xl:text-[68px]">
             Find the moments worth watching.
           </h1>
           <p className="mt-5 max-w-[520px] text-[17px] leading-8 text-[var(--mimir-text-muted)]">
-            Select a USB drive or footage folder. Mimir scans locally and helps you review suspicious moments.
-          </p>
-          <p className="mt-4 max-w-[500px] text-[14px] leading-6 text-[var(--mimir-text-subtle)]">
-            Select the USB drive, TeslaCam folder, or any folder containing MP4 clips.
+            Drop in a TeslaCam folder or footage folder. Mimir scans locally and helps you review suspicious moments.
           </p>
           <div className="mt-8 text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--mimir-text-subtle)]">
             Private Beta - {MIMIR_VERSION}
           </div>
         </div>
 
-        <div className="flex min-h-[560px] flex-col rounded-xl border border-[var(--mimir-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.038),rgba(255,255,255,0.014))] p-4 shadow-[0_28px_80px_rgba(0,0,0,0.34)] sm:p-5">
+        <div className="flex min-h-[540px] flex-col rounded-2xl border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.042),rgba(255,255,255,0.016))] p-4 shadow-[0_28px_86px_rgba(0,0,0,0.36)] sm:p-5">
           {!showScanStatus && (
             <>
+              {hasLatestSession && (
+                <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-white/[0.055] bg-black/18 px-4 py-3">
+                  <div>
+                    <div className="text-[13px] font-semibold text-[var(--mimir-text)]">Latest session is still open</div>
+                    <div className="mt-1 text-[12px] text-[var(--mimir-text-subtle)]">
+                      Return to your current review if you opened import by accident.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onReturnToLatestSession}
+                    className="h-9 shrink-0 rounded-full border border-white/[0.08] bg-white/[0.045] px-4 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.08]"
+                  >
+                    Back to latest session
+                  </button>
+                </div>
+              )}
+
+              {sessionHistory.length > 1 && (
+                <details className="mb-4 rounded-xl border border-white/[0.05] bg-black/12 px-4 py-3">
+                  <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)]">
+                    Recent sessions
+                  </summary>
+                  <div className="mt-3 grid gap-2">
+                    {sessionHistory.slice(0, 5).map(session => (
+                      <button
+                        key={session.session_path}
+                        type="button"
+                        onClick={() => onOpenSession(session.session_path)}
+                        className="flex min-h-10 items-center justify-between gap-3 rounded-lg px-3 text-left transition hover:bg-white/[0.045]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[12px] font-medium text-[var(--mimir-text)]">
+                            {session.source_name || 'Previous scan'}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] text-[var(--mimir-text-subtle)]">
+                            {session.incidents} incidents
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-[11px] text-[var(--mimir-text-subtle)]">
+                          {session.created_at ? new Date(session.created_at).toLocaleString() : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              )}
+
               <ReadinessPanel
                 systemCheck={systemCheck}
                 isCheckingSystem={isCheckingSystem}
@@ -1018,21 +1085,21 @@ export function ImportPanel({
               <button
                 onClick={onChooseFolder}
                 disabled={isWorking}
-                className={`group flex min-h-[300px] flex-1 items-center justify-center rounded-lg border border-dashed px-6 text-center transition disabled:cursor-wait disabled:opacity-70 ${
+                className={`group flex min-h-[268px] flex-1 items-center justify-center rounded-2xl border border-dashed px-6 text-center transition disabled:cursor-wait disabled:opacity-70 ${
                   isDraggingFolder
-                    ? 'border-white/38 bg-white/[0.07]'
-                    : 'border-[var(--mimir-border-strong)] bg-black/22 hover:border-white/24 hover:bg-white/[0.032]'
+                    ? 'border-[rgba(157,183,170,0.46)] bg-[var(--mimir-accent-soft)]'
+                    : 'border-[var(--mimir-border-strong)] bg-black/22 hover:border-[rgba(157,183,170,0.28)] hover:bg-white/[0.032]'
                 }`}
               >
                 <div className="max-w-[520px]">
-                  <div className="mx-auto mb-7 grid h-16 w-16 place-items-center rounded-full bg-white/[0.055] text-[30px] font-light text-[var(--mimir-text)] transition group-hover:bg-white/[0.08]">
+                  <div className="mx-auto mb-7 grid h-16 w-16 place-items-center rounded-full border border-[rgba(157,183,170,0.16)] bg-[var(--mimir-accent-soft)] text-[30px] font-light text-[var(--mimir-text)] transition group-hover:bg-[rgba(157,183,170,0.18)]">
                     +
                   </div>
                   <div className="text-[22px] font-semibold text-[var(--mimir-text)]">
                     Drop footage folder or USB here
                   </div>
                   <div className="mt-3 text-[14px] leading-6 text-[var(--mimir-text-muted)]">
-                    Select the USB drive, TeslaCam folder, or any folder containing MP4 clips.
+                    TeslaCam folders and regular MP4 folders both work.
                   </div>
                 </div>
               </button>
@@ -1045,14 +1112,14 @@ export function ImportPanel({
                 <button
                   onClick={onChooseFolder}
                   disabled={isWorking}
-                  className="h-12 rounded-lg bg-white/[0.055] px-5 text-[14px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.09] disabled:cursor-wait disabled:opacity-60"
+                  className="h-11 rounded-full border border-white/[0.065] bg-white/[0.05] px-5 text-[13px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.085] disabled:cursor-wait disabled:opacity-60"
                 >
-                  Choose USB drive or footage folder
+                  Choose footage folder
                 </button>
               </div>
 
               {hasSelectedFolder && (
-                <div className="mt-4 rounded-lg bg-white/[0.032] p-4">
+                <div className="mt-4 rounded-2xl bg-white/[0.032] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
                   <div className="min-w-0">
                     <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
                       Selected footage
@@ -1126,7 +1193,7 @@ export function ImportPanel({
                       <button
                         onClick={onAnalyze}
                         disabled={!canAnalyze}
-                        className="h-12 rounded-lg bg-[var(--mimir-text)] px-7 text-[15px] font-semibold text-black shadow-[0_16px_38px_rgba(255,255,255,0.075)] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/35 disabled:shadow-none"
+                        className="h-12 rounded-full bg-[var(--mimir-text)] px-7 text-[15px] font-semibold text-black shadow-[0_16px_38px_rgba(255,255,255,0.075)] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/35 disabled:shadow-none"
                       >
                         Analyze footage
                       </button>
@@ -1138,11 +1205,9 @@ export function ImportPanel({
               <ExperimentalAiSettings
                 enabled={experimentalAiEnabled}
                 model={experimentalAiModel}
-                budget={experimentalAiBudget}
                 timeoutSec={experimentalAiTimeoutSec}
                 onEnabledChange={onExperimentalAiEnabledChange}
                 onModelChange={onExperimentalAiModelChange}
-                onBudgetChange={onExperimentalAiBudgetChange}
                 onTimeoutSecChange={onExperimentalAiTimeoutSecChange}
               />
             </>
@@ -1161,8 +1226,20 @@ export function ImportPanel({
                       : 'Processing stays on this device.'}
                   </div>
                 </div>
-                <div className="inline-flex rounded-full border border-[var(--mimir-border)] bg-black/18 px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
-                  {formatScanMode(scanMode)}
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-full border border-[var(--mimir-border)] bg-black/18 px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
+                    {formatScanMode(scanMode)}
+                  </div>
+                  {isAnalyzing && (
+                    <button
+                      type="button"
+                      onClick={onCancelScan}
+                      disabled={isCancellingScan}
+                      className="h-8 rounded-full border border-white/[0.08] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] disabled:opacity-50"
+                    >
+                      {isCancellingScan ? 'Stopping...' : 'Cancel scan'}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1199,18 +1276,18 @@ export function ImportPanel({
                 </div>
 
                 <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
-                  {percent === null ? (
+                  {displayPercent === null ? (
                     <div className="h-full w-1/3 animate-[mimir-progress-pulse_1.4s_ease-in-out_infinite] rounded-full bg-white/55" />
                   ) : (
                     <div
                       className="h-full rounded-full bg-[var(--mimir-text)] transition-all duration-300"
-                      style={{ width: `${percent}%` }}
+                      style={{ width: `${displayPercent}%` }}
                     />
                   )}
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-[var(--mimir-text-subtle)]">
-                  {percent !== null && <span>{Math.round(percent)}%</span>}
+                  {displayPercent !== null && <span>{Math.round(displayPercent)}%</span>}
                   {typeof scanProgress?.incidents_created === 'number' && (
                     <span>{scanProgress.incidents_created} incidents found</span>
                   )}
@@ -1218,16 +1295,18 @@ export function ImportPanel({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-2">
+              <div className="mt-4 grid gap-2" role="list" aria-label="Scan progress">
                 {scanStages.map((stage, index) => {
                   const status = stageStatus(index, currentStageIndex, scanState)
 
                   return (
                   <div
                     key={stage.label}
+                    role="listitem"
+                    aria-current={status === 'active' ? 'step' : undefined}
                     className={`flex items-center gap-3 rounded-md border px-3 py-2 text-[13px] transition ${
                       status === 'active'
-                        ? 'border-white/20 bg-white/[0.055] text-[var(--mimir-text)]'
+                        ? 'border-[rgba(157,183,170,0.24)] bg-[var(--mimir-accent-soft)] text-[var(--mimir-text)] shadow-[0_0_28px_rgba(157,183,170,0.06)]'
                         : status === 'complete'
                           ? 'border-[var(--mimir-border)] bg-white/[0.025] text-[var(--mimir-text)]'
                           : status === 'error'
@@ -1236,7 +1315,10 @@ export function ImportPanel({
                     }`}
                   >
                     <StageIcon status={status} />
-                    {stage.label}
+                    <span>{stage.label}</span>
+                    <span className="sr-only">
+                      {status === 'active' ? 'in progress' : status === 'complete' ? 'complete' : status === 'error' ? 'failed' : 'pending'}
+                    </span>
                   </div>
                 )})}
               </div>

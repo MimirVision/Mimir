@@ -78,6 +78,11 @@ export interface MimirIncident {
   event_id?: number | string | null
   event_group_id?: string | null
   event_timestamp?: string | null
+  display_title?: string | null
+  display_timestamp?: string | null
+  source_filename?: string | null
+  source_stem?: string | null
+  filename_timestamp_detected?: boolean | null
   event_folder?: string | null
   source_category?: string | null
   severity?: string | null
@@ -152,6 +157,8 @@ export interface MimirIncident {
   key_moments?: MimirTimelineMarker[] | null
   primary_key_moment_sec?: number | null
   primary_key_moment_label?: string | null
+  user_key_moment_sec?: number | null
+  user_key_moment_updated_at?: string | null
   key_moment_version?: string | null
   ai_reviewed?: boolean | null
   ai_evidence?: unknown
@@ -171,6 +178,16 @@ export interface MimirSession {
   schema_version?: string
   scanner_version?: string
   core_version?: string
+  core_build_id?: string
+  generated_by?: string
+  backend_runtime?: string
+  scan_command_version?: string
+  feature_flags?: Record<string, boolean | string | number | null | undefined>
+  session_created_at?: string
+  session_id?: string
+  session_output_dir?: string
+  session_archive_path?: string
+  output_path?: string
   evidence_version?: string
   thumbnail_version?: string
   key_moment_version?: string
@@ -270,10 +287,13 @@ export type SessionLoadState = 'idle' | 'loading' | 'loaded' | 'missing' | 'erro
 export type ScanRunState = 'idle' | 'running' | 'complete' | 'error'
 
 export interface BackendProgress {
+  protocol_version?: string
+  session_id?: string
   stage?: string
   message?: string
   current_video?: string
   current?: number
+  completed?: number
   total?: number
   percent?: number | null
   elapsed_sec?: number
@@ -282,6 +302,19 @@ export interface BackendProgress {
   ai_calls?: number
   scan_engine?: string
   enhanced_ai_available?: boolean
+}
+
+export interface SessionHistoryEntry {
+  session_id: string
+  session_path: string
+  source_name: string
+  source_path: string
+  created_at: string
+  incidents: number
+  important: number
+  review: number
+  ignore: number
+  modified_time: string
 }
 
 export interface SystemCheckItem {
