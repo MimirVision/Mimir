@@ -1,0 +1,51 @@
+{
+  "schema_version": "mimir_baseline_manifest_v1",
+  "baseline_id": "free-beta-baseline-0.5.0",
+  "recorded_at": "2026-07-22T10:15:00Z",
+  "release_channel": "internal_free_beta",
+  "external_distribution_approved": false,
+  "frontend": {
+    "repository": "C:\\Mimir",
+    "commit": "6110419fe302aac8e69aa5d08a48d07d634c05c4",
+    "tag": "free-beta-baseline-0.5.0",
+    "installer_filename": "Mimir_0.5.0-beta.1_x64-setup.exe",
+    "installer_size_bytes": 181928139,
+    "installer_sha256": "59a099dfb644922b5139bc54b73034457ed0cae6ca9861e0d188c9b789383cbd",
+    "installer_signed": false
+  },
+  "detector": {
+    "detector_id": "rfdetr_nano_coco",
+    "detector_version": "rfdetr-1.8.3-nano-onnx-384",
+    "model_sha256": "1c7e251f349923a9baf31bed00532a7f487b2d03ef28f357c8e140c00214157c",
+    "model_size_bytes": 113156831,
+    "license": "Apache-2.0"
+  },
+  "regression": {
+    "suite_passed": true,
+    "folders_scanned": 2,
+    "labels_matched": 10,
+    "passed": 10,
+    "failed": 0,
+    "critical_failures": 0,
+    "false_importants": 0,
+    "false_ignores": 0,
+    "normal_and_no_object_detection_paths": true
+  },
+  "operational": {
+    "source_videos_hashed": 6,
+    "source_byte_identical": true,
+    "incidents": 6,
+    "scan_runtime_sec": 35.982,
+    "key_moment_version": "key_moments_v3_two_pass_contact_timing",
+    "door_ding_primary_key_moment_sec": 11.6,
+    "rear_impact_primary_key_moment_sec": 12.4
+  },
+  "external_release_blockers": [
+    "locked evaluation coverage",
+    "trusted artifact signatures",
+    "Windows 10 and Windows 11 clean-VM evidence",
+    "accessibility evidence",
+    "signed updater and rollback evidence",
+    "500-scan reliability and release metrics"
+  ]
+}

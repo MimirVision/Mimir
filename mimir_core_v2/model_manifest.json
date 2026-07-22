@@ -1,0 +1,36 @@
+{
+  "manifest_version": "mimir_model_manifest_v1",
+  "detector_id": "rfdetr_nano_coco",
+  "detector_version": "rfdetr-1.8.3-nano-onnx-384",
+  "runtime": "onnxruntime",
+  "architecture": "rf_detr",
+  "model_files": [
+    "models/rfdetr-nano.onnx"
+  ],
+  "models": [
+    {
+      "filename": "models/rfdetr-nano.onnx",
+      "sha256": "1c7e251f349923a9baf31bed00532a7f487b2d03ef28f357c8e140c00214157c",
+      "size_bytes": 113156831,
+      "upstream_model": "RF-DETR Nano",
+      "upstream_package_version": "1.8.3",
+      "export_resolution": 384
+    }
+  ],
+  "license": "Apache-2.0",
+  "license_file": "licenses/RF-DETR-APACHE-2.0.txt",
+  "source_url": "https://github.com/roboflow/rf-detr",
+  "commercial_distribution_approved": true,
+  "release_blocker": false,
+  "purpose": "person and vehicle candidate detection",
+  "input_size": 384,
+  "confidence_threshold": 0.3,
+  "max_detections_per_frame": 20,
+  "person_class_ids": [1],
+  "vehicle_class_ids": [3, 4, 6, 8],
+  "limitations": [
+    "Bounding boxes do not prove physical contact.",
+    "Vehicle doors are not a dedicated class.",
+    "Contact timing still requires Mimir temporal motion and ego-zone analysis."
+  ]
+}

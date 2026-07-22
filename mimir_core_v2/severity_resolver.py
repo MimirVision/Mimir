@@ -41,6 +41,8 @@ def _has_contact_impact_or_tampering(evidence: dict) -> bool:
         or _bool(evidence, "possible_contact")
         or _bool(evidence, "hard_contact_candidate")
         or _bool(evidence, "rear_impact_candidate")
+        or _bool(evidence, "no_yolo_motion_impact_candidate")
+        or _bool(evidence, "crash_safety_triggered")
         or _level(evidence, "impact_level") in {"LOW", "MEDIUM", "HIGH"}
         or _level(evidence, "contact_level") in {"LOW", "MEDIUM", "HIGH"}
     )
@@ -52,6 +54,8 @@ def important_evidence_reasons(local_evidence: dict) -> list[str]:
 
     if _bool(evidence, "crash_safety_triggered"):
         reasons.append("crash_safety_triggered")
+    if _bool(evidence, "no_yolo_motion_impact_candidate"):
+        reasons.append("no_yolo_motion_impact_candidate")
     if _level(evidence, "impact_level") == "HIGH":
         reasons.append("impact_level=HIGH")
     if _level(evidence, "contact_level") == "HIGH":
@@ -83,16 +87,11 @@ def ai_hard_evidence_reasons(ai_evidence: dict | None) -> list[str]:
     for field in (
         "visible_contact",
         "visible_impact",
-        "person_interaction",
         "tampering",
         "door_handle_attempt",
     ):
         if _bool(evidence, field):
             reasons.append(f"ai_{field}")
-
-    scene_type = str(evidence.get("scene_type") or "").strip().lower()
-    if scene_type in {"possible_contact", "possible_impact", "tampering"}:
-        reasons.append(f"ai_scene_type={scene_type}")
 
     return reasons
 
@@ -191,6 +190,17 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         "impact_candidate_score": evidence.get("impact_candidate_score", 0.0),
         "hard_contact_candidate": bool(evidence.get("hard_contact_candidate")),
         "rear_impact_candidate": bool(evidence.get("rear_impact_candidate")),
+        "object_contact_candidate": bool(evidence.get("object_contact_candidate")),
+        "object_contact_used_for_contact": bool(evidence.get("object_contact_used_for_contact")),
+        "object_touching_ego_vehicle": bool(evidence.get("object_touching_ego_vehicle")),
+        "object_contact_score": evidence.get("object_contact_score", 0.0),
+        "contact_object_class": evidence.get("contact_object_class", ""),
+        "contact_object_type": evidence.get("contact_object_type", ""),
+        "object_contact_reasons": evidence.get("object_contact_reasons", []),
+        "object_detection_available": bool(evidence.get("object_detection_available")),
+        "no_yolo_motion_impact_candidate": bool(evidence.get("no_yolo_motion_impact_candidate")),
+        "crash_safety_triggered": bool(evidence.get("crash_safety_triggered")),
+        "crash_safety_reasons": evidence.get("crash_safety_reasons", []),
         "motion_spike_ratio": evidence.get("motion_spike_ratio", 0.0),
         "camera_shake_score": evidence.get("camera_shake_score", 0.0),
         "strong_impact_like_motion": bool(evidence.get("strong_impact_like_motion")),
@@ -201,14 +211,19 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         "severity_floor_applied": False,
         "severity_floor_reason": "",
         "ai_blocked_reason": "",
+        "ai_scene_type": str(ai.get("scene_type") or ""),
+        "ai_recommended_severity": _ai_recommendation(ai),
+        "ai_confidence": ai.get("confidence", 0.0),
+        "ai_hard_evidence_reasons": [],
     }
 
     hard_reasons = important_evidence_reasons(evidence)
     ai_hard_reasons = ai_hard_evidence_reasons(ai)
-    hard_reasons.extend(ai_hard_reasons)
     hard_important = bool(hard_reasons)
+    hard_guardrail = hard_important or bool(ai_hard_reasons)
     debug["important_evidence_found"] = hard_important
     debug["important_evidence_reasons"] = hard_reasons
+    debug["ai_hard_evidence_reasons"] = ai_hard_reasons
 
     has_video = bool(evidence.get("has_video", True))
     severity = "IGNORE" if has_video else "REVIEW"
@@ -248,6 +263,12 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
     if _bool(evidence, "rear_impact_candidate"):
         floor_reasons.append("rear_impact_candidate requires IMPORTANT")
         severity = "IMPORTANT"
+    if _bool(evidence, "no_yolo_motion_impact_candidate"):
+        floor_reasons.append("no_yolo_motion_impact_candidate requires IMPORTANT")
+        severity = "IMPORTANT"
+    if _bool(evidence, "crash_safety_triggered"):
+        floor_reasons.append("crash_safety_triggered requires IMPORTANT")
+        severity = "IMPORTANT"
     if _level(evidence, "impact_level") == "HIGH":
         floor_reasons.append("impact_level HIGH requires IMPORTANT")
         severity = "IMPORTANT"
@@ -269,12 +290,26 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         severity = _max_severity(severity, "REVIEW")
         reasons.append("Uncertain local evidence.")
 
-    if _bool(evidence, "crash_safety_triggered"):
-        if SEVERITY_RANK[severity] < SEVERITY_RANK["REVIEW"]:
-            debug["severity_floor_applied"] = True
-            debug["severity_floor_reason"] = "crash_safety_triggered requires at least REVIEW"
+    ai_floor_reasons: list[str] = []
+    if _bool(ai, "visible_contact"):
         severity = _max_severity(severity, "REVIEW")
-        reasons.append("Crash safety trigger.")
+        ai_floor_reasons.append("AI visible_contact requires at least REVIEW")
+        if event_type in {"normal_traffic", "person_passby", "person_near_vehicle", "single_camera_event", "multi_camera_event"}:
+            event_type = "possible_contact"
+    if _bool(ai, "visible_impact"):
+        severity = _max_severity(severity, "REVIEW")
+        ai_floor_reasons.append("AI visible_impact requires at least REVIEW")
+        if event_type in {"normal_traffic", "person_passby", "person_near_vehicle", "single_camera_event", "multi_camera_event"}:
+            event_type = "possible_impact"
+    if _bool(ai, "tampering") or _bool(ai, "door_handle_attempt"):
+        severity = _max_severity(severity, "REVIEW")
+        ai_floor_reasons.append("AI tampering/door-handle evidence requires at least REVIEW")
+    if ai_floor_reasons:
+        debug["severity_floor_applied"] = True
+        debug["severity_floor_reason"] = "; ".join(
+            [value for value in (debug.get("severity_floor_reason", ""), *ai_floor_reasons) if value]
+        )
+        reasons.extend(ai_floor_reasons)
 
     if hard_important:
         severity = "IMPORTANT"
@@ -282,9 +317,12 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
 
     ai_recommendation = _ai_recommendation(ai)
     if ai_recommendation == "IMPORTANT":
-        if hard_important:
+        if hard_guardrail:
             severity = "IMPORTANT"
-            reasons.append("AI supported by hard local evidence.")
+            if ai_hard_reasons and not hard_important:
+                debug["important_evidence_found"] = True
+                debug["important_evidence_reasons"] = ai_hard_reasons
+            reasons.append("AI IMPORTANT recommendation was supported by hard contact, impact, or tampering evidence.")
         else:
             debug["ai_blocked_reason"] = "AI escalation blocked: no hard contact, impact, or tampering evidence."
             reasons.append(debug["ai_blocked_reason"])
@@ -294,7 +332,7 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
             reasons.append("AI recommended review.")
 
     cap_reason = ""
-    if not hard_important:
+    if not hard_guardrail:
         if _bool(evidence, "normal_traffic") or _bool(evidence, "normal_traffic_evidence"):
             cap_reason = "normal traffic capped at IGNORE without hard evidence"
             severity = _min_severity(severity, "IGNORE")

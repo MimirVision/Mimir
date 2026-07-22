@@ -6,6 +6,14 @@
     "notes": "Current mixed test folder with normal clips, door dings, and rear-end."
   },
   {
+    "name": "current_crash_door_ding_no_yolo",
+    "input": "C:\\Mimir\\Test",
+    "required": true,
+    "source_set": "current_crash_door_ding_set",
+    "extra_args": ["--disable-yolo"],
+    "notes": "Ensures hard rear-end is still Important when object detection is unavailable."
+  },
+  {
     "name": "known_person_near_set",
     "input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
     "required": false,

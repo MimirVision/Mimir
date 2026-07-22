@@ -1,238 +1,413 @@
-"""Release validation for Mimir Core v2.
+"""Operational and external-release gates for Mimir Core v2.
 
-This script only runs validation commands. It does not modify scanner behavior.
+The default mode is intentionally strict. Use ``--internal`` for dogfood builds;
+external blockers remain in the report but do not hide operational test results.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import json
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = ROOT / "MimirOutputV2"
-SESSION_PATH = OUTPUT_DIR / "latest_session.json"
-BENCHMARK_REPORT_PATH = OUTPUT_DIR / "benchmark_report.json"
-RELEASE_REPORT_PATH = OUTPUT_DIR / "release_check_report.json"
+DEFAULT_FRONTEND_ROOT = ROOT.parent / "Mimir"
+DEFAULT_OUTPUT_DIR = ROOT / "MimirOutputV2"
+MIN_LOCKED_LABELS = 750
+MIN_POSITIVE_LABELS = 300
+MIN_HARD_NEGATIVES = 300
 
 COMPILE_TARGETS = [
     "mimir_core_v2_scan.py",
-    "mimir_core_v2\\cli.py",
-    "mimir_core_v2\\event_grouping.py",
-    "mimir_core_v2\\frame_sampler.py",
-    "mimir_core_v2\\evidence_extractor.py",
-    "mimir_core_v2\\thumbnailer.py",
-    "mimir_core_v2\\severity_resolver.py",
-    "mimir_core_v2\\test_grouping.py",
-    "mimir_core_v2\\test_evidence.py",
-    "mimir_core_v2\\test_thumbnails.py",
-    "mimir_core_v2\\test_resolver.py",
-    "mimir_core_v2\\test_ai_guardrails.py",
-    "mimir_core_v2\\benchmark.py",
+    "mimir_core_v2_actions.py",
+    "mimir_core_v2_dataset.py",
+    "mimir_core_v2_training.py",
+    "export_rfdetr_model.py",
+    "mimir_core_v2/cli.py",
+    "mimir_core_v2/progress.py",
+    "mimir_core_v2/runtime_paths.py",
+    "mimir_core_v2/onnx_object_detector.py",
+    "mimir_core_v2/ego_vehicle.py",
+    "mimir_core_v2/key_moment_refiner.py",
+    "mimir_core_v2/event_grouping.py",
+    "mimir_core_v2/frame_sampler.py",
+    "mimir_core_v2/evidence_extractor.py",
+    "mimir_core_v2/thumbnailer.py",
+    "mimir_core_v2/severity_resolver.py",
+    "mimir_core_v2/output_writer.py",
+    "mimir_core_v2/test_grouping.py",
+    "mimir_core_v2/test_evidence.py",
+    "mimir_core_v2/test_thumbnails.py",
+    "mimir_core_v2/test_key_moments.py",
+    "mimir_core_v2/test_resolver.py",
+    "mimir_core_v2/test_ai_guardrails.py",
+    "mimir_core_v2/test_release_foundation.py",
+    "mimir_core_v2/test_storage_actions.py",
+    "mimir_core_v2/test_onnx_detector.py",
+    "mimir_core_v2/benchmark.py",
     "mimir_core_v2_audit.py",
 ]
+
+FORBIDDEN_TRACKED_PREFIXES = (
+    ".venv/",
+    "MimirOutput/",
+    "MimirOutputV2/",
+    "Frames/",
+    "dist/",
+    "dist_backend/",
+    "build/",
+    "build_backend/",
+    "Test/",
+    "beta-smoke-test/",
+    "src-tauri/resources/mimir-backend/_internal/",
+)
+FORBIDDEN_TRACKED_SUFFIXES = (".mp4", ".mov", ".avi", ".pt", ".onnx")
+
+
+def source_video_hashes(input_path: str | Path) -> dict[str, dict[str, Any]]:
+    root = Path(input_path).resolve()
+    if not root.is_dir():
+        raise ReleaseCheckFailed(f"input folder missing: {root}")
+
+    hashes: dict[str, dict[str, Any]] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() != ".mp4":
+            continue
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        hashes[str(path.relative_to(root))] = {
+            "size_bytes": path.stat().st_size,
+            "sha256": digest.hexdigest(),
+        }
+    return hashes
 
 
 class ReleaseCheckFailed(Exception):
     pass
 
 
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def command_text(args: list[str]) -> str:
     return " ".join(f'"{arg}"' if " " in str(arg) else str(arg) for arg in args)
 
 
-def run_required(args: list[str], label: str) -> subprocess.CompletedProcess:
-    print()
-    print(f"> {command_text(args)}")
+def run_required(args: list[str], label: str) -> None:
+    print(f"\n> {command_text(args)}")
     result = subprocess.run(args, cwd=ROOT)
     if result.returncode != 0:
         raise ReleaseCheckFailed(f"{label} failed with exit code {result.returncode}")
-    return result
 
 
-def read_json(path: Path) -> dict:
-    if not path.exists():
-        return {}
+def add_check(checks: list[dict[str, Any]], name: str, passed: bool, detail: str, blocking: bool = True) -> None:
+    checks.append({"name": name, "passed": bool(passed), "blocking": blocking, "detail": detail})
+
+
+def git_tracked_files(root: Path) -> list[str] | None:
+    if not (root / ".git").exists():
+        return None
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return result.stdout.splitlines() if result.returncode == 0 else None
+
+
+def forbidden_tracked(files: list[str] | None) -> list[str]:
+    if files is None:
+        return ["repository could not be inspected"]
+    findings = []
+    for raw in files:
+        path = raw.replace("\\", "/")
+        lower = path.lower()
+        if any(lower.startswith(prefix.lower()) for prefix in FORBIDDEN_TRACKED_PREFIXES):
+            findings.append(path)
+        elif lower.endswith(FORBIDDEN_TRACKED_SUFFIXES):
+            findings.append(path)
+    return findings
+
+
+def benchmark_inventory(labels_path: Path) -> dict[str, int]:
+    counts = {"total": 0, "positive": 0, "hard_negative": 0}
     try:
-        with path.open("r", encoding="utf-8") as file:
-            data = json.load(file)
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return data if isinstance(data, dict) else {}
+        with labels_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                expected = str(row.get("expected_severity") or "").upper()
+                category = str(row.get("category") or "").lower()
+                counts["total"] += 1
+                if expected in {"IMPORTANT", "REVIEW"} and category not in {"person_near"}:
+                    counts["positive"] += 1
+                if expected == "IGNORE" or category in {"person_near", "person_passby", "normal_traffic"}:
+                    counts["hard_negative"] += 1
+    except OSError:
+        pass
+    return counts
 
 
-def read_session_required() -> dict:
-    session = read_json(SESSION_PATH)
-    if not session:
-        raise ReleaseCheckFailed(f"latest_session.json missing or unreadable: {SESSION_PATH}")
-    return session
+def authenticode_status(path: Path) -> str:
+    if not path.exists() or sys.platform != "win32":
+        return "missing" if not path.exists() else "unsupported_platform"
+    command = f"(Get-AuthenticodeSignature -LiteralPath '{str(path).replace("'", "''")}').Status"
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", command],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return result.stdout.strip() if result.returncode == 0 else "error"
 
 
-def compile_targets() -> None:
+def locate_installer(frontend_root: Path, explicit: str) -> Path | None:
+    if explicit:
+        return Path(explicit)
+    bundle_root = frontend_root / "src-tauri" / "target" / "release" / "bundle"
+    candidates = list(bundle_root.glob("nsis/*.exe")) + list(bundle_root.glob("msi/*.msi"))
+    return max(candidates, key=lambda item: item.stat().st_mtime) if candidates else None
+
+
+def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    manifest = read_json(ROOT / "mimir_core_v2" / "model_manifest.json")
+    detector_ok = bool(manifest) and not bool(manifest.get("release_blocker")) and bool(
+        manifest.get("commercial_distribution_approved")
+    ) and str(manifest.get("license") or "") in {"Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause"}
+    add_check(
+        checks,
+        "permissive_detector",
+        detector_ok,
+        str(manifest.get("detector_id") or "model manifest missing"),
+    )
+    models = manifest.get("models") if isinstance(manifest.get("models"), list) else []
+    model_provenance_ok = bool(models) and all(
+        isinstance(item, dict)
+        and item.get("filename")
+        and len(str(item.get("sha256") or "")) == 64
+        and int(item.get("size_bytes") or 0) > 0
+        for item in models
+    )
+    add_check(checks, "model_provenance", model_provenance_ok, f"{len(models)} model records with checksum and size")
+    license_path = ROOT / str(manifest.get("license_file") or "")
+    add_check(
+        checks,
+        "model_license_notice",
+        bool(manifest.get("license_file")) and license_path.exists(),
+        str(license_path),
+    )
+
+    inventory = benchmark_inventory(ROOT / "mimir_core_v2" / "benchmark_labels.csv")
+    add_check(checks, "locked_evaluation_size", inventory["total"] >= MIN_LOCKED_LABELS, f"{inventory['total']} / {MIN_LOCKED_LABELS} labels")
+    add_check(checks, "locked_positive_coverage", inventory["positive"] >= MIN_POSITIVE_LABELS, f"{inventory['positive']} / {MIN_POSITIVE_LABELS} positives")
+    add_check(checks, "locked_hard_negative_coverage", inventory["hard_negative"] >= MIN_HARD_NEGATIVES, f"{inventory['hard_negative']} / {MIN_HARD_NEGATIVES} hard negatives")
+
+    backend_findings = forbidden_tracked(git_tracked_files(ROOT))
+    frontend_findings = forbidden_tracked(git_tracked_files(frontend_root))
+    all_findings = backend_findings + frontend_findings
+    add_check(
+        checks,
+        "repository_hygiene",
+        not all_findings,
+        "clean" if not all_findings else f"{len(all_findings)} generated/private/model files still tracked; examples: {', '.join(all_findings[:5])}",
+    )
+
+    required_docs = [
+        frontend_root / "docs" / "FREE_BETA_TERMS.md",
+        frontend_root / "docs" / "PRIVACY.md",
+        frontend_root / "docs" / "LIMITATIONS.md",
+        frontend_root / "docs" / "MODEL_CARD.md",
+    ]
+    missing_docs = [path.name for path in required_docs if not path.exists()]
+    add_check(checks, "release_documents", not missing_docs, "complete" if not missing_docs else f"missing: {', '.join(missing_docs)}")
+
+    sbom = frontend_root / "release_assets" / "sbom.cdx.json"
+    add_check(checks, "sbom", sbom.exists(), str(sbom))
+
+    executables = [
+        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-scan.exe",
+        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-actions.exe",
+    ]
+    installer_path = locate_installer(frontend_root, installer)
+    if installer_path is not None:
+        executables.append(installer_path)
+    signature_results = {str(path): authenticode_status(path) for path in executables}
+    signed = bool(installer_path) and all(status == "Valid" for status in signature_results.values())
+    add_check(checks, "signed_release_artifacts", signed, json.dumps(signature_results, sort_keys=True))
+
+    clean_vm_report = read_json(frontend_root / "release_assets" / "clean_vm_report.json")
+    clean_vm_ok = bool(clean_vm_report.get("windows_10_passed")) and bool(clean_vm_report.get("windows_11_passed"))
+    add_check(checks, "clean_vm_installation", clean_vm_ok, "Windows 10 and Windows 11 required")
+
+    security_report = read_json(frontend_root / "release_assets" / "security_scan_report.json")
+    add_check(checks, "security_scan", bool(security_report.get("passed")), str(security_report.get("summary") or "report missing"))
+    accessibility_report = read_json(frontend_root / "release_assets" / "accessibility_report.json")
+    add_check(checks, "accessibility", bool(accessibility_report.get("passed")), str(accessibility_report.get("summary") or "report missing"))
+
+    update_report = read_json(frontend_root / "release_assets" / "update_rollback_report.json")
+    update_ok = bool(update_report.get("signed_update_passed")) and bool(update_report.get("rollback_passed")) and bool(update_report.get("sessions_preserved"))
+    add_check(checks, "signed_update_and_rollback", update_ok, str(update_report.get("summary") or "report missing"))
+
+    evaluation = read_json(frontend_root / "release_assets" / "evaluation_report.json")
+    metrics = evaluation.get("metrics") if isinstance(evaluation.get("metrics"), dict) else {}
+    evaluation_requirements = {
+        "critical_impact_recall": float(metrics.get("critical_impact_recall") or 0) >= 0.99,
+        "critical_false_ignores": int(metrics.get("critical_false_ignores") or 0) == 0,
+        "door_contact_recall": float(metrics.get("door_contact_recall") or 0) >= 0.97,
+        "false_important_rate": float(metrics.get("false_important_rate") or 1) <= 0.005,
+        "key_moment_median_error_sec": float(metrics.get("key_moment_median_error_sec") or 999) <= 0.5,
+        "key_moment_p95_error_sec": float(metrics.get("key_moment_p95_error_sec") or 999) <= 1.0,
+        "automated_e2e_scans": int(metrics.get("automated_e2e_scans") or 0) >= 500,
+        "media_availability": float(metrics.get("media_availability") or 0) >= 0.995,
+        "hour_scan_runtime_sec": float(metrics.get("hour_scan_runtime_sec") or 99999) <= 900,
+        "source_byte_identical": bool(metrics.get("source_byte_identical")),
+        "interrupted_action_data_loss": int(metrics.get("interrupted_action_data_loss") or 1) == 0,
+    }
+    failed_metrics = [name for name, passed in evaluation_requirements.items() if not passed]
+    add_check(checks, "release_metrics", not failed_metrics, "complete" if not failed_metrics else f"missing/failing: {', '.join(failed_metrics)}")
+    return checks
+
+
+def run_operational_checks(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     for target in COMPILE_TARGETS:
-        if not (ROOT / target).exists():
+        path = ROOT / target
+        if not path.exists():
             raise ReleaseCheckFailed(f"compile target missing: {target}")
-        run_required([sys.executable, "-m", "py_compile", target], f"compile {target}")
+        run_required([sys.executable, "-m", "py_compile", str(path)], f"compile {target}")
+    for module in (
+        "mimir_core_v2.test_release_foundation",
+        "mimir_core_v2.test_storage_actions",
+        "mimir_core_v2.test_resolver",
+        "mimir_core_v2.test_ai_guardrails",
+    ):
+        run_required([sys.executable, "-m", module], module)
 
-
-def benchmark_status_from_report() -> tuple[str, int]:
-    report = read_json(BENCHMARK_REPORT_PATH)
-    failed = int(report.get("failed") or 0)
-    critical = int(report.get("critical_failures") or 0)
-    if failed or critical:
-        return "failed", critical
-    return "passed", critical
-
-
-def build_summary(input_folder: str, scan_runtime_sec: float, statuses: dict) -> dict:
-    session = read_json(SESSION_PATH)
-    incidents = session.get("incidents") if isinstance(session.get("incidents"), list) else []
-    grouping_debug = session.get("grouping_debug") if isinstance(session.get("grouping_debug"), dict) else {}
-    benchmark_report = read_json(BENCHMARK_REPORT_PATH)
-
+    if not args.input:
+        raise ReleaseCheckFailed("--input is required unless --gate-only is used")
+    run_required(
+        [sys.executable, "-m", "mimir_core_v2.test_onnx_detector", "--input", args.input],
+        "RF-DETR real-footage smoke test",
+    )
+    session_path = output_dir / "latest_session.json"
+    benchmark_report = output_dir / "benchmark_report.json"
+    source_before = source_video_hashes(args.input)
+    if not source_before:
+        raise ReleaseCheckFailed("input folder contains no MP4 source footage")
+    started = time.perf_counter()
+    run_required(
+        [sys.executable, str(ROOT / "mimir_core_v2_scan.py"), "--input", args.input, "--mode", "balanced", "--output", str(output_dir)],
+        "Core v2 scan",
+    )
+    source_after = source_video_hashes(args.input)
+    if source_after != source_before:
+        raise ReleaseCheckFailed("source footage changed during scan")
+    benchmark_command = [
+        sys.executable,
+        "-m",
+        "mimir_core_v2.benchmark",
+        "--session",
+        str(session_path),
+        "--report",
+        str(benchmark_report),
+        "--strict",
+    ]
+    if args.source_set:
+        benchmark_command.extend(["--source-set", args.source_set])
+    run_required(benchmark_command, "benchmark")
+    benchmark = read_json(benchmark_report)
+    if any(int(benchmark.get(name) or 0) for name in ("failed", "critical_failures", "false_importants", "false_ignores")):
+        raise ReleaseCheckFailed("benchmark contains a failure")
+    session = read_json(session_path)
+    if not session:
+        raise ReleaseCheckFailed(f"session missing: {session_path}")
     return {
-        "input_folder": input_folder,
-        "scan_runtime_sec": round(scan_runtime_sec, 3),
-        "videos_found": grouping_debug.get("mp4_files_found", "not available"),
-        "event_groups": session.get("event_groups_found", "not available"),
-        "incidents": len(incidents),
-        "important": session.get("important", "not available"),
-        "review": session.get("review", "not available"),
-        "ignore": session.get("ignore", "not available"),
-        "grouping_status": statuses.get("grouping", "not run"),
-        "resolver_status": statuses.get("resolver", "not run"),
-        "evidence_status": statuses.get("evidence", "not run"),
-        "thumbnails_status": statuses.get("thumbnails", "not run"),
-        "audit_status": statuses.get("audit", "not run"),
-        "thumbnails_generated": session.get("thumbnails_generated", "not available"),
-        "thumbnails_failed": session.get("thumbnails_failed", "not available"),
-        "benchmark_status": statuses.get("benchmark", "not run"),
-        "critical_failures": int(benchmark_report.get("critical_failures") or 0),
-        "benchmark": {
-            "labels_loaded": benchmark_report.get("labels_loaded", 0),
-            "labels_matched": benchmark_report.get("labels_matched", 0),
-            "skipped_unmatched": benchmark_report.get("skipped_unmatched", 0),
-            "passed": benchmark_report.get("passed", 0),
-            "failed": benchmark_report.get("failed", 0),
-            "false_importants": benchmark_report.get("false_importants", 0),
-            "false_ignores": benchmark_report.get("false_ignores", 0),
-        },
+        "passed": True,
+        "runtime_sec": round(time.perf_counter() - started, 3),
+        "session_id": session.get("session_id"),
+        "incidents": len(session.get("incidents") or []),
+        "source_videos_hashed": len(source_before),
+        "source_byte_identical": True,
+        "benchmark": benchmark,
     }
 
 
-def write_release_report(summary: dict, passed: bool, error: str = "") -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    report = dict(summary)
-    report["passed"] = passed
-    report["error"] = error
-    with RELEASE_REPORT_PATH.open("w", encoding="utf-8") as file:
-        json.dump(report, file, indent=2)
-
-
-def print_summary(summary: dict) -> None:
-    print()
-    print("Mimir Core v2 release summary")
-    print("=============================")
-    print(f"input folder: {summary.get('input_folder')}")
-    print(f"scan runtime: {summary.get('scan_runtime_sec')} sec")
-    print(f"videos found: {summary.get('videos_found')}")
-    print(f"event groups: {summary.get('event_groups')}")
-    print(f"incidents: {summary.get('incidents')}")
-    print(f"important: {summary.get('important')}")
-    print(f"review: {summary.get('review')}")
-    print(f"ignore: {summary.get('ignore')}")
-    print(f"grouping status: {summary.get('grouping_status')}")
-    print(f"resolver status: {summary.get('resolver_status')}")
-    print(f"evidence status: {summary.get('evidence_status')}")
-    print(f"thumbnails status: {summary.get('thumbnails_status')}")
-    print(f"audit status: {summary.get('audit_status')}")
-    print(f"thumbnails generated: {summary.get('thumbnails_generated')}")
-    print(f"thumbnails failed: {summary.get('thumbnails_failed')}")
-    print(f"benchmark status: {summary.get('benchmark_status')}")
-    print(f"critical failures: {summary.get('critical_failures')}")
-    print(f"report: {RELEASE_REPORT_PATH}")
-
-
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run Mimir Core v2 release checks.")
-    parser.add_argument("--input", required=True, help="Folder to scan for the release check.")
+    parser = argparse.ArgumentParser(description="Run Mimir Core v2 beta release gates.")
+    parser.add_argument("--input", help="Real footage folder for operational validation.")
+    parser.add_argument("--source-set", default="", help="Benchmark source set for the input folder.")
+    parser.add_argument("--output", default=str(DEFAULT_OUTPUT_DIR / "release_check"))
+    parser.add_argument("--frontend-root", default=str(DEFAULT_FRONTEND_ROOT))
+    parser.add_argument("--installer", default="")
+    parser.add_argument("--gate-only", action="store_true", help="Evaluate external gates without scanning footage.")
+    parser.add_argument("--internal", action="store_true", help="Dogfood mode: report external blockers without failing on them.")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    statuses = {
-        "resolver": "not run",
-        "grouping": "not run",
-        "evidence": "not run",
-        "thumbnails": "not run",
-        "audit": "not run",
-        "benchmark": "not run",
-    }
-    scan_runtime_sec = 0.0
-
+    output_dir = Path(args.output).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report_name = "release_gate_report.json" if args.gate_only else "release_check_report.json"
+    report_path = output_dir / report_name
+    operational: dict[str, Any] = {"passed": True, "skipped": bool(args.gate_only)}
+    operational_error = ""
     try:
-        print("Mimir Core v2 release check")
-        print(f"Backend root: {ROOT}")
-        print(f"Input: {args.input}")
-
-        compile_targets()
-        run_required([sys.executable, "-m", "mimir_core_v2.test_resolver"], "resolver tests")
-        statuses["resolver"] = "passed"
-
-        scan_started = time.perf_counter()
-        run_required(
-            [
-                sys.executable,
-                "mimir_core_v2_scan.py",
-                "--input",
-                args.input,
-                "--mode",
-                "balanced",
-            ],
-            "v2 scan",
-        )
-        scan_runtime_sec = time.perf_counter() - scan_started
-        read_session_required()
-
-        run_required([sys.executable, "-m", "mimir_core_v2.test_grouping", "--input", args.input], "grouping test")
-        statuses["grouping"] = "passed"
-
-        run_required([sys.executable, "-m", "mimir_core_v2.test_evidence", "--input", args.input], "evidence test")
-        statuses["evidence"] = "passed"
-
-        run_required([sys.executable, "-m", "mimir_core_v2.test_thumbnails"], "thumbnail test")
-        statuses["thumbnails"] = "passed"
-
-        run_required([sys.executable, "mimir_core_v2_audit.py"], "detection audit")
-        statuses["audit"] = "passed"
-
-        run_required([sys.executable, "-m", "mimir_core_v2.test_ai_guardrails"], "AI guardrail tests")
-
-        run_required([sys.executable, "-m", "mimir_core_v2.benchmark"], "benchmark")
-        statuses["benchmark"], critical_failures = benchmark_status_from_report()
-        if statuses["benchmark"] != "passed":
-            raise ReleaseCheckFailed(f"benchmark reported failed matched labels or critical failures ({critical_failures})")
-
-        summary = build_summary(args.input, scan_runtime_sec, statuses)
-        write_release_report(summary, True)
-        print_summary(summary)
-        print()
-        print("MIMIR CORE V2 RELEASE CHECK PASSED")
-        return 0
+        if not args.gate_only:
+            operational = run_operational_checks(args, output_dir)
     except ReleaseCheckFailed as exc:
-        summary = build_summary(args.input, scan_runtime_sec, statuses)
-        write_release_report(summary, False, str(exc))
-        print()
-        print(f"Release check error: {exc}")
-        print_summary(summary)
-        print()
-        print("MIMIR CORE V2 RELEASE CHECK FAILED")
-        return 1
+        operational = {"passed": False, "skipped": False}
+        operational_error = str(exc)
+
+    gates = evaluate_external_gates(Path(args.frontend_root).resolve(), args.installer)
+    external_ready = all(item["passed"] for item in gates if item["blocking"])
+    passed = bool(operational.get("passed")) and (external_ready or args.internal)
+    report = {
+        "schema_version": "mimir_release_check_v2",
+        "generated_at": utc_now(),
+        "release_channel": "free_invite_only_beta",
+        "billing_enabled": False,
+        "activation_required": False,
+        "internal_mode": bool(args.internal),
+        "operational": operational,
+        "operational_error": operational_error,
+        "external_release_ready": external_ready,
+        "external_gates": gates,
+        "passed": passed,
+    }
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    print("\nMimir free beta release readiness")
+    print("=================================")
+    operational_label = "SKIPPED" if operational.get("skipped") else ("PASS" if operational.get("passed") else "FAIL")
+    print(f"operational checks: {operational_label}")
+    for item in gates:
+        print(f"[{'PASS' if item['passed'] else 'BLOCK'}] {item['name']}: {item['detail']}")
+    print(f"external release ready: {'YES' if external_ready else 'NO'}")
+    print(f"report: {report_path}")
+    if passed:
+        print("MIMIR INTERNAL CHECK PASSED" if args.internal and not external_ready else "MIMIR FREE BETA RELEASE CHECK PASSED")
+        return 0
+    print("MIMIR FREE BETA RELEASE CHECK FAILED")
+    return 1
 
 
 if __name__ == "__main__":

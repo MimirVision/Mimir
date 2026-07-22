@@ -128,6 +128,37 @@ def main() -> int:
             {"IMPORTANT"},
         ),
         run_case(
+            "no_yolo_motion_impact_candidate true",
+            {"object_detection_available": False, "no_yolo_motion_impact_candidate": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "crash_safety_triggered true",
+            {"crash_safety_triggered": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "no-YOLO weak motion only",
+            {
+                "object_detection_available": False,
+                "motion_score": 0.01,
+                "max_motion_score": 0.07,
+                "localized_motion_score": 0.08,
+                "motion_spike_ratio": 1.2,
+                "camera_shake_score": 0.01,
+                "impact_level": "NONE",
+                "contact_level": "NONE",
+                "possible_impact": False,
+                "possible_contact": False,
+                "no_yolo_motion_impact_candidate": False,
+                "crash_safety_triggered": False,
+            },
+            {},
+            {"IGNORE"},
+        ),
+        run_case(
             "contact_level HIGH",
             {"contact_level": "HIGH"},
             {},
@@ -138,10 +169,6 @@ def main() -> int:
             {"impact_level": "HIGH"},
             {},
             {"IMPORTANT"},
-        ),
-        at_least_review(
-            "crash_safety_triggered true",
-            {"crash_safety_triggered": True},
         ),
         run_case(
             "AI recommends IMPORTANT but local evidence is person_passby only",

@@ -99,11 +99,13 @@ def scan_and_benchmark(entry: dict[str, Any]) -> dict[str, Any]:
         str(input_path),
         "--mode",
         "balanced",
-        "--output-dir",
-        str(output_dir),
     ]
+    extra_args = entry.get("extra_args") if isinstance(entry.get("extra_args"), list) else []
+    scan_args.extend(str(arg) for arg in extra_args)
+    scan_args.extend(["--output-dir", str(output_dir)])
     run_command(scan_args, f"scan {name}")
 
+    source_set = str(entry.get("source_set") or name)
     benchmark_args = [
         sys.executable,
         "-m",
@@ -115,7 +117,7 @@ def scan_and_benchmark(entry: dict[str, Any]) -> dict[str, Any]:
         "--report",
         str(benchmark_report_path),
         "--source-set",
-        name,
+        source_set,
     ]
     run_command(benchmark_args, f"benchmark {name}")
 
@@ -125,6 +127,8 @@ def scan_and_benchmark(entry: dict[str, Any]) -> dict[str, Any]:
         "input": str(input_path),
         "required": bool(entry.get("required")),
         "notes": entry.get("notes", ""),
+        "source_set": source_set,
+        "extra_args": [str(arg) for arg in extra_args],
         "output_dir": str(output_dir),
         "session_path": str(session_path),
         "benchmark_report_path": str(benchmark_report_path),

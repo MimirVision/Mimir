@@ -1,6 +1,8 @@
 
 # Python / local env
 .venv/
+.venv-runtime/
+.venv-training/
 __pycache__/
 *.py[cod]
 *.pyo
@@ -10,6 +12,18 @@ dist/
 # Runtime / generated output
 Frames/
 MimirOutput/
+MimirOutputV2/
+Important/
+Review/
+Ignore/
 *.mp4_event_*.jpg
+dist_backend/
+build_backend/
+*.pt
+models/
+training_data/
+training_runs/
+.training-cache/
+*.onnx
 # Local logs
 *.log

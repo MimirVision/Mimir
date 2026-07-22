@@ -1,0 +1,6 @@
+# Optional development environment. Never bundled with the free beta runtime.
+rfdetr[onnx]==1.8.3
+huggingface-hub==0.36.0
+opencv-python==4.13.0.92
+numpy==2.5.0
+pillow==12.3.0

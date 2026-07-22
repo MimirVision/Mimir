@@ -6,6 +6,8 @@ then uses PyInstaller to produce beta executables under dist_backend.
 
 from __future__ import annotations
 
+import json
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +36,12 @@ CORE_MODULES = [
     ROOT / "mimir_core_v2" / "event_grouping.py",
     ROOT / "mimir_core_v2" / "frame_sampler.py",
     ROOT / "mimir_core_v2" / "evidence_extractor.py",
+    ROOT / "mimir_core_v2" / "ego_vehicle.py",
+    ROOT / "mimir_core_v2" / "key_moment_refiner.py",
+    ROOT / "mimir_core_v2" / "model_manifest.py",
+    ROOT / "mimir_core_v2" / "onnx_object_detector.py",
+    ROOT / "mimir_core_v2" / "progress.py",
+    ROOT / "mimir_core_v2" / "runtime_paths.py",
     ROOT / "mimir_core_v2" / "thumbnailer.py",
     ROOT / "mimir_core_v2" / "ai_reviewer.py",
     ROOT / "mimir_core_v2" / "severity_resolver.py",
@@ -44,6 +52,9 @@ CORE_MODULES = [
 
 class PackagingError(Exception):
     pass
+
+
+FORBIDDEN_RELEASE_MODULES = ("torch", "torchvision", "ultralytics", "rfdetr")
 
 
 def command_text(args: list[str]) -> str:
@@ -81,6 +92,18 @@ def verify_pyinstaller() -> None:
             "python -m pip install pyinstaller"
         )
     print(f"PyInstaller {result.stdout.strip()} detected")
+
+
+def verify_runtime_environment() -> None:
+    """Reject release builds made from the larger training environment."""
+
+    present = [name for name in FORBIDDEN_RELEASE_MODULES if importlib.util.find_spec(name)]
+    if present:
+        names = ", ".join(present)
+        raise PackagingError(
+            "Release build environment contains training-only modules: "
+            f"{names}. Build with .venv-runtime and requirements-build.txt."
+        )
 
 
 def compile_checks() -> None:
@@ -155,7 +178,7 @@ exec(code, globals_dict)
 
 
 def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
-    return [
+    command = [
         sys.executable,
         "-m",
         "PyInstaller",
@@ -172,6 +195,30 @@ def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
         str(SPEC_DIR),
         str(entrypoint),
     ]
+    if name == "mimir-core-v2-scan":
+        manifest = ROOT / "mimir_core_v2" / "model_manifest.json"
+        if not manifest.exists():
+            raise PackagingError(f"Model manifest is missing: {manifest}")
+        command[-1:-1] = ["--add-data", f"{manifest};mimir_core_v2"]
+        try:
+            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PackagingError(f"Model manifest is invalid: {exc}") from exc
+        for model_name in manifest_data.get("model_files", []):
+            model_path = ROOT / str(model_name)
+            if not model_path.exists():
+                raise PackagingError(f"Required release model is missing: {model_path}")
+            destination = str(Path(str(model_name)).parent).replace("\\", "/") or "."
+            command[-1:-1] = ["--add-data", f"{model_path};{destination}"]
+        license_name = str(manifest_data.get("license_file") or "")
+        if license_name:
+            license_path = ROOT / license_name
+            if not license_path.exists():
+                raise PackagingError(f"Required model license is missing: {license_path}")
+            destination = str(Path(license_name).parent).replace("\\", "/") or "."
+            command[-1:-1] = ["--add-data", f"{license_path};{destination}"]
+        command[-1:-1] = ["--hidden-import", "onnxruntime", "--collect-binaries", "onnxruntime"]
+    return command
 
 
 def build_executable(name: str, entrypoint: Path) -> None:
@@ -179,29 +226,43 @@ def build_executable(name: str, entrypoint: Path) -> None:
     exe_path = DIST_DIR / f"{name}.exe"
     if not exe_path.exists():
         raise PackagingError(f"Expected executable was not created: {exe_path}")
+    verify_analysis_toc(name)
     print(f"created: {exe_path}")
+
+
+def verify_analysis_toc(name: str) -> None:
+    toc_path = WORK_DIR / name / name / "Analysis-00.toc"
+    if not toc_path.exists():
+        raise PackagingError(f"PyInstaller analysis manifest is missing: {toc_path}")
+
+    toc_text = toc_path.read_text(encoding="utf-8", errors="replace").lower()
+    leaked = []
+    for module_name in FORBIDDEN_RELEASE_MODULES:
+        markers = (f"'{module_name}'", f"'{module_name}.", f"\\{module_name}\\")
+        if any(marker in toc_text for marker in markers):
+            leaked.append(module_name)
+    if leaked:
+        raise PackagingError(
+            f"{name}.exe includes training-only modules: {', '.join(leaked)}"
+        )
 
 
 def main() -> int:
     try:
         verify_files()
         verify_pyinstaller()
+        verify_runtime_environment()
         DIST_DIR.mkdir(parents=True, exist_ok=True)
         SPEC_DIR.mkdir(parents=True, exist_ok=True)
         ENTRYPOINT_DIR.mkdir(parents=True, exist_ok=True)
         compile_checks()
 
-        actions_wrapper = ENTRYPOINT_DIR / "mimir_core_v2_actions_entry.py"
-        write_script_wrapper(actions_wrapper, ROOT / "mimir_core_v2_actions.py")
-
         build_executable("mimir-core-v2-scan", ROOT / "mimir_core_v2_scan.py")
-        build_executable("mimir-core-v2-actions", actions_wrapper)
+        build_executable("mimir-core-v2-actions", ROOT / "mimir_core_v2_actions.py")
 
         release_check = ROOT / "mimir_core_v2_release_check.py"
         if release_check.exists():
-            release_wrapper = ENTRYPOINT_DIR / "mimir_core_v2_release_check_entry.py"
-            write_script_wrapper(release_wrapper, release_check)
-            build_executable("mimir-core-v2-release-check", release_wrapper)
+            build_executable("mimir-core-v2-release-check", release_check)
 
         print()
         print("Backend executable build complete")
