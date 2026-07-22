@@ -51,7 +51,12 @@ def read_config(path: Path) -> list[dict[str, Any]]:
     return entries
 
 
-def run_command(args: list[str], label: str) -> subprocess.CompletedProcess[str]:
+def run_command(
+    args: list[str],
+    label: str,
+    *,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
     print()
     print(f"> {' '.join(args)}")
     result = subprocess.run(
@@ -63,7 +68,7 @@ def run_command(args: list[str], label: str) -> subprocess.CompletedProcess[str]
     )
     if result.stdout:
         print(result.stdout.rstrip())
-    if result.returncode != 0:
+    if check and result.returncode != 0:
         raise SuiteError(f"{label} failed with exit code {result.returncode}")
     return result
 
@@ -119,9 +124,23 @@ def scan_and_benchmark(entry: dict[str, Any]) -> dict[str, Any]:
         "--source-set",
         source_set,
     ]
-    run_command(benchmark_args, f"benchmark {name}")
+    benchmark_result = run_command(benchmark_args, f"benchmark {name}", check=False)
+    if not benchmark_report_path.exists():
+        raise SuiteError(
+            f"benchmark {name} failed with exit code {benchmark_result.returncode} "
+            "without writing a report"
+        )
 
     summary = benchmark_summary(benchmark_report_path)
+    benchmark_passed = benchmark_result.returncode == 0 and not any(
+        int(summary.get(key) or 0)
+        for key in (
+            "failed",
+            "critical_failures",
+            "false_importants",
+            "false_ignores",
+        )
+    )
     return {
         "name": name,
         "input": str(input_path),
@@ -132,7 +151,8 @@ def scan_and_benchmark(entry: dict[str, Any]) -> dict[str, Any]:
         "output_dir": str(output_dir),
         "session_path": str(session_path),
         "benchmark_report_path": str(benchmark_report_path),
-        "status": "passed",
+        "status": "passed" if benchmark_passed else "failed",
+        "benchmark_exit_code": benchmark_result.returncode,
         **summary,
     }
 

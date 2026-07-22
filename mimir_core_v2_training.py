@@ -8,16 +8,23 @@ dataset passes rights, leakage, and minimum-size checks.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from mimir_core_v2.dataset_package import exclusion_hashes
+
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 ROOT = Path(__file__).resolve().parent
@@ -310,8 +317,10 @@ def fetch_source(args: argparse.Namespace) -> int:
         raise ValueError(f"automatic retrieval is not allowed for source status: {source.get('status')}")
     if args.include_footage and not args.accept_license:
         raise ValueError("--accept-license is required before downloading Nexar footage")
+    if args.include_footage and not str(args.accepted_by or "").strip():
+        raise ValueError("--accepted-by is required to record who authorized the Nexar license")
     try:
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import HfApi, snapshot_download
     except ImportError as exc:
         raise ValueError("Install requirements-training.txt to retrieve approved datasets") from exc
 
@@ -319,8 +328,14 @@ def fetch_source(args: argparse.Namespace) -> int:
     patterns = ["README.md", "LICENSE", "*.csv"]
     if args.include_footage:
         patterns.extend(["train/**"])
+    if args.include_evaluation_footage:
+        if not args.include_footage:
+            raise ValueError("--include-evaluation-footage requires --include-footage")
+        patterns.extend(["test-public/**", "test-private/**"])
+    repository = str(source["repository"])
+    repository_info = HfApi().dataset_info(repository)
     snapshot_download(
-        repo_id=str(source["repository"]),
+        repo_id=repository,
         repo_type="dataset",
         local_dir=str(output),
         allow_patterns=patterns,
@@ -328,9 +343,14 @@ def fetch_source(args: argparse.Namespace) -> int:
     receipt = {
         "schema_version": "mimir_external_dataset_receipt_v1",
         "source_id": args.source,
+        "repository": repository,
+        "repository_revision": str(repository_info.sha),
         "retrieved_at": utc_now(),
         "include_footage": bool(args.include_footage),
+        "include_evaluation_footage": bool(args.include_evaluation_footage),
         "license_accepted": bool(args.accept_license),
+        "license_accepted_by": str(args.accepted_by or "").strip() or None,
+        "license_acceptance_basis": str(args.acceptance_basis or "").strip() or None,
         "license_url": source.get("license_url"),
         "attribution_required": True,
         "automatic_training": False,
@@ -339,6 +359,210 @@ def fetch_source(args: argparse.Namespace) -> int:
     print(f"Source files retrieved to {output}")
     if not args.include_footage:
         print("Only metadata and license files were retrieved; no footage was downloaded.")
+    return 0
+
+
+def _optional_float(value: object) -> float | None:
+    try:
+        return float(value) if str(value or "").strip() else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _nexar_file_record(
+    path: Path,
+    source_root: Path,
+    partition: str,
+    label: str,
+    metadata: dict[str, str],
+) -> dict[str, Any]:
+    return {
+        "relative_path": path.relative_to(source_root).as_posix(),
+        "sha256": sha256(path),
+        "bytes": path.stat().st_size,
+        "source_partition": partition,
+        "source_label": label,
+        "metadata": metadata,
+    }
+
+
+def prepare_nexar(args: argparse.Namespace) -> int:
+    """Build an auxiliary-only timing manifest from the licensed Nexar source."""
+    source_root = Path(args.source_root).resolve()
+    output = Path(args.output).resolve()
+    receipt_path = source_root / "MIMIR_SOURCE_RECEIPT.json"
+    license_path = source_root / "LICENSE"
+    if not receipt_path.is_file() or not license_path.is_file():
+        raise ValueError("Nexar source receipt and license are required")
+    receipt = read_json(receipt_path)
+    if (
+        receipt.get("source_id") != "nexar_collision_prediction"
+        or receipt.get("include_footage") is not True
+        or receipt.get("license_accepted") is not True
+        or receipt.get("include_evaluation_footage") is not True
+    ):
+        raise ValueError("Nexar footage must have an accepted-license source receipt")
+
+    indexed: list[tuple[Path, str, str, dict[str, str]]] = []
+    for partition in ("train", "test-public", "test-private"):
+        for label in ("positive", "negative"):
+            metadata_path = source_root / partition / label / "metadata.csv"
+            if not metadata_path.is_file():
+                raise ValueError(f"Missing Nexar metadata: {metadata_path}")
+            with metadata_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    filename = str(row.get("file_name") or "").strip()
+                    media_path = metadata_path.parent / filename
+                    if not filename or not media_path.is_file():
+                        raise ValueError(f"Nexar metadata references missing media: {filename}")
+                    indexed.append(
+                        (
+                            media_path,
+                            partition,
+                            label,
+                            {str(key): str(value or "") for key, value in row.items()},
+                        )
+                    )
+    counts = Counter((partition, label) for _, partition, label, _ in indexed)
+    if counts[("train", "positive")] != 750 or counts[("train", "negative")] != 750:
+        raise ValueError(f"Unexpected Nexar training inventory: {dict(counts)}")
+    if sum(counts[("test-public", label)] for label in ("positive", "negative")) != 667:
+        raise ValueError(f"Unexpected Nexar public-test inventory: {dict(counts)}")
+    if sum(counts[("test-private", label)] for label in ("positive", "negative")) != 677:
+        raise ValueError(f"Unexpected Nexar private-test inventory: {dict(counts)}")
+
+    workers = max(1, int(args.workers))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        inventory = list(
+            executor.map(
+                lambda item: _nexar_file_record(item[0], source_root, item[1], item[2], item[3]),
+                indexed,
+            )
+        )
+    hashes = [str(item["sha256"]) for item in inventory]
+    if len(set(hashes)) != len(hashes):
+        raise ValueError("Duplicate Nexar video content was detected")
+
+    split_counts: Counter[str] = Counter()
+    temporal_items: list[dict[str, Any]] = []
+    for label in ("positive", "negative"):
+        class_items = sorted(
+            (
+                item
+                for item in inventory
+                if item["source_partition"] == "train" and item["source_label"] == label
+            ),
+            key=lambda item: str(item["sha256"]),
+        )
+        train_end = int(len(class_items) * 0.9)
+        for index, item in enumerate(class_items):
+            split = "train" if index < train_end else "validation"
+            item["split"] = split
+            split_counts[split] += 1
+            metadata = item["metadata"]
+            event_time = _optional_float(metadata.get("time_of_event")) if label == "positive" else None
+            if label == "positive" and event_time is None:
+                raise ValueError(f"Positive Nexar item has no event time: {item['relative_path']}")
+            media_path = source_root / str(item["relative_path"])
+            temporal_items.append(
+                {
+                    "incident_id": f"nexar_{media_path.stem}",
+                    "source_group_hash": item["sha256"],
+                    "source_dataset": "nexar_collision_prediction",
+                    "source_partition": "train",
+                    "source_label": "collision_or_near_miss" if label == "positive" else "normal_driving",
+                    "split": split,
+                    "media": [str(media_path.resolve())],
+                    "duration_sec": None,
+                    "external_event_time_sec": event_time,
+                    "external_event_target": 1 if label == "positive" else 0,
+                    "external_alert_time_sec": _optional_float(metadata.get("time_of_alert")),
+                    "contact_outcome": "collision_or_near_miss" if label == "positive" else "normal_driving",
+                    "category": "external_collision_timing" if label == "positive" else "external_hard_negative",
+                    "camera": "dashcam_front",
+                    "objects": [],
+                    "geometry_provenance": "motion_only_external_timing",
+                    "conditions": {
+                        "light": metadata.get("light_conditions"),
+                        "weather": metadata.get("weather"),
+                        "scene": metadata.get("scene"),
+                    },
+                }
+            )
+
+    for partition, split in (("test-public", "test_public"), ("test-private", "test_private")):
+        for item in (value for value in inventory if value["source_partition"] == partition):
+            item["split"] = split
+            split_counts[split] += 1
+            metadata = item["metadata"]
+            label = str(item["source_label"])
+            media_path = source_root / str(item["relative_path"])
+            prefix = "public" if partition == "test-public" else "private"
+            temporal_items.append(
+                {
+                    "incident_id": f"nexar_{prefix}_{media_path.stem}",
+                    "source_group_hash": item["sha256"],
+                    "source_dataset": "nexar_collision_prediction",
+                    "source_partition": partition,
+                    "source_label": "collision_or_near_miss" if label == "positive" else "normal_driving",
+                    "split": split,
+                    "media": [str(media_path.resolve())],
+                    "duration_sec": None,
+                    "external_event_time_sec": None,
+                    "external_event_target": 1 if label == "positive" else 0,
+                    "external_time_to_accident_sec": _optional_float(metadata.get("time_to_accident")),
+                    "contact_outcome": "collision_or_near_miss" if label == "positive" else "normal_driving",
+                    "category": "external_collision_prediction" if label == "positive" else "external_hard_negative",
+                    "camera": "dashcam_front",
+                    "objects": [],
+                    "geometry_provenance": "motion_only_external_prediction",
+                    "conditions": {
+                        "light": metadata.get("light_conditions"),
+                        "weather": metadata.get("weather"),
+                        "scene": metadata.get("scene"),
+                    },
+                }
+            )
+
+    source_audit = {
+        "passed": True,
+        "source_kind": "licensed_external_published_timing",
+        "complete_items": 1500,
+        "total_verified_items": len(temporal_items),
+        "positive_items": counts[("train", "positive")],
+        "hard_negative_items": counts[("train", "negative")],
+        "official_public_items": split_counts["test_public"],
+        "official_private_lockbox_items": split_counts["test_private"],
+        "official_private_lockbox_evaluated": False,
+        "blind_relabel_items": 0,
+        "complete_split_counts": dict(split_counts),
+        "license_accepted": True,
+        "license_sha256": sha256(license_path),
+        "repository": receipt.get("repository"),
+        "repository_revision": receipt.get("repository_revision"),
+        "release_evaluation_eligible": False,
+        "errors": [],
+    }
+    training_manifest = {
+        "schema_version": TRAINING_SCHEMA,
+        "created_at": utc_now(),
+        "training_purpose": "auxiliary_collision_timing_pretraining_only",
+        "promotion_eligible": False,
+        "source_dataset_root": str(source_root),
+        "source_receipt": str(receipt_path),
+        "source_receipt_sha256": sha256(receipt_path),
+        "source_audit": source_audit,
+        "object_frames": 0,
+        "object_annotations": 0,
+        "segmentation_annotations": 0,
+        "temporal_items": sorted(temporal_items, key=lambda item: str(item["incident_id"])),
+    }
+    output.mkdir(parents=True, exist_ok=True)
+    write_json(output / "nexar_inventory.json", {"items": inventory, "source_audit": source_audit})
+    write_json(output / "training_manifest.json", training_manifest)
+    print(f"Prepared {len(temporal_items)} Nexar groups in {output}")
+    print(f"Splits: {dict(split_counts)}")
+    print("This source is auxiliary pretraining only and cannot promote a Mimir model.")
     return 0
 
 
@@ -628,7 +852,7 @@ def train_model(args: argparse.Namespace) -> int:
 def extract_temporal_command(args: argparse.Namespace) -> int:
     from mimir_core_v2.temporal_training import extract_feature_dataset
 
-    result = extract_feature_dataset(Path(args.prepared), Path(args.output), args.sample_fps)
+    result = extract_feature_dataset(Path(args.prepared), Path(args.output), args.sample_fps, args.workers)
     print(f"Temporal sequences: {len(result.get('sequences') or [])}")
     print(f"Temporal feature manifest: {Path(args.output) / 'temporal_features_manifest.json'}")
     if result.get("errors"):
@@ -659,9 +883,25 @@ def train_temporal_command(args: argparse.Namespace) -> int:
         min_groups=args.min_groups,
         min_positives=args.min_positives,
         min_negatives=args.min_hard_negatives,
+        pretrained_checkpoint=Path(args.pretrained_checkpoint) if args.pretrained_checkpoint else None,
     )
     print(json.dumps(result, indent=2))
     print("Candidate remains unpromoted until locked evaluation passes.")
+    return 0
+
+
+def pretrain_temporal_command(args: argparse.Namespace) -> int:
+    from mimir_core_v2.temporal_training import pretrain_external_event_candidate
+
+    result = pretrain_external_event_candidate(
+        Path(args.features),
+        Path(args.prepared),
+        Path(args.output),
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+    )
+    print(json.dumps(result, indent=2))
+    print("Auxiliary pretrainer is not promotion eligible; Tesla contact fine-tuning is still required.")
     return 0
 
 
@@ -690,7 +930,10 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--source", required=True)
     fetch.add_argument("--output", required=True)
     fetch.add_argument("--include-footage", action="store_true")
+    fetch.add_argument("--include-evaluation-footage", action="store_true")
     fetch.add_argument("--accept-license", action="store_true")
+    fetch.add_argument("--accepted-by", default="")
+    fetch.add_argument("--acceptance-basis", default="")
 
     audit = commands.add_parser("audit", help="Audit consent, rights, labels, duplicates, and split leakage.")
     audit.add_argument("--dataset-root", required=True)
@@ -699,6 +942,10 @@ def build_parser() -> argparse.ArgumentParser:
     prepare = commands.add_parser("prepare", help="Extract annotated real frames and temporal manifests.")
     prepare.add_argument("--dataset-root", required=True)
     prepare.add_argument("--output", required=True)
+    nexar = commands.add_parser("prepare-nexar", help="Verify and prepare licensed Nexar auxiliary timing data.")
+    nexar.add_argument("--source-root", required=True)
+    nexar.add_argument("--output", required=True)
+    nexar.add_argument("--workers", type=int, default=4)
 
     train = commands.add_parser("train", help="Fine-tune RF-DETR after pilot data gates pass.")
     train.add_argument("--prepared", required=True)
@@ -714,6 +961,7 @@ def build_parser() -> argparse.ArgumentParser:
     temporal.add_argument("--prepared", required=True)
     temporal.add_argument("--output", required=True)
     temporal.add_argument("--sample-fps", type=float, default=15.0)
+    temporal.add_argument("--workers", type=int, default=4)
     perception = commands.add_parser(
         "infer-perception", help="Run an unpromoted RF-DETR candidate over prepared footage."
     )
@@ -730,6 +978,15 @@ def build_parser() -> argparse.ArgumentParser:
     train_temporal.add_argument("--min-groups", type=int, default=100)
     train_temporal.add_argument("--min-positives", type=int, default=25)
     train_temporal.add_argument("--min-hard-negatives", type=int, default=25)
+    train_temporal.add_argument("--pretrained-checkpoint", default="")
+    pretrain_temporal = commands.add_parser(
+        "pretrain-temporal", help="Train an auxiliary Nexar collision/near-miss timing encoder."
+    )
+    pretrain_temporal.add_argument("--features", required=True)
+    pretrain_temporal.add_argument("--prepared", required=True)
+    pretrain_temporal.add_argument("--output", default=str(ROOT / "training_runs" / "external_pretraining"))
+    pretrain_temporal.add_argument("--epochs", type=int, default=10)
+    pretrain_temporal.add_argument("--learning-rate", type=float, default=0.001)
     predict_temporal = commands.add_parser(
         "predict-temporal", help="Run an unpromoted temporal ONNX candidate with its frozen policy."
     )
@@ -756,12 +1013,16 @@ def main(argv: list[str] | None = None) -> int:
             return audit_command(args)
         if args.command == "prepare":
             return prepare_dataset(args)
+        if args.command == "prepare-nexar":
+            return prepare_nexar(args)
         if args.command == "extract-temporal":
             return extract_temporal_command(args)
         if args.command == "infer-perception":
             return infer_perception_command(args)
         if args.command == "train-temporal":
             return train_temporal_command(args)
+        if args.command == "pretrain-temporal":
+            return pretrain_temporal_command(args)
         if args.command == "predict-temporal":
             return predict_temporal_command(args)
         return train_model(args)

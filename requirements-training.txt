@@ -1,6 +1,14 @@
 # Optional development environment. Never bundled with the free beta runtime.
-rfdetr[onnx]==1.8.3
-huggingface-hub==0.36.0
+# Install the pinned CUDA PyTorch wheels first with scripts/setup_training_env.ps1.
+rfdetr==1.8.3
+huggingface-hub==1.17.0
+transformers==5.5.4
 opencv-python==4.13.0.92
 numpy==2.5.0
 pillow==12.3.0
+onnx==1.22.0
+onnxscript==0.7.1
+onnxruntime-gpu==1.20.2
+onnxsim==0.5.0
+onnx-graphsurgeon==0.6.1
+polygraphy==0.50.3
