@@ -1,0 +1,5 @@
+# Core v2 packaged runtime. Training dependencies live in requirements-training.txt.
+numpy==2.5.0
+opencv-python==4.13.0.92
+onnxruntime==1.23.2
+pillow==12.3.0

@@ -1,7 +1,8 @@
-"""Compare Mimir Core v2 results across local AI model options.
+"""Compare Mimir Core v2 no-AI and local vision model runs.
 
-This script is comparison tooling only. It runs the existing v2 scanner and
-benchmark without changing scanner behavior, labels, or source files.
+This is regression/diagnostic tooling only. It runs the existing scanner and
+benchmark in isolated output directories and does not change detection,
+resolver, labels, frontend, or source footage.
 """
 
 from __future__ import annotations
@@ -9,63 +10,78 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = ROOT / "MimirOutputV2"
-SESSION_PATH = OUTPUT_DIR / "latest_session.json"
-BENCHMARK_REPORT_PATH = OUTPUT_DIR / "benchmark_report.json"
-MODEL_COMPARE_JSON = OUTPUT_DIR / "model_compare_report.json"
-MODEL_COMPARE_CSV = OUTPUT_DIR / "model_compare_report.csv"
-DEFAULT_MODELS = ["none", "qwen2.5vl:7b", "llava:7b"]
+OUTPUT_ROOT = ROOT / "MimirOutputV2"
+COMPARE_ROOT = OUTPUT_ROOT / "model_compare"
+DEFAULT_MODELS = ["qwen2.5vl:7b", "llava:7b"]
+CSV_FIELDS = [
+    "model_name",
+    "available",
+    "scan_completed",
+    "ai_enabled",
+    "ai_reviewed_groups",
+    "ai_skipped_groups",
+    "ai_failed_groups",
+    "ai_review_runtime_sec",
+    "benchmark_passed",
+    "labels_matched",
+    "failed",
+    "critical_failures",
+    "false_importants",
+    "false_ignores",
+    "ai_disagreement_count",
+    "ai_downgraded_hard_local_important_count",
+    "ai_false_ignore_candidate_count",
+    "runtime_sec",
+    "output_dir",
+    "notes",
+]
 
 
-def read_json(path: Path) -> dict:
+def safe_name(value: str) -> str:
+    text = str(value or "").strip().lower()
+    text = text.replace(":", "_").replace(".", "_")
+    safe = re.sub(r"[^a-z0-9_.-]+", "_", text)
+    return safe.strip("._") or "model"
+
+
+def timestamp_name() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def read_json(path: Path) -> dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8") as file:
             data = json.load(file)
         return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError) as exc:
-        return {"_read_error": str(exc)}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
-def normalize_models(value: str) -> list[str]:
-    models = [item.strip() for item in str(value or "").split(",") if item.strip()]
-    return models or list(DEFAULT_MODELS)
+def write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
 
 
-def ollama_model_available(model: str) -> tuple[bool, str]:
-    if model == "none":
-        return True, ""
-
-    request = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            data = json.loads(response.read().decode("utf-8", errors="replace"))
-    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError) as exc:
-        return False, f"AI runtime unavailable or not responding: {exc}"
-
-    installed = []
-    for item in data.get("models", []):
-        if isinstance(item, dict):
-            name = str(item.get("name") or "")
-            if name:
-                installed.append(name)
-
-    if model in installed:
-        return True, ""
-
-    short_model = model.split(":", 1)[0]
-    if any(name == short_model or name.startswith(short_model + ":") for name in installed):
-        return True, ""
-
-    return False, f"AI model not installed: {model}"
+def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in CSV_FIELDS})
 
 
 def run_command(command: list[str], timeout_sec: int | None = None) -> tuple[int, str]:
@@ -86,251 +102,336 @@ def run_command(command: list[str], timeout_sec: int | None = None) -> tuple[int
         return 127, str(exc)
 
 
-def run_scan(input_folder: str, model: str, mode: str) -> tuple[int, float, str]:
-    command = [sys.executable, str(ROOT / "mimir_core_v2_scan.py"), "--input", input_folder, "--mode", mode]
-    if model != "none":
-        command.extend(["--vlm", model])
+def normalize_models(value: str) -> list[str]:
+    models = [item.strip() for item in str(value or "").split(",") if item.strip()]
+    return models or list(DEFAULT_MODELS)
+
+
+def ollama_model_available(model: str) -> tuple[bool, str]:
+    request = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8", errors="replace"))
+    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        return False, f"Ollama unavailable or not responding: {exc}"
+
+    installed: list[str] = []
+    for item in data.get("models", []):
+        if isinstance(item, dict) and item.get("name"):
+            installed.append(str(item.get("name")))
+
+    if model in installed:
+        return True, ""
+
+    base = model.split(":", 1)[0]
+    if any(name == base or name.startswith(base + ":") for name in installed):
+        return True, ""
+
+    return False, f"model not installed in Ollama: {model}"
+
+
+def blank_result(model_name: str, run_dir: Path, notes: str = "") -> dict[str, Any]:
+    return {
+        "model_name": model_name,
+        "available": False,
+        "scan_completed": False,
+        "ai_enabled": model_name != "no_ai",
+        "ai_reviewed_groups": 0,
+        "ai_skipped_groups": 0,
+        "ai_failed_groups": 0,
+        "ai_review_runtime_sec": 0.0,
+        "benchmark_passed": False,
+        "labels_matched": 0,
+        "failed": 0,
+        "critical_failures": 0,
+        "false_importants": 0,
+        "false_ignores": 0,
+        "ai_disagreement_count": 0,
+        "ai_downgraded_hard_local_important_count": 0,
+        "ai_false_ignore_candidate_count": 0,
+        "runtime_sec": 0.0,
+        "output_dir": str(run_dir),
+        "notes": notes,
+    }
+
+
+def scan_timeout_seconds(model_name: str, ai_review_budget: int, ai_timeout_sec: int) -> int:
+    if model_name == "no_ai":
+        return 240
+    return max(300, int(ai_review_budget) * int(ai_timeout_sec) + 240)
+
+
+def run_scan(
+    input_folder: str,
+    model_name: str,
+    run_dir: Path,
+    ai_review_budget: int,
+    ai_timeout_sec: int,
+) -> tuple[int, float, str]:
+    command = [
+        sys.executable,
+        "mimir_core_v2_scan.py",
+        "--input",
+        input_folder,
+        "--mode",
+        "balanced",
+        "--output-dir",
+        str(run_dir),
+    ]
+    if model_name != "no_ai":
+        command.extend(
+            [
+                "--vlm",
+                model_name,
+                "--ai-review-budget",
+                str(ai_review_budget),
+                "--ai-timeout-sec",
+                str(ai_timeout_sec),
+            ]
+        )
 
     started = time.perf_counter()
-    return_code, output = run_command(command)
-    runtime = round(time.perf_counter() - started, 3)
-    return return_code, runtime, output
+    code, output = run_command(command, timeout_sec=scan_timeout_seconds(model_name, ai_review_budget, ai_timeout_sec))
+    return code, round(time.perf_counter() - started, 3), output
 
 
-def run_benchmark() -> tuple[int, str, dict]:
-    return_code, output = run_command([sys.executable, "-m", "mimir_core_v2.benchmark"])
-    report = read_json(BENCHMARK_REPORT_PATH) if BENCHMARK_REPORT_PATH.exists() else {}
-    return return_code, output, report
+def run_benchmark(run_dir: Path, source_set: str) -> tuple[int, str, dict[str, Any]]:
+    report_path = run_dir / "benchmark_report.json"
+    command = [
+        sys.executable,
+        "-m",
+        "mimir_core_v2.benchmark",
+        "--session",
+        str(run_dir / "latest_session.json"),
+        "--source-set",
+        source_set,
+        "--report",
+        str(report_path),
+    ]
+    code, output = run_command(command, timeout_sec=180)
+    return code, output, read_json(report_path)
 
 
-def counts_from_session(session: dict) -> dict:
-    incidents = session.get("incidents") if isinstance(session.get("incidents"), list) else []
+def quality_metrics(run_dir: Path) -> dict[str, int]:
+    report = read_json(run_dir / "ai_quality_report.json")
     return {
-        "videos_found": session.get("grouping_debug", {}).get("mp4_files_found", ""),
-        "event_groups": session.get("event_groups_found", len(incidents)),
-        "incidents": session.get("incident_count", len(incidents)),
-        "important": session.get("important", 0),
-        "review": session.get("review", 0),
-        "ignore": session.get("ignore", 0),
-        "ai_reviewed_groups": session.get("ai_reviewed_groups", 0),
-        "ai_skipped_groups": session.get("ai_skipped_groups", 0),
+        "ai_disagreement_count": int(report.get("ai_disagreement_count") or 0),
+        "ai_downgraded_hard_local_important_count": int(report.get("ai_downgraded_hard_local_important_count") or 0),
+        "ai_false_ignore_candidate_count": int(report.get("ai_false_ignore_candidate_count") or 0),
     }
 
 
-def result_for_unavailable(model: str, reason: str) -> dict:
+def session_metrics(run_dir: Path) -> dict[str, Any]:
+    session = read_json(run_dir / "latest_session.json")
     return {
-        "model": model,
-        "status": "unavailable",
-        "reason": reason,
-        "runtime_sec": "",
-        "videos_found": "",
-        "event_groups": "",
-        "incidents": "",
-        "important": "",
-        "review": "",
-        "ignore": "",
-        "ai_reviewed_groups": "",
-        "ai_skipped_groups": "",
-        "labels_matched": "",
-        "passed": "",
-        "failed": "",
-        "critical_failures": "",
-        "false_importants": "",
-        "false_ignores": "",
+        "ai_enabled": bool(session.get("ai_enabled")),
+        "ai_reviewed_groups": int(session.get("ai_reviewed_groups") or 0),
+        "ai_skipped_groups": int(session.get("ai_skipped_groups") or 0),
+        "ai_failed_groups": int(session.get("ai_failed_groups") or 0),
+        "ai_review_runtime_sec": float(session.get("ai_review_runtime_sec") or 0.0),
     }
 
 
-def compare_one_model(input_folder: str, model: str, mode: str) -> dict:
-    available, reason = ollama_model_available(model)
-    if not available:
-        return result_for_unavailable(model, reason)
+def compare_one(
+    input_folder: str,
+    source_set: str,
+    model_name: str,
+    run_dir: Path,
+    ai_review_budget: int,
+    ai_timeout_sec: int,
+) -> dict[str, Any]:
+    run_dir.mkdir(parents=True, exist_ok=True)
 
-    scan_code, runtime, scan_output = run_scan(input_folder, model, mode)
+    if model_name != "no_ai":
+        available, reason = ollama_model_available(model_name)
+        if not available:
+            return blank_result(model_name, run_dir, reason)
+
+    scan_code, runtime_sec, scan_output = run_scan(input_folder, model_name, run_dir, ai_review_budget, ai_timeout_sec)
+    result = blank_result(model_name, run_dir)
+    result["available"] = True
+    result["runtime_sec"] = runtime_sec
+    result["scan_output_tail"] = scan_output[-4000:]
+
     if scan_code != 0:
+        result["notes"] = f"scan failed with exit code {scan_code}"
+        return result
+
+    result["scan_completed"] = True
+    result.update(session_metrics(run_dir))
+    if result.get("ai_enabled"):
+        result.update(quality_metrics(run_dir))
+    if int(result.get("ai_failed_groups") or 0) > 0:
+        result["notes"] = f"{result.get('ai_failed_groups')} AI review attempt(s) failed safely"
+
+    benchmark_code, benchmark_output, benchmark = run_benchmark(run_dir, source_set)
+    result["benchmark_output_tail"] = benchmark_output[-4000:]
+    result["labels_matched"] = int(benchmark.get("labels_matched") or 0)
+    result["failed"] = int(benchmark.get("failed") or 0)
+    result["critical_failures"] = int(benchmark.get("critical_failures") or 0)
+    result["false_importants"] = int(benchmark.get("false_importants") or 0)
+    result["false_ignores"] = int(benchmark.get("false_ignores") or 0)
+    result["benchmark_passed"] = bool(
+        benchmark_code == 0
+        and result["failed"] == 0
+        and result["critical_failures"] == 0
+        and result["false_importants"] == 0
+        and result["false_ignores"] == 0
+        and result["labels_matched"] > 0
+    )
+    if not result["benchmark_passed"]:
+        result["notes"] = f"benchmark failed or had no matched labels; exit code {benchmark_code}"
+
+    return result
+
+
+def metric_tuple(result: dict[str, Any]) -> tuple[float, float, float, float, float, float, float]:
+    unavailable_penalty = 1_000_000 if not result.get("available") or not result.get("scan_completed") else 0
+    return (
+        unavailable_penalty + float(result.get("critical_failures") or 0),
+        float(result.get("false_importants") or 0),
+        float(result.get("false_ignores") or 0),
+        float(result.get("ai_downgraded_hard_local_important_count") or 0),
+        float(result.get("ai_false_ignore_candidate_count") or 0),
+        float(result.get("runtime_sec") or 0.0),
+        float(result.get("ai_failed_groups") or 0),
+    )
+
+
+def recommendation(results: list[dict[str, Any]]) -> dict[str, str]:
+    no_ai = next((result for result in results if result.get("model_name") == "no_ai"), None)
+    ai_results = [result for result in results if result.get("model_name") != "no_ai" and result.get("available") and result.get("scan_completed")]
+
+    if not no_ai or not no_ai.get("benchmark_passed"):
         return {
-            **result_for_unavailable(model, f"scan failed with exit code {scan_code}"),
-            "status": "failed",
-            "runtime_sec": runtime,
-            "scan_output": scan_output[-4000:],
+            "recommended_mode": "needs_manual_review",
+            "recommended_model": "",
+            "reason": "No-AI baseline did not pass benchmark, so no AI recommendation is safe.",
         }
 
-    session = read_json(SESSION_PATH)
-    if session.get("_read_error"):
-        return {
-            **result_for_unavailable(model, f"latest_session.json could not be read: {session['_read_error']}"),
-            "status": "failed",
-            "runtime_sec": runtime,
-            "scan_output": scan_output[-4000:],
-        }
-
-    benchmark_code, benchmark_output, benchmark = run_benchmark()
-    status = "ok"
-    reason = ""
-    if benchmark_code not in {0, 2}:
-        status = "benchmark_failed"
-        reason = f"benchmark exited {benchmark_code}"
-
-    counts = counts_from_session(session)
-    return {
-        "model": model,
-        "status": status,
-        "reason": reason,
-        "runtime_sec": runtime,
-        **counts,
-        "labels_matched": benchmark.get("labels_matched", 0),
-        "passed": benchmark.get("passed", 0),
-        "failed": benchmark.get("failed", 0),
-        "critical_failures": benchmark.get("critical_failures", 0),
-        "false_importants": benchmark.get("false_importants", 0),
-        "false_ignores": benchmark.get("false_ignores", 0),
-        "scan_output": scan_output[-4000:],
-        "benchmark_output": benchmark_output[-4000:],
-    }
-
-
-def sortable_number(value: object, default: float = 1_000_000_000.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def recommend_default(results: list[dict]) -> dict:
-    if not any(int(result.get("labels_matched") or 0) > 0 for result in results if result.get("status") == "ok"):
-        return {
-            "model": "",
-            "reason": "No benchmark labels matched, so no model recommendation was made.",
-        }
-
-    eligible = [
+    good_ai = [
         result
-        for result in results
-        if result.get("status") == "ok" and int(result.get("critical_failures") or 0) == 0
+        for result in ai_results
+        if result.get("benchmark_passed")
+        and int(result.get("critical_failures") or 0) == 0
+        and int(result.get("false_importants") or 0) == 0
+        and int(result.get("false_ignores") or 0) == 0
     ]
-    if not eligible:
-        return {"model": "", "reason": "No available model completed without critical failures."}
 
-    eligible.sort(
-        key=lambda item: (
-            sortable_number(item.get("false_ignores")),
-            sortable_number(item.get("false_importants")),
-            sortable_number(item.get("runtime_sec")),
-        )
-    )
-    best = eligible[0]
-    reason = (
-        "Recommended by lowest false ignores, then lowest false importants, then fastest runtime."
-    )
-    if best.get("model") == "none":
-        reason = "No AI performed best by benchmark metrics, so no AI is recommended for beta."
-    return {"model": best.get("model", ""), "reason": reason}
+    if not good_ai:
+        return {
+            "recommended_mode": "no_ai_local_only",
+            "recommended_model": "no_ai",
+            "reason": "No AI model completed with benchmark quality better than the local-only baseline.",
+        }
 
+    best_ai = sorted(good_ai, key=metric_tuple)[0]
+    no_ai_quality = metric_tuple(no_ai)
+    best_ai_quality = metric_tuple(best_ai)
+    ai_quality_worse_than_no_ai = best_ai_quality[3] > no_ai_quality[3] or best_ai_quality[4] > no_ai_quality[4]
 
-def write_reports(results: list[dict], recommendation: dict, input_folder: str, mode: str) -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    report = {
-        "input": input_folder,
-        "mode": mode,
-        "results": results,
-        "recommendation": recommendation,
+    if ai_quality_worse_than_no_ai:
+        return {
+            "recommended_mode": "no_ai_local_only",
+            "recommended_model": "no_ai",
+            "reason": "AI matched benchmark outcomes but produced worse hard-impact downgrade or false-ignore quality flags than no AI.",
+        }
+
+    if int(best_ai.get("ai_downgraded_hard_local_important_count") or 0) > 0 or int(best_ai.get("ai_false_ignore_candidate_count") or 0) > 0:
+        return {
+            "recommended_mode": "ai_debug_only",
+            "recommended_model": str(best_ai.get("model_name") or ""),
+            "reason": "The model is useful for diagnostics but still misjudges hard local evidence, so do not expose AI reasoning in beta UI.",
+        }
+
+    return {
+        "recommended_mode": "ai_second_opinion_hidden",
+        "recommended_model": str(best_ai.get("model_name") or ""),
+        "reason": "The model passed benchmark and did not produce hard-impact downgrade or false-ignore quality flags; keep it hidden as a second opinion.",
     }
-    with MODEL_COMPARE_JSON.open("w", encoding="utf-8") as file:
-        json.dump(report, file, indent=2)
-
-    fields = [
-        "model",
-        "status",
-        "reason",
-        "runtime_sec",
-        "videos_found",
-        "event_groups",
-        "incidents",
-        "important",
-        "review",
-        "ignore",
-        "ai_reviewed_groups",
-        "ai_skipped_groups",
-        "labels_matched",
-        "passed",
-        "failed",
-        "critical_failures",
-        "false_importants",
-        "false_ignores",
-    ]
-    with MODEL_COMPARE_CSV.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fields)
-        writer.writeheader()
-        for result in results:
-            writer.writerow({field: result.get(field, "") for field in fields})
-
-
-def print_table(results: list[dict], recommendation: dict) -> None:
-    fields = [
-        ("model", 16),
-        ("status", 14),
-        ("runtime_sec", 11),
-        ("event_groups", 12),
-        ("incidents", 9),
-        ("important", 9),
-        ("review", 7),
-        ("ignore", 7),
-        ("ai_reviewed_groups", 11),
-        ("failed", 7),
-        ("critical_failures", 8),
-        ("false_importants", 10),
-        ("false_ignores", 9),
-    ]
-    header = " ".join(name[:width].ljust(width) for name, width in fields)
-    print(header)
-    print("-" * len(header))
-    for result in results:
-        print(" ".join(str(result.get(name, ""))[:width].ljust(width) for name, width in fields))
-        if result.get("status") not in {"ok", ""} and result.get("reason"):
-            print(f"  reason: {result['reason']}")
-
-    print()
-    if recommendation.get("model"):
-        print(f"Recommended default: {recommendation['model']}")
-    else:
-        print("Recommended default: none")
-    print(f"Recommendation reason: {recommendation.get('reason', '')}")
-    print(f"JSON report: {MODEL_COMPARE_JSON}")
-    print(f"CSV report: {MODEL_COMPARE_CSV}")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Compare Mimir Core v2 model options on one input folder.")
-    parser.add_argument("--input", required=True, help="Benchmark footage folder.")
-    parser.add_argument("--models", default=",".join(DEFAULT_MODELS), help="Comma-separated models, use 'none' for no AI.")
-    parser.add_argument("--mode", default="balanced", choices=["fast", "balanced", "thorough"], help="Scan mode.")
+    parser = argparse.ArgumentParser(description="Compare Mimir Core v2 local AI model options.")
+    parser.add_argument("--input", required=True, help="Folder to scan.")
+    parser.add_argument("--source-set", required=True, help="Benchmark source_set to evaluate.")
+    parser.add_argument("--models", default=",".join(DEFAULT_MODELS), help="Comma-separated Ollama model names.")
+    parser.add_argument("--ai-review-budget", type=int, default=5, help="AI review budget per model run.")
+    parser.add_argument("--ai-timeout-sec", type=int, default=60, help="AI timeout per reviewed group.")
     return parser
+
+
+def print_summary(results: list[dict[str, Any]], rec: dict[str, str], report_dir: Path) -> None:
+    print("Mimir AI Model Comparison")
+    print("=========================")
+    for result in results:
+        model = result.get("model_name", "")
+        if not result.get("available"):
+            status = "unavailable"
+        elif not result.get("scan_completed"):
+            status = "scan failed"
+        elif result.get("benchmark_passed"):
+            status = "PASS"
+        else:
+            status = "FAIL"
+        print(
+            f"{model}: {status} "
+            f"matched={result.get('labels_matched')} "
+            f"failed={result.get('failed')} "
+            f"critical={result.get('critical_failures')} "
+            f"false_importants={result.get('false_importants')} "
+            f"false_ignores={result.get('false_ignores')} "
+            f"ai_failed={result.get('ai_failed_groups')} "
+            f"ai_downgrades={result.get('ai_downgraded_hard_local_important_count')} "
+            f"ai_false_ignores={result.get('ai_false_ignore_candidate_count')} "
+            f"runtime={result.get('runtime_sec')}s"
+        )
+        if result.get("notes"):
+            print(f"  notes: {result.get('notes')}")
+
+    print()
+    print("Recommendation:")
+    print(f"{rec.get('recommended_mode')}: {rec.get('recommended_model')}")
+    print(rec.get("reason", ""))
+    print()
+    print(f"report dir: {report_dir}")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    models = normalize_models(args.models)
+    compare_dir = COMPARE_ROOT / timestamp_name()
+    models = ["no_ai", *normalize_models(args.models)]
+    results: list[dict[str, Any]] = []
 
-    print("Mimir Core v2 Model Compare")
-    print("===========================")
-    print(f"input: {args.input}")
-    print(f"mode: {args.mode}")
-    print(f"models: {', '.join(models)}")
-    print()
-
-    results = []
     for model in models:
-        print(f"Running: {model}")
-        result = compare_one_model(args.input, model, args.mode)
+        run_dir = compare_dir / safe_name(model)
+        print(f"Running comparison for {model}...")
+        result = compare_one(
+            input_folder=args.input,
+            source_set=args.source_set,
+            model_name=model,
+            run_dir=run_dir,
+            ai_review_budget=max(0, args.ai_review_budget),
+            ai_timeout_sec=max(1, args.ai_timeout_sec),
+        )
         results.append(result)
-        print(f"  status: {result.get('status')}")
-        if result.get("reason"):
-            print(f"  reason: {result['reason']}")
 
-    recommendation = recommend_default(results)
-    write_reports(results, recommendation, args.input, args.mode)
-    print()
-    print_table(results, recommendation)
-    return 0
+    rec = recommendation(results)
+    report = {
+        "input": args.input,
+        "source_set": args.source_set,
+        "models": models,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "report_dir": str(compare_dir),
+        "recommendation": rec,
+        "results": results,
+    }
+    write_json(compare_dir / "model_compare_report.json", report)
+    write_csv(compare_dir / "model_compare_report.csv", results)
+    print_summary(results, rec, compare_dir)
+
+    no_ai = next((result for result in results if result.get("model_name") == "no_ai"), {})
+    return 0 if no_ai.get("benchmark_passed") else 2
 
 
 if __name__ == "__main__":

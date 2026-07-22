@@ -75,7 +75,11 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
                 samples.append(
                     {
                         "camera": clip.get("camera", "unknown"),
+                        "frame_index": int(frame_index),
+                        "fps": round(fps, 3) if fps > 0 else 0.0,
                         "time_sec": round(frame_index / fps, 3) if fps > 0 else 0.0,
+                        "duration_sec": round(duration_sec, 3),
+                        "source_video": str(path),
                         "shape": list(frame.shape[:2]) if hasattr(frame, "shape") else [],
                         "frame": frame,
                     }
@@ -89,7 +93,10 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
                     "camera": clip.get("camera", "unknown"),
                     "sampled_frames": sampled,
                     "duration_sec": round(duration_sec, 3),
+                    "frame_count": frame_count,
+                    "fps": round(fps, 3) if fps > 0 else 0.0,
                     "sample_fps": sample_fps,
+                    "source_video": str(path),
                 }
             )
         finally:

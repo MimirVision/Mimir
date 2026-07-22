@@ -37,6 +37,20 @@ LOCAL_EVIDENCE_FIELDS = [
     "max_motion_score",
     "motion_spike_time_sec",
     "motion_spike_ratio",
+    "ego_vehicle_zone",
+    "ego_zone_motion_score",
+    "visual_contact_time_sec",
+    "visual_contact_score",
+    "visual_contact_candidate",
+    "visual_contact_reasons",
+    "object_contact_time_sec",
+    "object_contact_score",
+    "object_contact_candidate",
+    "object_contact_used_for_contact",
+    "object_touching_ego_vehicle",
+    "contact_object_class",
+    "contact_object_type",
+    "object_contact_reasons",
     "camera_shake_score",
     "abrupt_scene_change",
     "strong_impact_like_motion",
@@ -47,6 +61,11 @@ LOCAL_EVIDENCE_FIELDS = [
     "vehicle_detected",
     "person_detected",
     "normal_traffic",
+    "yolo_available",
+    "object_detection_available",
+    "no_yolo_motion_impact_candidate",
+    "crash_safety_triggered",
+    "crash_safety_reasons",
 ]
 
 CLASSIFICATION_DEBUG_FIELDS = [
@@ -66,6 +85,9 @@ CSV_FIELDS = [
     "summary",
     "camera_count",
     "video_filename",
+    "primary_key_moment_sec",
+    "primary_key_moment_label",
+    "key_moments_summary",
     *LOCAL_EVIDENCE_FIELDS,
     *CLASSIFICATION_DEBUG_FIELDS,
     "suspicious_ignored",
@@ -125,6 +147,22 @@ def incident_video_filename(incident: dict[str, Any]) -> str:
         if filename:
             return filename
     return ""
+
+
+def key_moments_summary(incident: dict[str, Any]) -> str:
+    moments = as_list(incident.get("key_moments"))
+    if not moments:
+        evidence = as_dict(incident.get("local_evidence"))
+        moments = as_list(evidence.get("key_moments"))
+    summary_parts: list[str] = []
+    for moment in moments:
+        data = as_dict(moment)
+        time_sec = clean_text(data.get("time_sec"))
+        label = clean_text(data.get("label"))
+        moment_type = clean_text(data.get("type"))
+        camera = clean_text(data.get("camera"))
+        summary_parts.append(f"{time_sec}s {label} ({moment_type}, {camera})")
+    return "; ".join(summary_parts)
 
 
 def evidence_value(evidence: dict[str, Any], field: str) -> Any:
@@ -236,6 +274,9 @@ def build_row(incident: dict[str, Any], index: int) -> dict[str, Any]:
         "summary": incident.get("summary", ""),
         "camera_count": incident.get("camera_count", evidence.get("camera_count", "")),
         "video_filename": incident_video_filename(incident),
+        "primary_key_moment_sec": incident.get("primary_key_moment_sec", evidence.get("primary_key_moment_sec", "")),
+        "primary_key_moment_label": incident.get("primary_key_moment_label", evidence.get("primary_key_moment_label", "")),
+        "key_moments_summary": key_moments_summary(incident),
         "missing_thumbnail": not has_thumbnail(incident, evidence),
         "missing_local_evidence": not bool(evidence),
     }
@@ -287,6 +328,10 @@ def build_report(session: dict[str, Any]) -> dict[str, Any]:
         "source": str(SESSION_PATH),
         "scanner_version": session.get("scanner_version", ""),
         "schema_version": session.get("schema_version", ""),
+        "core_version": session.get("core_version", ""),
+        "core_build_id": session.get("core_build_id", ""),
+        "backend_runtime": session.get("backend_runtime", ""),
+        "feature_flags": session.get("feature_flags", {}),
         "summary": summary,
         "incidents": rows,
         "suspicious_ignored_incidents": suspicious,
@@ -318,6 +363,9 @@ def print_incident_row(row: dict[str, Any]) -> None:
     print(f"summary: {clean_text(row.get('summary'))}")
     print(f"camera_count: {clean_text(row.get('camera_count'))}")
     print(f"video_path filename: {clean_text(row.get('video_filename'))}")
+    print(f"primary_key_moment_sec: {clean_text(row.get('primary_key_moment_sec'))}")
+    print(f"primary_key_moment_label: {clean_text(row.get('primary_key_moment_label'))}")
+    print(f"key_moments: {clean_text(row.get('key_moments_summary'))}")
 
     print("local_evidence:")
     for field in LOCAL_EVIDENCE_FIELDS:
@@ -339,6 +387,10 @@ def print_report(report: dict[str, Any]) -> None:
     print("Mimir Core v2 detection audit")
     print("=============================")
     print(f"source: {SESSION_PATH}")
+    print(f"core_version: {clean_text(report.get('core_version'))}")
+    print(f"core_build_id: {clean_text(report.get('core_build_id'))}")
+    print(f"backend_runtime: {clean_text(report.get('backend_runtime'))}")
+    print(f"feature_flags: {clean_text(report.get('feature_flags'))}")
     print(f"high motion threshold: {HIGH_MOTION_SCORE_THRESHOLD:g}")
 
     rows = as_list(report.get("incidents"))

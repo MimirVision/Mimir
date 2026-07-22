@@ -7,6 +7,7 @@ This script only operates after review. It never permanently deletes files:
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import shutil
@@ -15,11 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mimir_core_v2.runtime_paths import default_output_dir
+
 
 BACKEND_ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = BACKEND_ROOT / "MimirOutputV2"
+OUTPUT_DIR = default_output_dir()
 DEFAULT_SESSION_PATH = OUTPUT_DIR / "latest_session.json"
 ACTION_REPORT_PATH = OUTPUT_DIR / "last_action_report.json"
+ACTION_JOURNAL_PATH = OUTPUT_DIR / "storage_action_journal.json"
 
 LIBRARY_ROOT = Path.home() / "Videos" / "Mimir Library"
 TRASH_ROOT = LIBRARY_ROOT / "_Mimir Trash"
@@ -309,11 +313,41 @@ def safe_move_file(source: Path, destination: Path, dry_run: bool) -> dict[str, 
 
 
 def destination_folder_for_incident(incident: dict[str, Any], action: str) -> Path:
+    if action == "restore_from_trash":
+        original = as_path(incident.get("original_source_video"))
+        if original is not None and original.parent:
+            return original.parent
+        return LIBRARY_ROOT / "Restored"
     if action == "move_to_trash":
         return TRASH_ROOT
 
     severity = normalize_severity(incident.get("final_severity") or incident.get("severity"))
     return LIBRARY_ROOT / SEVERITY_FOLDERS[severity]
+
+
+def destination_for_file(
+    incident: dict[str, Any],
+    file_record: dict[str, Any],
+    action: str,
+    create_folder: bool,
+) -> Path:
+    if action != "restore_from_trash":
+        folder = destination_folder_for_incident(incident, action)
+        return unique_destination(folder, file_record["filename"], create_folder=create_folder)
+
+    original_path = ""
+    if file_record.get("kind") == "camera_clip" and file_record.get("clip_index") is not None:
+        clips = camera_clips_for_incident(incident)
+        index = int(file_record["clip_index"])
+        if 0 <= index < len(clips):
+            original_path = clean_text(clips[index].get("original_path"))
+    if not original_path and file_record.get("kind") == "video_path":
+        original_path = clean_text(incident.get("original_source_video"))
+    original = as_path(original_path)
+    if original is not None:
+        return unique_destination(original.parent, original.name, create_folder=create_folder)
+    folder = LIBRARY_ROOT / "Restored"
+    return unique_destination(folder, file_record["filename"], create_folder=create_folder)
 
 
 def apply_file_update(
@@ -322,7 +356,7 @@ def apply_file_update(
     moved_path: str,
     action: str,
 ) -> None:
-    original_path = file_record["path"]
+    original_path = clean_text(file_record.get("path") or file_record.get("source"))
     if file_record["kind"] == "camera_clip" and file_record["clip_index"] is not None:
         clips = camera_clips_for_incident(incident)
         index = int(file_record["clip_index"])
@@ -331,9 +365,13 @@ def apply_file_update(
             clip.setdefault("original_path", original_path)
             clip["path"] = moved_path
             clip["exists"] = True
-            clip["storage_state"] = "trash" if action == "move_to_trash" else "library"
+            clip["storage_state"] = (
+                "trash" if action == "move_to_trash" else "source" if action == "restore_from_trash" else "library"
+            )
             if action == "move_to_trash":
                 clip["trash_path"] = moved_path
+            elif action == "restore_from_trash":
+                clip["trash_path"] = None
             else:
                 clip["library_path"] = moved_path
 
@@ -385,7 +423,7 @@ def update_incident_storage(
     ]
     complete = bool(successful_results) and not failed_for_incident
     partial = bool(successful_results) and bool(failed_for_incident)
-    target_state = "trash" if action == "move_to_trash" else "library"
+    target_state = "trash" if action == "move_to_trash" else "source" if action == "restore_from_trash" else "library"
 
     for result in successful_results:
         apply_file_update(incident, result, clean_text(result.get("destination")), action)
@@ -404,6 +442,11 @@ def update_incident_storage(
         incident["trash_video_path"] = primary_moved_path
         incident["user_deleted"] = complete
         incident["moved_to_library"] = False
+    elif action == "restore_from_trash":
+        incident["trash_video_path"] = None
+        incident["user_deleted"] = False
+        incident["moved_to_library"] = False
+        incident["library_video_path"] = None
     else:
         incident["library_folder"] = str(destination_folder)
         incident["library_video_path"] = primary_moved_path
@@ -496,8 +539,17 @@ def append_incident_file_accounting(
         )
 
 
-def perform_action(session: dict[str, Any], selected: list[dict[str, Any]], action: str, dry_run: bool) -> dict[str, Any]:
+def perform_action(
+    session: dict[str, Any],
+    selected: list[dict[str, Any]],
+    action: str,
+    dry_run: bool,
+    journal_path: Path | None = None,
+) -> dict[str, Any]:
     report = build_report(action, dry_run, selected)
+    report["transaction_id"] = f"storage-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    report["transaction_state"] = "planning"
+    report["rollback_files"] = []
     incident_results: dict[str, list[dict[str, Any]]] = {}
     selected_keys = {
         normalize_id(incident.get("id")) or normalize_id(incident.get("event_group_id")): incident
@@ -507,6 +559,9 @@ def perform_action(session: dict[str, Any], selected: list[dict[str, Any]], acti
     if not selected:
         report["failures"].append({"error": "no incidents matched the selection"})
         return report
+
+    if journal_path is not None and not dry_run:
+        write_json(journal_path, report)
 
     for incident_key, incident in selected_keys.items():
         destination_folder = destination_folder_for_incident(incident, action)
@@ -562,7 +617,12 @@ def perform_action(session: dict[str, Any], selected: list[dict[str, Any]], acti
                 incident_results[incident_key].append(skipped)
                 continue
 
-            destination = unique_destination(destination_folder, file_record["filename"], create_folder=not dry_run)
+            destination = destination_for_file(
+                incident,
+                file_record,
+                action,
+                create_folder=not dry_run,
+            )
             result = safe_move_file(source, destination, dry_run)
             result.update(
                 {
@@ -582,8 +642,28 @@ def perform_action(session: dict[str, Any], selected: list[dict[str, Any]], acti
             else:
                 report["failed_files"].append(result)
                 report["failures"].append(result)
+            if journal_path is not None and not dry_run:
+                report["transaction_state"] = "moving"
+                write_json(journal_path, report)
 
         append_incident_file_accounting(report, incident, file_records)
+
+    if not dry_run and report["failures"]:
+        report["transaction_state"] = "rolling_back"
+        for moved in reversed(report["moved_files"]):
+            destination = as_path(moved.get("destination"))
+            source = as_path(moved.get("source"))
+            if destination is None or source is None or not destination.exists():
+                continue
+            rollback = safe_move_file(destination, source, False)
+            rollback["original_move"] = moved
+            report["rollback_files"].append(rollback)
+        rollback_failed = any(not item.get("ok") for item in report["rollback_files"])
+        report["transaction_state"] = "rollback_incomplete" if rollback_failed else "rolled_back"
+        if journal_path is not None:
+            write_json(journal_path, report)
+        report["ok"] = False
+        return report
 
     if not dry_run:
         failures = report["failures"]
@@ -592,6 +672,9 @@ def perform_action(session: dict[str, Any], selected: list[dict[str, Any]], acti
             update_incident_storage(incident, action, destination_folder_for_incident(incident, action), results, failures)
 
     report["ok"] = len(report["failures"]) == 0
+    report["transaction_state"] = "dry_run" if dry_run else "committed"
+    if journal_path is not None and not dry_run:
+        write_json(journal_path, report)
     return report
 
 
@@ -626,14 +709,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--status", choices=["IMPORTANT", "REVIEW", "IGNORE", "important", "review", "ignore"], help="Process all incidents with this final severity.")
     parser.add_argument("--move-to-library", action="store_true", help="Move selected incidents into Mimir Library.")
     parser.add_argument("--move-to-trash", action="store_true", help="Move selected incidents into Mimir Trash.")
+    parser.add_argument("--restore-from-trash", action="store_true", help="Restore selected incidents from Mimir Trash.")
+    parser.add_argument("--report", default="", help="Optional action report path. Defaults beside the selected session.")
+    parser.add_argument("--journal", default="", help="Optional transaction journal path. Defaults beside the selected session.")
+    parser.add_argument("--library-root", default="", help="Optional Mimir Library root override.")
     parser.add_argument("--dry-run", action="store_true", help="Report planned moves without moving files or updating latest_session.json.")
     parser.add_argument("--list-incidents", action="store_true", help="List incidents from latest_session.json.")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
+    global LIBRARY_ROOT, TRASH_ROOT
     args = parse_args(argv or sys.argv[1:])
     session_path = Path(args.session)
+    if args.library_root:
+        LIBRARY_ROOT = Path(args.library_root)
+        TRASH_ROOT = LIBRARY_ROOT / "_Mimir Trash"
+    report_path = Path(args.report) if args.report else session_path.parent / "last_action_report.json"
+    journal_path = Path(args.journal) if args.journal else session_path.parent / "storage_action_journal.json"
 
     try:
         session = load_json(session_path)
@@ -650,30 +743,33 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_incidents:
         return print_incidents(session)
 
-    requested_actions = [args.move_to_library, args.move_to_trash]
+    requested_actions = [args.move_to_library, args.move_to_trash, args.restore_from_trash]
     if sum(1 for selected in requested_actions if selected) != 1:
-        print("Choose exactly one action: --move-to-library or --move-to-trash.")
+        print("Choose exactly one action: --move-to-library, --move-to-trash, or --restore-from-trash.")
         return 1
 
     if not (args.incident_id or args.incident_ids or args.status):
         print("Select incidents with --incident-id, --incident-ids, or --status.")
         return 1
 
-    action = "move_to_trash" if args.move_to_trash else "move_to_library"
+    action = "restore_from_trash" if args.restore_from_trash else "move_to_trash" if args.move_to_trash else "move_to_library"
     selected = selected_incidents(session, args)
-    report = perform_action(session, selected, action, args.dry_run)
+    session_before = copy.deepcopy(session)
+    report = perform_action(session, selected, action, args.dry_run, journal_path=journal_path)
     report["updated_session_path"] = str(session_path)
 
     try:
-        if not args.dry_run and report["moved_files"]:
+        if not args.dry_run and report.get("transaction_state") == "committed" and report["moved_files"]:
             write_json(session_path, session)
-        write_json(ACTION_REPORT_PATH, report)
+        elif report.get("transaction_state") in {"rolled_back", "rollback_incomplete"}:
+            session = session_before
+        write_json(report_path, report)
     except OSError as exc:
         print(f"Action completed but report/session writing failed: {exc}")
         return 1
 
     print(json.dumps(report, indent=2))
-    print(f"Action report saved: {ACTION_REPORT_PATH}")
+    print(f"Action report saved: {report_path}")
     if args.dry_run:
         print("Dry-run only. No files were moved and latest_session.json was not updated.")
     return 0 if report["ok"] else 1

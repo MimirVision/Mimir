@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
-from . import SCANNER_VERSION, SCHEMA_VERSION
+from . import (
+    CORE_BUILD_ID,
+    CORE_VERSION,
+    FEATURE_FLAGS,
+    GENERATED_BY,
+    SCAN_COMMAND_VERSION,
+    SCANNER_VERSION,
+    SCHEMA_VERSION,
+)
 from .event_grouping import GROUPING_VERSION, build_grouping_debug
 
 
@@ -18,11 +29,13 @@ TOP_LEVEL_EVIDENCE_FIELDS = [
     "camera_shake_score",
     "abrupt_scene_change",
     "scene_change_score",
+    "object_detection_available",
     "strong_impact_like_motion",
     "possible_impact",
     "impact_level",
     "impact_score",
     "impact_evidence_reasons",
+    "no_yolo_motion_impact_candidate",
     "possible_contact",
     "contact_level",
     "contact_score",
@@ -43,7 +56,58 @@ TOP_LEVEL_EVIDENCE_FIELDS = [
     "tampering_evidence",
     "door_handle_attempt",
     "crash_safety_triggered",
+    "crash_safety_reasons",
+    "key_moments",
+    "primary_key_moment_sec",
+    "primary_key_moment_label",
+    "key_moment_version",
+    "key_moment_refinement",
+    "key_moment_refinement_version",
+    "contact_timing_confidence",
+    "contact_timing_uncertain",
+    "ego_vehicle_mask_source",
+    "contact_candidate",
+    "contact_verified",
+    "apparent_visual_contact",
+    "uncertain_close_activity",
+    "confidence_provenance",
+    "primary_key_moment_context",
 ]
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def backend_runtime_name() -> str:
+    if getattr(sys, "frozen", False):
+        return "exe"
+    return "python_script"
+
+
+def apply_session_metadata(session: dict, output_path: Path) -> None:
+    feature_flags = dict(FEATURE_FLAGS)
+    existing_flags = session.get("feature_flags")
+    if isinstance(existing_flags, dict):
+        feature_flags.update(existing_flags)
+
+    session.setdefault("core_version", CORE_VERSION)
+    session.setdefault("core_build_id", CORE_BUILD_ID)
+    session.setdefault("generated_by", GENERATED_BY)
+    session.setdefault("backend_runtime", backend_runtime_name())
+    session.setdefault("scan_command_version", SCAN_COMMAND_VERSION)
+    session["feature_flags"] = feature_flags
+    session.setdefault("session_created_at", _utc_now_iso())
+    session["output_path"] = str(output_path.resolve())
+
+
+def _write_json_atomically(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
+        file.write("\n")
+    os.replace(temporary, path)
 
 
 def _person_count(evidence: dict) -> int:
@@ -79,6 +143,7 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
     source_stem = Path(str(source_filename)).stem if source_filename else event_group.get("source_stem", "")
     display_timestamp = event_group.get("display_timestamp", "")
     display_title = event_group.get("display_title") or source_stem or display_timestamp
+    ai_evidence = ai_review.get("ai_evidence", {}) if isinstance(ai_review.get("ai_evidence"), dict) else {}
 
     incident = {
         "id": f"incident_{index:04d}",
@@ -104,14 +169,27 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
         "hero_thumbnail": evidence.get("hero_thumbnail", ""),
         "contact_sheet": evidence.get("contact_sheet", ""),
         "timeline_markers": evidence.get("timeline_markers", []),
+        "key_moments": evidence.get("key_moments", []),
+        "primary_key_moment_sec": evidence.get("primary_key_moment_sec", 0.0),
+        "primary_key_moment_label": evidence.get("primary_key_moment_label", ""),
+        "key_moment_version": evidence.get("key_moment_version", ""),
         "local_evidence": evidence,
         "local_evidence_summary": evidence,
-        "ai_evidence": ai_review.get("ai_evidence", {}),
+        "ai_evidence": ai_evidence,
         "ai_raw_response": ai_review.get("ai_raw_response", ""),
         "ai_parse_error": bool(ai_review.get("ai_parse_error")),
         "ai_reviewed": bool(ai_review.get("ai_reviewed")),
         "ai_review_skipped_reason": ai_review.get("ai_review_skipped_reason", ""),
         "ai_model": ai_review.get("ai_model") or ai_review.get("model", ""),
+        "ai_debug_dir": ai_review.get("ai_debug_dir", ""),
+        "ai_prompt_version": ai_review.get("ai_prompt_version", ""),
+        "ai_images_used": ai_review.get("ai_images_used", []),
+        "ai_image_count": ai_review.get("ai_image_count", 0),
+        "ai_scene_type": ai_evidence.get("scene_type", ""),
+        "ai_recommended_severity": ai_evidence.get("recommended_severity", ai_review.get("recommended_severity", "")),
+        "ai_confidence": ai_evidence.get("confidence", 0.0),
+        "ai_concerns": ai_evidence.get("concerns", []),
+        "ai_runtime_sec": ai_review.get("runtime_sec", 0.0),
         "ai_evidence_review": ai_review,
         "severity_reasons": severity.get("severity_reasons", []),
         "classification_debug": severity.get("classification_debug", {}),
@@ -126,6 +204,19 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
     incident["contact_reasons"] = evidence.get("contact_evidence_reasons", [])
     incident["impact_evidence_level"] = evidence.get("impact_level", "NONE")
     incident["contact_evidence_level"] = evidence.get("contact_level", "NONE")
+    incident["contact_candidates"] = []
+    if evidence.get("contact_candidate") or evidence.get("possible_contact"):
+        incident["contact_candidates"].append(
+            {
+                "time_sec": evidence.get("primary_key_moment_sec") or evidence.get("motion_spike_time_sec"),
+                "camera": primary_camera,
+                "apparent_visual_contact": bool(evidence.get("apparent_visual_contact")),
+                "contact_verified": bool(evidence.get("contact_verified")),
+                "timing_confidence": evidence.get("contact_timing_confidence", 0.0),
+                "timing_uncertain": bool(evidence.get("contact_timing_uncertain", True)),
+                "reasons": evidence.get("contact_evidence_reasons", []),
+            }
+        )
     incident["important_evidence_found"] = incident["classification_debug"].get("important_evidence_found")
     incident["severity_cap_applied"] = incident["classification_debug"].get("severity_cap_applied")
     incident["severity_cap_reason"] = incident["classification_debug"].get("severity_cap_reason")
@@ -136,6 +227,7 @@ def build_session(selected_input: str, event_groups: list[dict], incidents: list
     important = sum(1 for incident in incidents if incident.get("final_severity") == "IMPORTANT")
     review = sum(1 for incident in incidents if incident.get("final_severity") == "REVIEW")
     ignore = sum(1 for incident in incidents if incident.get("final_severity") == "IGNORE")
+    key_moment_versions = [incident.get("key_moment_version") for incident in incidents if incident.get("key_moment_version")]
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -149,6 +241,12 @@ def build_session(selected_input: str, event_groups: list[dict], incidents: list
         "generic_filename_groups": sum(1 for group in event_groups if group.get("generic_filename_group")),
         "tesla_timestamp_groups": sum(1 for group in event_groups if group.get("tesla_timestamp_detected")),
         "incident_count": len(incidents),
+        "key_moment_version": key_moment_versions[0] if key_moment_versions else "",
+        "key_moments_generated_count": sum(
+            len(incident.get("key_moments") or [])
+            for incident in incidents
+            if isinstance(incident.get("key_moments"), list)
+        ),
         "important": important,
         "review": review,
         "ignore": ignore,
@@ -161,6 +259,14 @@ def write_latest_session(session: dict, output_folder: str | Path) -> Path:
     folder = Path(output_folder)
     folder.mkdir(parents=True, exist_ok=True)
     output_path = folder / "latest_session.json"
-    with output_path.open("w", encoding="utf-8") as file:
-        json.dump(session, file, indent=2)
+    apply_session_metadata(session, output_path)
+    session_id = str(session.get("session_id") or "").strip()
+    session_output_dir = Path(str(session.get("session_output_dir") or "")) if session.get("session_output_dir") else None
+    if session_output_dir is None and session_id:
+        session_output_dir = folder / "sessions" / session_id
+    if session_output_dir is not None:
+        archive_path = session_output_dir / "session.json"
+        session["session_archive_path"] = str(archive_path.resolve())
+        _write_json_atomically(archive_path, session)
+    _write_json_atomically(output_path, session)
     return output_path

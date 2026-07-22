@@ -1,0 +1,74 @@
+{
+  "registry_version": "mimir_dataset_sources_v1",
+  "policy": "Never download or train on footage unless its source entry is eligible and all required acceptance/provenance checks pass.",
+  "sources": [
+    {
+      "id": "mimir_user_consent",
+      "name": "Explicitly consented Mimir beta footage",
+      "status": "preferred",
+      "temporal_contact_value": "high",
+      "automatic_download": false,
+      "requirements": [
+        "clip-by-clip opt-in",
+        "rights confirmation",
+        "source-isolated train/test split",
+        "human contact timing annotation"
+      ],
+      "notes": "Primary source for parked-car door dings and Tesla Sentry camera geometry. No background collection or upload."
+    },
+    {
+      "id": "nexar_collision_prediction",
+      "name": "Nexar Collision Prediction Dataset",
+      "status": "eligible_after_explicit_license_acceptance",
+      "temporal_contact_value": "medium",
+      "repository": "nexar-ai/nexar_collision_prediction",
+      "url": "https://huggingface.co/datasets/nexar-ai/nexar_collision_prediction",
+      "license_url": "https://huggingface.co/datasets/nexar-ai/nexar_collision_prediction/blob/main/LICENSE",
+      "reported_download_size_gb": 31.4,
+      "reported_training_clips": 1500,
+      "automatic_download": false,
+      "notes": "Useful for collision timing and hard negatives, but it is moving dashcam footage rather than parked Tesla door-ding footage. License attribution, no-resale, and ethical-use conditions must be retained."
+    },
+    {
+      "id": "open_images_v7",
+      "name": "Open Images V7",
+      "status": "per_image_license_review_required",
+      "temporal_contact_value": "none",
+      "url": "https://storage.googleapis.com/openimages/web/index.html",
+      "automatic_download": false,
+      "notes": "Potential object/door imagery only. Annotations are CC BY 4.0 and listed images are CC BY 2.0, but Google explicitly requires verifying each image license."
+    },
+    {
+      "id": "bdd100k",
+      "name": "BDD100K",
+      "status": "blocked_without_commercial_membership_or_separate_license",
+      "temporal_contact_value": "low",
+      "url": "https://bdd-data.berkeley.edu/",
+      "automatic_download": false
+    },
+    {
+      "id": "kitti",
+      "name": "KITTI Vision Benchmark",
+      "status": "blocked_noncommercial_license",
+      "temporal_contact_value": "none",
+      "url": "https://www.cvlibs.net/datasets/kitti/",
+      "automatic_download": false
+    },
+    {
+      "id": "nuscenes",
+      "name": "nuScenes / nuImages",
+      "status": "blocked_without_commercial_license",
+      "temporal_contact_value": "low",
+      "url": "https://www.nuscenes.org/terms-of-use-commercial",
+      "automatic_download": false
+    },
+    {
+      "id": "ccd_dota_web_video_sets",
+      "name": "CCD and DoTA academic web-video datasets",
+      "status": "legal_review_required",
+      "temporal_contact_value": "medium",
+      "automatic_download": false,
+      "notes": "Repository code licenses do not by themselves establish redistribution/training rights for every underlying web video."
+    }
+  ]
+}
