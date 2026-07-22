@@ -97,6 +97,16 @@ def main() -> int:
         requirements = backend / "requirements.txt"
     components += python_components(requirements)
     components += model_components(backend)
+    components.append(
+        {
+            "type": "application",
+            "name": "age",
+            "version": "1.3.1",
+            "purl": "pkg:github/FiloSottile/age@v1.3.1",
+            "licenses": [{"license": {"id": "BSD-3-Clause"}}],
+            "properties": [{"name": "mimir:purpose", "value": "manual encrypted training contribution export"}],
+        }
+    )
     unique = {(item["type"], item["name"], item["version"]): item for item in components}
     document = {
         "bomFormat": "CycloneDX",

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type SyntheticEvent } from 'react'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { CrashSafeBoundary, logIncidentDiagnostic } from './CrashSafeBoundary'
 import type { MimirCameraClip, MimirIncident, MimirSession, MimirTimelineMarker } from '../types'
 
@@ -91,6 +92,14 @@ interface IncidentFeedbackResult {
   feedback_folder: string
   feedback_file: string
   video_copied: boolean
+  message: string
+}
+
+interface TrainingContributionResult {
+  ok: boolean
+  output_path: string
+  backend_runner: string
+  backend_command: string
   message: string
 }
 
@@ -2987,8 +2996,135 @@ function AiFeedbackPanel({
   )
 }
 
+function TrainingContributionPanel({ incident, session }: { incident: MimirIncident; session?: MimirSession }) {
+  const [recordedBy, setRecordedBy] = useState('')
+  const [rightsBasis, setRightsBasis] = useState<'owned' | 'explicit_permission' | 'public_license'>('owned')
+  const [permissionReference, setPermissionReference] = useState('')
+  const [permissionRecord, setPermissionRecord] = useState('')
+  const [rightsConfirmed, setRightsConfirmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setRecordedBy('')
+    setRightsBasis('owned')
+    setPermissionReference('')
+    setPermissionRecord('')
+    setRightsConfirmed(false)
+    setMessage('')
+    setError('')
+  }, [incident.id])
+
+  const choosePermissionRecord = async () => {
+    const selected = await openDialog({ multiple: false, directory: false, title: 'Choose permission record' })
+    if (typeof selected === 'string') {
+      setPermissionRecord(selected)
+    }
+  }
+
+  const exportPackage = async () => {
+    if (!rightsConfirmed || !recordedBy.trim() || !permissionReference.trim()) {
+      setError('Confirm your rights and complete the consent details first.')
+      return
+    }
+    const suggestedName = `${safeText(incident.source_stem, incidentActionId(incident))}.mimir-dataset.age`
+      .replace(/[<>:"/\\|?*]+/g, '_')
+    const destination = await saveDialog({
+      title: 'Export encrypted Mimir training package',
+      defaultPath: suggestedName,
+      filters: [{ name: 'Mimir encrypted dataset', extensions: ['age'] }],
+    })
+    if (!destination) {
+      return
+    }
+    const outputPath = destination.toLowerCase().endsWith('.mimir-dataset.age')
+      ? destination
+      : destination.toLowerCase().endsWith('.age')
+        ? destination.slice(0, -4) + '.mimir-dataset.age'
+        : destination + '.mimir-dataset.age'
+    setBusy(true)
+    setError('')
+    setMessage('Encrypting selected footage locally...')
+    try {
+      const result = await invoke<TrainingContributionResult>('export_training_contribution', {
+        sessionPath: session?.session_archive_path || session?.output_path || null,
+        incidentId: incidentActionId(incident),
+        outputPath,
+        recordedBy: recordedBy.trim(),
+        rightsBasis,
+        permissionReference: permissionReference.trim(),
+        independentPermissionRecord: permissionRecord || null,
+      })
+      setMessage(result.message)
+      setRightsConfirmed(false)
+    } catch (value) {
+      setMessage('')
+      setError(actionErrorMessage(value))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 grid gap-3">
+      <p className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+        Export this incident only after confirming you own the footage or have permission to use it for model development. Nothing uploads automatically.
+      </p>
+      <input
+        value={recordedBy}
+        onChange={event => setRecordedBy(event.target.value)}
+        placeholder="Your name"
+        className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
+      />
+      <select
+        value={rightsBasis}
+        onChange={event => setRightsBasis(event.target.value as typeof rightsBasis)}
+        className="h-10 rounded-lg border border-white/[0.08] bg-[var(--mimir-bg-depth)] px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
+      >
+        <option value="owned">I recorded and own this footage</option>
+        <option value="explicit_permission">I have explicit permission</option>
+        <option value="public_license">A public license permits this use</option>
+      </select>
+      <input
+        value={permissionReference}
+        onChange={event => setPermissionReference(event.target.value)}
+        placeholder="Ownership, permission, or license reference"
+        className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
+      />
+      <button
+        type="button"
+        onClick={() => void choosePermissionRecord()}
+        className="h-9 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] hover:bg-white/[0.05] hover:text-[var(--mimir-text)]"
+      >
+        {permissionRecord ? 'Permission record selected' : 'Attach permission record (optional)'}
+      </button>
+      <label className="flex items-start gap-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+        <input
+          type="checkbox"
+          checked={rightsConfirmed}
+          onChange={event => setRightsConfirmed(event.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-white"
+        />
+        I confirm these rights apply to this selected incident and its grouped camera angles.
+      </label>
+      <button
+        type="button"
+        onClick={() => void exportPackage()}
+        disabled={busy || !rightsConfirmed}
+        className="h-10 rounded-lg bg-[var(--mimir-text)] px-3 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <span className="inline-flex items-center gap-2">{busy && <SmallSpinner />}Export encrypted package</span>
+      </button>
+      {message && <div className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">{message}</div>}
+      {error && <div className="text-[12px] leading-5 text-red-100/85">{error}</div>}
+    </div>
+  )
+}
+
 function ReviewActionsPanel({
   incident,
+  session,
   currentSeverity,
   mimirSeverity,
   isManualOverride,
@@ -3018,6 +3154,7 @@ function ReviewActionsPanel({
   onOpenFiles,
 }: {
   incident: MimirIncident
+  session?: MimirSession
   currentSeverity: SeverityGroup
   mimirSeverity: SeverityGroup
   isManualOverride: boolean
@@ -3166,6 +3303,13 @@ function ReviewActionsPanel({
           onIncludeVideoChange={onFeedbackIncludeVideoChange}
           onSubmit={onSubmitFeedback}
         />
+      </details>
+
+      <details className="mt-3 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
+        <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
+          Export for Mimir training
+        </summary>
+        <TrainingContributionPanel incident={incident} session={session} />
       </details>
 
       <div className="mt-4 rounded-xl bg-black/10 p-3.5">
@@ -3695,6 +3839,7 @@ export function IncidentViewerScreen({
             >
               <ReviewActionsPanel
                 incident={incident}
+                session={session}
                 currentSeverity={severityResolution.displaySeverity}
                 mimirSeverity={severityResolution.mimirSeverity}
                 isManualOverride={severityResolution.isManualOverride}

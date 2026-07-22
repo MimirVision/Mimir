@@ -31,7 +31,6 @@ const experimentalAiTimeoutSecKey = 'experimental_ai_timeout_sec'
 const defaultVisionModel = 'qwen2.5vl:7b'
 const defaultAiTimeoutSec = 60
 const internalAiReviewBudget = 999
-const appWebview = getCurrentWebview()
 
 interface LocalScanResult {
   stdout: string
@@ -228,29 +227,36 @@ export default function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined
 
-    appWebview
-      .onDragDropEvent(event => {
-        if (event.payload.type === 'over') {
-          setIsDraggingFolder(true)
-        }
-
-        if (event.payload.type === 'leave') {
-          setIsDraggingFolder(false)
-        }
-
-        if (event.payload.type === 'drop') {
-          const [firstPath] = event.payload.paths
-
-          if (firstPath) {
-            void selectFolder(firstPath)
+    try {
+      getCurrentWebview()
+        .onDragDropEvent(event => {
+          if (event.payload.type === 'over') {
+            setIsDraggingFolder(true)
           }
 
-          setIsDraggingFolder(false)
-        }
-      })
-      .then(unlistenFn => {
-        unlisten = unlistenFn
-      })
+          if (event.payload.type === 'leave') {
+            setIsDraggingFolder(false)
+          }
+
+          if (event.payload.type === 'drop') {
+            const [firstPath] = event.payload.paths
+
+            if (firstPath) {
+              void selectFolder(firstPath)
+            }
+
+            setIsDraggingFolder(false)
+          }
+        })
+        .then(unlistenFn => {
+          unlisten = unlistenFn
+        })
+        .catch(() => {
+          // Browser-only accessibility checks do not expose a Tauri webview.
+        })
+    } catch {
+      // Browser-only accessibility checks do not expose a Tauri webview.
+    }
 
     return () => {
       unlisten?.()

@@ -1,9 +1,12 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  test: {
+    exclude: ['tests/e2e/**', 'node_modules/**'],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   // prevent vite from obscuring rust panics

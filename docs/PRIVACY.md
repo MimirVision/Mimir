@@ -15,7 +15,8 @@ are separate, explicit commands with a transaction journal.
 
 Training footage is never collected automatically. Dataset export requires an
 explicit incident-by-incident selection and a recorded consent statement. Export
-is local; upload is a separate human action. Paths are reduced to filenames in the
+creates an `age`-encrypted package for a recipient key; transfer is a separate human
+action. The intake private key is never included in the app. Paths are reduced to filenames in the
 annotation record where practical, but video content may itself contain identifying
 information.
 

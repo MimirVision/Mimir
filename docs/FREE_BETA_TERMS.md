@@ -17,4 +17,6 @@ after installation.
 
 Beta users may submit diagnostics or footage only through a separate, explicit
 action. Participation does not grant Mimir permission to collect footage in the
-background. Any future paid product will use separate terms and a separate decision.
+background. Footage contributions require clip-level rights confirmation and are
+encrypted for manual transfer. Contribution is optional and does not affect access
+to the free beta. Any future paid product will use separate terms and a separate decision.
