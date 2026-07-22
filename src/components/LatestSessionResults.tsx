@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/tauri'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import type { MimirIncident, MimirSession, SessionLoadState } from '../types'
 
 interface LatestSessionPanelProps {

@@ -1,104 +1,43 @@
 # Mimir
 
-Mimir is a local-first desktop app for reviewing vehicle and dashcam footage. It scans clips, finds activity around the car, explains why a clip was flagged, and sorts results into clear review priorities.
+Mimir is a free, invite-only Windows beta for local review of Tesla Sentry footage.
+It finds moments worth checking, keeps source video local, and leaves the final
+decision with the user. Generic MP4 input is best-effort.
 
-## Customer experience
+There are no payments, subscriptions, accounts, activation servers, or mandatory
+internet connection. Experimental local AI is optional, off by default, and never
+overrides hard local safety evidence.
 
-The consumer build is designed to be simple:
-
-1. Install Mimir.
-2. Open Mimir.
-3. Select the footage folder.
-4. Start a scan.
-5. Review flagged clips with confidence, evidence, and a plain-language explanation.
-
-The Windows installer now includes the local backend sidecar, the vision model, and the desktop UI. Customers should not need to install Python or start an API manually.
-
-## What Mimir analyzes
-
-Mimir currently analyzes:
-
-- People detected near the vehicle
-- Nearby vehicles
-- Sustained activity across sampled frames
-- The strongest evidence frame for each event
-- Optional local AI review when enabled
-
-Each flagged event includes:
-
-- Decision label
-- Confidence percentage
-- Reason for the decision
-- Findings used in the decision
-- Suggested next action
-- Evidence frame
-
-## Local-first privacy
-
-The first product version runs locally on the customer's computer. Footage does not need to be uploaded to a cloud service for scanning.
-
-## Project structure
-
-```text
-src/                    React/Tauri desktop UI
-src-tauri/              Tauri shell and installer config
-api.py                  FastAPI bridge used by the local sidecar
-mimir_core.py           Scanner and event classification logic
-backend_entry.py        PyInstaller entrypoint for the sidecar
-scripts/build-sidecar.ps1
-yolov8n.pt              Local vision model
-```
-
-## Development setup
-
-Install JavaScript dependencies:
+## Development
 
 ```powershell
 npm install
-```
-
-Install Python 3.12, then create the project Python environment:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-## Run for development
-
-Start the backend manually:
-
-```powershell
-npm run api
-```
-
-In another terminal, start the desktop app:
-
-```powershell
+npm run type-check
+npm run build
 npm run desktop:dev
 ```
 
-## Build the consumer installer
+Core v2 lives in `C:\Mimir_Backend`. Development can point at that workspace, while
+packaged builds use self-contained executables and a per-user application data
+directory. Python and packaged runners share the same scan arguments and versioned
+JSON-lines progress protocol.
+
+## Release Safety
+
+External distribution is fail-closed. See [release readiness](docs/RELEASE_READINESS.md),
+[privacy](docs/PRIVACY.md), [limitations](docs/LIMITATIONS.md), and the
+[model card](docs/MODEL_CARD.md).
+
+The strict gate must pass before an installer is shared:
 
 ```powershell
-npm run desktop:build
+C:\Mimir_Backend\.venv-runtime\Scripts\python.exe C:\Mimir_Backend\mimir_core_v2_release_check.py --gate-only
 ```
 
-This builds the Python backend sidecar, then builds the Tauri app and installers.
+The runtime detector is the checksum-pinned RF-DETR Nano ONNX model described in
+the model card and backend model manifest. External release remains blocked until
+the locked evaluation, signatures, clean-VM, accessibility, and update evidence
+also pass.
 
-Build output:
-
-```text
-src-tauri/target/release/bundle/msi/
-src-tauri/target/release/bundle/nsis/
-```
-
-## Cloud path
-
-Cloud should come after the local desktop product is smooth:
-
-1. Keep private local scanning as the default.
-2. Add account licensing and code signing.
-3. Add optional cloud sync for reports and evidence frames.
-4. Add browser/phone access for already-processed events.
-5. Add upload-based scanning only when storage, privacy, and billing are ready.
+Consent-first collection and training instructions live in
+`C:\Mimir_Backend\TRAINING_DATA_GUIDE.md`.

@@ -3,22 +3,20 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
-    fs,
+    env, fs,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::{Arc, Mutex},
     thread,
     time::UNIX_EPOCH,
 };
+use tauri::{Emitter, Manager};
 
 #[allow(dead_code)]
 const DEV_BACKEND_ROOT: &str = r"C:\Mimir_Backend";
 #[allow(dead_code)]
-const DEV_BACKEND_DIST: &str = r"C:\Mimir_Backend\dist\mimir-backend";
-#[allow(dead_code)]
 const DEV_BACKEND_PYTHON: &str = r"C:\Mimir_Backend\.venv\Scripts\python.exe";
-#[allow(dead_code)]
-const DEV_BACKEND_SCRIPT: &str = r"C:\Mimir_Backend\tesla_ai_sorter.py";
 #[allow(dead_code)]
 const DEV_CORE_V2_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_scan.py";
 #[allow(dead_code)]
@@ -27,18 +25,7 @@ const DEV_CORE_V2_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_actions
 const DEV_CORE_V2_SCAN_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe";
 #[allow(dead_code)]
 const DEV_CORE_V2_ACTIONS_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe";
-#[allow(dead_code)]
-const DEV_CLIP_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_clip_actions.py";
-#[allow(dead_code)]
-const DEV_LATEST_SESSION_JSON: &str = r"C:\Mimir_Backend\MimirOutput\latest_session.json";
-#[allow(dead_code)]
-const DEV_CORE_V2_LATEST_SESSION_JSON: &str = r"C:\Mimir_Backend\MimirOutputV2\latest_session.json";
-#[allow(dead_code)]
-const DEV_CORE_V2_ACTION_REPORT_JSON: &str =
-    r"C:\Mimir_Backend\MimirOutputV2\last_action_report.json";
-const USE_MIMIR_CORE_V2: bool = true;
 const BACKEND_RESOURCE_FOLDER: &str = "mimir-backend";
-const BACKEND_EXE_NAME: &str = "mimir-backend.exe";
 const CORE_V2_SCAN_EXE_NAME: &str = "mimir-core-v2-scan.exe";
 const CORE_V2_ACTIONS_EXE_NAME: &str = "mimir-core-v2-actions.exe";
 const DEFAULT_VISION_MODEL: &str = "qwen2.5vl:7b";
@@ -56,6 +43,20 @@ struct ScanResult {
     backend_mode: String,
     backend_runner: String,
     backend_command: String,
+}
+
+#[derive(Serialize)]
+struct SessionHistoryEntry {
+    session_id: String,
+    session_path: String,
+    source_name: String,
+    source_path: String,
+    created_at: String,
+    incidents: u64,
+    important: u64,
+    review: u64,
+    ignore: u64,
+    modified_time: String,
 }
 
 #[derive(Serialize)]
@@ -96,6 +97,23 @@ struct ScanFailure {
     message: String,
     stdout: String,
     stderr: String,
+}
+
+#[derive(Clone, Default)]
+struct ActiveScanProcess {
+    pid: Arc<Mutex<Option<u32>>>,
+}
+
+struct ActiveScanGuard {
+    pid: Arc<Mutex<Option<u32>>>,
+}
+
+impl Drop for ActiveScanGuard {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.pid.lock() {
+            *active = None;
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -147,14 +165,8 @@ struct LocalAiInstallResult {
 
 #[derive(Clone)]
 enum BackendMode {
-    Bundled,
-    #[allow(dead_code)]
-    DevelopmentResource,
-    #[allow(dead_code)]
-    DevelopmentPythonFallback,
-    #[allow(dead_code)]
+    #[cfg(debug_assertions)]
     CoreV2Python,
-    #[allow(dead_code)]
     CoreV2Exe,
 }
 
@@ -169,19 +181,20 @@ struct BackendRuntime {
 impl BackendRuntime {
     fn mode_label(&self) -> &'static str {
         match self.mode {
-            BackendMode::Bundled => "bundled_backend",
-            BackendMode::DevelopmentResource => "development_resource_backend",
-            BackendMode::DevelopmentPythonFallback => "development_backend",
+            #[cfg(debug_assertions)]
             BackendMode::CoreV2Python => "mimir_core_v2",
             BackendMode::CoreV2Exe => "mimir_core_v2_exe",
         }
     }
 
     fn is_python_fallback(&self) -> bool {
-        matches!(
-            self.mode,
-            BackendMode::DevelopmentPythonFallback | BackendMode::CoreV2Python
-        )
+        #[cfg(debug_assertions)]
+        {
+            return matches!(self.mode, BackendMode::CoreV2Python);
+        }
+
+        #[cfg(not(debug_assertions))]
+        false
     }
 
     fn runner_label(&self) -> &'static str {
@@ -193,8 +206,8 @@ impl BackendRuntime {
                     "sidecar"
                 }
             }
-            BackendMode::Bundled | BackendMode::DevelopmentResource => "sidecar",
-            BackendMode::DevelopmentPythonFallback | BackendMode::CoreV2Python => "python_script",
+            #[cfg(debug_assertions)]
+            BackendMode::CoreV2Python => "python_script",
         }
     }
 
@@ -221,37 +234,6 @@ impl ScanFailure {
     }
 }
 
-fn bundled_session_path(backend_dir: &Path) -> PathBuf {
-    let output_folder = if USE_MIMIR_CORE_V2 {
-        "MimirOutputV2"
-    } else {
-        "MimirOutput"
-    };
-
-    backend_dir
-        .join("_internal")
-        .join(output_folder)
-        .join("latest_session.json")
-}
-
-fn bundled_backend_runtime_from_dir(
-    backend_dir: PathBuf,
-    mode: BackendMode,
-) -> Option<BackendRuntime> {
-    let executable = backend_dir.join(BACKEND_EXE_NAME);
-
-    if !executable.exists() {
-        return None;
-    }
-
-    Some(BackendRuntime {
-        executable,
-        current_dir: backend_dir.clone(),
-        session_path: bundled_session_path(&backend_dir),
-        mode,
-    })
-}
-
 fn backend_missing_failure(kind: &str, candidates: &[&str]) -> ScanFailure {
     let details = candidates
         .iter()
@@ -274,8 +256,9 @@ fn backend_missing_failure(kind: &str, candidates: &[&str]) -> ScanFailure {
 }
 
 fn resource_core_v2_exe(app: &tauri::AppHandle, exe_name: &str) -> Option<PathBuf> {
-    app.path_resolver()
+    app.path()
         .resource_dir()
+        .ok()
         .map(|resource_dir| resource_dir.join(BACKEND_RESOURCE_FOLDER).join(exe_name))
         .filter(|path| path.exists())
 }
@@ -290,44 +273,68 @@ fn resource_core_v2_runtime(app: &tauri::AppHandle, exe_name: &str) -> Option<Ba
     Some(BackendRuntime {
         executable,
         current_dir,
-        session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+        session_path: configured_output_dir(app).join("latest_session.json"),
         mode: BackendMode::CoreV2Exe,
     })
+}
+
+fn configured_output_dir(app: &tauri::AppHandle) -> PathBuf {
+    if let Some(configured) = env::var_os("MIMIR_OUTPUT_DIR") {
+        let path = PathBuf::from(configured);
+        if path.is_absolute() {
+            return path;
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        let development_output = PathBuf::from(DEV_BACKEND_ROOT).join("MimirOutputV2");
+        if Path::new(DEV_BACKEND_ROOT).exists() {
+            return development_output;
+        }
+    }
+
+    app.path()
+        .app_data_dir()
+        .ok()
+        .unwrap_or_else(|| {
+            env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("Mimir")
+        })
+        .join("MimirOutputV2")
 }
 
 fn resolve_core_v2_scan_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
     #[cfg(debug_assertions)]
     {
+        let session_path = configured_output_dir(app).join("latest_session.json");
         if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_SCRIPT).exists() {
             return Ok(BackendRuntime {
                 executable: PathBuf::from(DEV_BACKEND_PYTHON),
                 current_dir: PathBuf::from(DEV_BACKEND_ROOT),
-                session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
+                session_path: session_path.clone(),
                 mode: BackendMode::CoreV2Python,
             });
         }
     }
 
-    if Path::new(DEV_CORE_V2_SCAN_EXE).exists() {
-        return Ok(BackendRuntime {
-            executable: PathBuf::from(DEV_CORE_V2_SCAN_EXE),
-            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
-            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
-            mode: BackendMode::CoreV2Exe,
-        });
+    #[cfg(debug_assertions)]
+    {
+        let session_path = configured_output_dir(app).join("latest_session.json");
+        if Path::new(DEV_CORE_V2_SCAN_EXE).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_CORE_V2_SCAN_EXE),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path: session_path.clone(),
+                mode: BackendMode::CoreV2Exe,
+            });
+        }
     }
 
     if let Some(runtime) = resource_core_v2_runtime(app, CORE_V2_SCAN_EXE_NAME) {
         return Ok(runtime);
-    }
-
-    if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_SCRIPT).exists() {
-        return Ok(BackendRuntime {
-            executable: PathBuf::from(DEV_BACKEND_PYTHON),
-            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
-            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
-            mode: BackendMode::CoreV2Python,
-        });
     }
 
     Err(backend_missing_failure(
@@ -337,26 +344,21 @@ fn resolve_core_v2_scan_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime
 }
 
 fn resolve_core_v2_actions_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
-    if Path::new(DEV_CORE_V2_ACTIONS_EXE).exists() {
-        return Ok(BackendRuntime {
-            executable: PathBuf::from(DEV_CORE_V2_ACTIONS_EXE),
-            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
-            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
-            mode: BackendMode::CoreV2Exe,
-        });
+    #[cfg(debug_assertions)]
+    {
+        let session_path = configured_output_dir(app).join("latest_session.json");
+        if Path::new(DEV_CORE_V2_ACTIONS_EXE).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_CORE_V2_ACTIONS_EXE),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path: session_path.clone(),
+                mode: BackendMode::CoreV2Exe,
+            });
+        }
     }
 
     if let Some(runtime) = resource_core_v2_runtime(app, CORE_V2_ACTIONS_EXE_NAME) {
         return Ok(runtime);
-    }
-
-    if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_ACTION_SCRIPT).exists() {
-        return Ok(BackendRuntime {
-            executable: PathBuf::from(DEV_BACKEND_PYTHON),
-            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
-            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
-            mode: BackendMode::CoreV2Python,
-        });
     }
 
     Err(backend_missing_failure(
@@ -369,72 +371,8 @@ fn resolve_core_v2_actions_runtime(app: &tauri::AppHandle) -> Result<BackendRunt
     ))
 }
 
-fn resolve_clip_action_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
-    if USE_MIMIR_CORE_V2
-        && Path::new(DEV_BACKEND_PYTHON).exists()
-        && Path::new(DEV_CLIP_ACTION_SCRIPT).exists()
-    {
-        return Ok(BackendRuntime {
-            executable: PathBuf::from(DEV_BACKEND_PYTHON),
-            current_dir: PathBuf::from(DEV_BACKEND_ROOT),
-            session_path: PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON),
-            mode: BackendMode::CoreV2Python,
-        });
-    }
-
-    resolve_backend_runtime(app)
-}
-
 fn resolve_backend_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
-    if USE_MIMIR_CORE_V2 {
-        return resolve_core_v2_scan_runtime(app);
-    }
-
-    #[cfg(debug_assertions)]
-    {
-        if let Some(runtime) = bundled_backend_runtime_from_dir(
-            PathBuf::from(DEV_BACKEND_DIST),
-            BackendMode::DevelopmentResource,
-        ) {
-            return Ok(runtime);
-        }
-    }
-
-    if let Some(resource_dir) = app.path_resolver().resource_dir() {
-        if let Some(runtime) = bundled_backend_runtime_from_dir(
-            resource_dir.join(BACKEND_RESOURCE_FOLDER),
-            BackendMode::Bundled,
-        ) {
-            return Ok(runtime);
-        }
-    }
-
-    #[cfg(debug_assertions)]
-    {
-        let dev_resource_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join(BACKEND_RESOURCE_FOLDER);
-
-        if let Some(runtime) =
-            bundled_backend_runtime_from_dir(dev_resource_dir, BackendMode::DevelopmentResource)
-        {
-            return Ok(runtime);
-        }
-
-        if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_BACKEND_SCRIPT).exists() {
-            return Ok(BackendRuntime {
-                executable: PathBuf::from(DEV_BACKEND_PYTHON),
-                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
-                session_path: PathBuf::from(DEV_LATEST_SESSION_JSON),
-                mode: BackendMode::DevelopmentPythonFallback,
-            });
-        }
-    }
-
-    Err(backend_missing_failure(
-        "scan",
-        &[DEV_BACKEND_DIST, DEV_BACKEND_PYTHON, DEV_BACKEND_SCRIPT],
-    ))
+    resolve_core_v2_scan_runtime(app)
 }
 
 fn backend_command(runtime: &BackendRuntime) -> Command {
@@ -451,8 +389,8 @@ fn active_output_dir(runtime: &BackendRuntime) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEV_BACKEND_ROOT).join("MimirOutputV2"))
 }
 
-fn should_pass_explicit_output_dir(runtime: &BackendRuntime) -> bool {
-    matches!(runtime.mode, BackendMode::CoreV2Exe | BackendMode::CoreV2Python)
+fn should_pass_explicit_output_dir(_runtime: &BackendRuntime) -> bool {
+    true
 }
 
 fn output_argument_name(runtime: &BackendRuntime) -> &'static str {
@@ -496,6 +434,108 @@ fn file_modified_time(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+fn validated_session_path(
+    app: &tauri::AppHandle,
+    requested: Option<String>,
+) -> Result<PathBuf, ScanFailure> {
+    let output_dir = configured_output_dir(app);
+    let candidate = requested
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| output_dir.join("latest_session.json"));
+    if !candidate.exists() || !candidate.is_file() {
+        return Err(ScanFailure::new(
+            "The requested Mimir session does not exist.",
+        ));
+    }
+    let canonical_output = output_dir
+        .canonicalize()
+        .map_err(|error| ScanFailure::new(error.to_string()))?;
+    let canonical_candidate = candidate
+        .canonicalize()
+        .map_err(|error| ScanFailure::new(error.to_string()))?;
+    if !canonical_candidate.starts_with(&canonical_output) {
+        return Err(ScanFailure::new(
+            "The requested session is outside Mimir's output folder.",
+        ));
+    }
+    let filename = canonical_candidate
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if filename != "latest_session.json" && filename != "session.json" {
+        return Err(ScanFailure::new(
+            "The requested file is not a Mimir session.",
+        ));
+    }
+    Ok(canonical_candidate)
+}
+
+fn history_entry(path: &Path) -> Option<SessionHistoryEntry> {
+    let contents = fs::read_to_string(path).ok()?;
+    let session: Value = serde_json::from_str(&contents).ok()?;
+    let summary = session.get("scan_summary").and_then(Value::as_object);
+    let source_name = summary
+        .and_then(|value| value.get("source_name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let source_path = summary
+        .and_then(|value| value.get("source_path"))
+        .and_then(Value::as_str)
+        .or_else(|| session.get("selected_input").and_then(Value::as_str))
+        .unwrap_or_default()
+        .to_string();
+    Some(SessionHistoryEntry {
+        session_id: session
+            .get("session_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        session_path: path.to_string_lossy().to_string(),
+        source_name,
+        source_path,
+        created_at: session
+            .get("session_created_at")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        incidents: session
+            .get("incidents_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        important: session
+            .get("important")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        review: session.get("review").and_then(Value::as_u64).unwrap_or(0),
+        ignore: session.get("ignore").and_then(Value::as_u64).unwrap_or(0),
+        modified_time: file_modified_time(path),
+    })
+}
+
+fn list_session_history_sync(
+    app: &tauri::AppHandle,
+) -> Result<Vec<SessionHistoryEntry>, ScanFailure> {
+    let sessions_dir = configured_output_dir(app).join("sessions");
+    if !sessions_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for directory in
+        fs::read_dir(&sessions_dir).map_err(|error| ScanFailure::new(error.to_string()))?
+    {
+        let directory = directory.map_err(|error| ScanFailure::new(error.to_string()))?;
+        let session_path = directory.path().join("session.json");
+        if let Some(entry) = history_entry(&session_path) {
+            entries.push(entry);
+        }
+    }
+    entries.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    entries.truncate(25);
+    Ok(entries)
+}
+
 fn append_backend_scan_args(
     command: &mut Command,
     runtime: &BackendRuntime,
@@ -507,7 +547,7 @@ fn append_backend_scan_args(
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
 ) {
-    let backend_scan_mode = if USE_MIMIR_CORE_V2 && scan_mode == "quality" {
+    let backend_scan_mode = if scan_mode == "quality" {
         "thorough"
     } else {
         scan_mode
@@ -529,14 +569,8 @@ fn append_backend_scan_args(
             ai_timeout_sec,
         );
     } else if runtime.is_python_fallback() {
-        let script = if matches!(runtime.mode, BackendMode::CoreV2Python) {
-            DEV_CORE_V2_SCRIPT
-        } else {
-            DEV_BACKEND_SCRIPT
-        };
-
         command
-            .arg(script)
+            .arg(DEV_CORE_V2_SCRIPT)
             .arg("--input")
             .arg(input_folder)
             .arg("--mode")
@@ -586,51 +620,6 @@ fn append_experimental_ai_scan_args(
         .arg(ai_review_budget.unwrap_or(5).to_string())
         .arg("--ai-timeout-sec")
         .arg(ai_timeout_sec.unwrap_or(60).to_string());
-}
-
-fn append_backend_action_args(
-    command: &mut Command,
-    runtime: &BackendRuntime,
-    incident_id: &str,
-    action: &str,
-    status: Option<&str>,
-) -> Result<(), ScanFailure> {
-    if runtime.is_python_fallback() {
-        command
-            .arg(DEV_CLIP_ACTION_SCRIPT)
-            .arg("--session")
-            .arg(&runtime.session_path)
-            .arg("--incident-id")
-            .arg(incident_id);
-    } else {
-        command
-            .arg("action")
-            .arg("--session")
-            .arg(&runtime.session_path)
-            .arg("--incident-id")
-            .arg(incident_id);
-    }
-
-    match action {
-        "set_status" => {
-            let status = status.ok_or_else(|| ScanFailure::new("Status is required."))?;
-            if !valid_status(status) {
-                return Err(ScanFailure::new(
-                    "Status must be IGNORE, REVIEW, or IMPORTANT.",
-                ));
-            }
-            command.arg("--set-status").arg(status);
-        }
-        "move_to_library" => {
-            command.arg("--move-to-library");
-        }
-        "delete" => {
-            command.arg("--delete");
-        }
-        _ => return Err(ScanFailure::new("Unsupported incident action.")),
-    }
-
-    Ok(())
 }
 
 fn valid_scan_mode(value: &str) -> bool {
@@ -703,7 +692,7 @@ fn local_ai_status_sync(selected_model: Option<String>) -> LocalAiStatus {
 
 fn emit_install_stream<R: Read + Send + 'static>(
     mut reader: R,
-    window: tauri::Window,
+    window: tauri::WebviewWindow,
     output: std::sync::Arc<std::sync::Mutex<String>>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -760,7 +749,7 @@ fn emit_install_stream<R: Read + Send + 'static>(
 }
 
 fn pull_local_ai_model_sync(
-    window: tauri::Window,
+    window: tauri::WebviewWindow,
     selected_model: Option<String>,
 ) -> Result<LocalAiInstallResult, ScanFailure> {
     let selected_model = selected_model
@@ -1085,11 +1074,7 @@ fn folder_check_item(
 fn run_system_check_sync(app: tauri::AppHandle) -> SystemCheckResult {
     let mut items = Vec::new();
 
-    let scanner_candidates = if USE_MIMIR_CORE_V2 {
-        vec![DEV_CORE_V2_SCAN_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_SCRIPT]
-    } else {
-        vec![DEV_BACKEND_DIST, DEV_BACKEND_PYTHON, DEV_BACKEND_SCRIPT]
-    };
+    let scanner_candidates = vec![DEV_CORE_V2_SCAN_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_SCRIPT];
     let scanner_runtime = resolve_backend_runtime(&app);
 
     if let Ok(runtime) = &scanner_runtime {
@@ -1184,8 +1169,7 @@ fn run_system_check_sync(app: tauri::AppHandle) -> SystemCheckResult {
         ));
     }
 
-    if USE_MIMIR_CORE_V2 {
-        match resolve_core_v2_actions_runtime(&app) {
+    match resolve_core_v2_actions_runtime(&app) {
             Ok(runtime) => items.push(check_item(
                 "local_actions",
                 "Storage actions",
@@ -1224,13 +1208,9 @@ fn run_system_check_sync(app: tauri::AppHandle) -> SystemCheckResult {
                 .collect::<Vec<_>>()
                 .join("\n\n"),
             )),
-        }
     }
 
-    let output_folder = Path::new(DEV_CORE_V2_LATEST_SESSION_JSON)
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| ScanFailure::new("Could not resolve the Core v2 output folder."));
+    let output_folder = Ok(configured_output_dir(&app));
     items.push(folder_check_item(
         "core_v2_output_folder",
         "Scan output folder",
@@ -1340,13 +1320,14 @@ fn incident_json_path(incident: &Value) -> Option<PathBuf> {
 
 fn run_scan_sync(
     app: tauri::AppHandle,
-    window: tauri::Window,
+    window: tauri::WebviewWindow,
     selected_folder: String,
     scan_mode: String,
     use_enhanced_ai: bool,
     vision_model: Option<String>,
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
+    active_scan_pid: Arc<Mutex<Option<u32>>>,
 ) -> Result<ScanResult, ScanFailure> {
     let source_folder = PathBuf::from(selected_folder);
 
@@ -1370,6 +1351,12 @@ fn run_scan_sync(
         .unwrap_or_else(|| DEFAULT_VISION_MODEL.to_string());
     let output_dir = active_output_dir(&runtime);
     fs::create_dir_all(&output_dir).map_err(|error| ScanFailure::new(error.to_string()))?;
+    app.asset_protocol_scope()
+        .allow_directory(&source_canonical, true)
+        .map_err(|error| ScanFailure::new(error.to_string()))?;
+    app.asset_protocol_scope()
+        .allow_directory(&output_dir, true)
+        .map_err(|error| ScanFailure::new(error.to_string()))?;
 
     let mut command = backend_command(&runtime);
     append_backend_scan_args(
@@ -1385,11 +1372,29 @@ fn run_scan_sync(
     );
     let backend_command = command_preview(&command);
 
+    {
+        let active = active_scan_pid
+            .lock()
+            .map_err(|_| ScanFailure::new("Could not access scan process state."))?;
+        if active.is_some() {
+            return Err(ScanFailure::new("A Mimir scan is already running."));
+        }
+    }
+
     let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| ScanFailure::new(format!("Bundled backend could not start. {}", error)))?;
+    {
+        let mut active = active_scan_pid
+            .lock()
+            .map_err(|_| ScanFailure::new("Could not store scan process state."))?;
+        *active = Some(child.id());
+    }
+    let _scan_guard = ActiveScanGuard {
+        pid: active_scan_pid,
+    };
 
     let stdout_pipe = child
         .stdout
@@ -1501,14 +1506,16 @@ async fn count_teslacam_clips(selected_folder: String) -> Result<usize, ScanFail
 #[tauri::command]
 async fn run_local_scan(
     app: tauri::AppHandle,
-    window: tauri::Window,
+    window: tauri::WebviewWindow,
     selected_folder: String,
     scan_mode: String,
     use_enhanced_ai: bool,
     vision_model: Option<String>,
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
+    active_scan: tauri::State<'_, ActiveScanProcess>,
 ) -> Result<ScanResult, ScanFailure> {
+    let active_scan_pid = active_scan.pid.clone();
     tauri::async_runtime::spawn_blocking(move || {
         run_scan_sync(
             app,
@@ -1519,94 +1526,30 @@ async fn run_local_scan(
             vision_model,
             ai_review_budget,
             ai_timeout_sec,
+            active_scan_pid,
         )
     })
     .await
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
-fn run_clip_action_sync(
-    app: tauri::AppHandle,
-    incident_id: String,
-    action: String,
-    status: Option<String>,
-) -> Result<ClipActionResult, ScanFailure> {
-    let runtime = resolve_clip_action_runtime(&app)?;
-    let mut command = backend_command(&runtime);
-    append_backend_action_args(
-        &mut command,
-        &runtime,
-        &incident_id,
-        &action,
-        status.as_deref(),
-    )?;
-
-    let output = command
-        .output()
-        .map_err(|error| ScanFailure::new(format!("Bundled backend could not start. {}", error)))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if !output.status.success() {
-        return Err(ScanFailure::with_output(
-            "Incident action failed.",
-            stdout,
-            stderr,
-        ));
-    }
-
-    let parsed: Value = serde_json::from_str(&stdout).map_err(|error| {
-        ScanFailure::with_output(error.to_string(), stdout.clone(), stderr.clone())
-    })?;
-    let ok = parsed.get("ok").and_then(Value::as_bool).unwrap_or(false);
-
-    if !ok {
-        let message = parsed
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("Incident action failed.");
-        return Err(ScanFailure::with_output(message, stdout, stderr));
-    }
-
-    Ok(ClipActionResult {
-        ok,
-        action: parsed
-            .get("action")
-            .and_then(Value::as_str)
-            .unwrap_or(action.as_str())
-            .to_string(),
-        incident_id: parsed
-            .get("incident_id")
-            .and_then(Value::as_str)
-            .unwrap_or(&incident_id)
-            .to_string(),
-        message: parsed
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("Incident action completed.")
-            .to_string(),
-        updated_session: parsed
-            .get("updated_session")
-            .and_then(Value::as_str)
-            .unwrap_or_else(|| runtime.session_path.to_str().unwrap_or(""))
-            .to_string(),
-        stdout,
-        stderr,
-    })
-}
-
 #[tauri::command]
-async fn run_incident_action(
-    app: tauri::AppHandle,
-    incident_id: String,
-    action: String,
-    status: Option<String>,
-) -> Result<ClipActionResult, ScanFailure> {
-    tauri::async_runtime::spawn_blocking(move || {
-        run_clip_action_sync(app, incident_id, action, status)
-    })
-    .await
-    .map_err(|error| ScanFailure::new(error.to_string()))?
+async fn cancel_local_scan(
+    active_scan: tauri::State<'_, ActiveScanProcess>,
+) -> Result<bool, ScanFailure> {
+    let pid = active_scan
+        .pid
+        .lock()
+        .map_err(|_| ScanFailure::new("Could not access scan process state."))?
+        .to_owned();
+    let Some(pid) = pid else {
+        return Ok(false);
+    };
+    let status = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .status()
+        .map_err(|error| ScanFailure::new(format!("Could not stop the scan: {}", error)))?;
+    Ok(status.success())
 }
 
 fn run_core_v2_storage_action_sync(
@@ -1614,13 +1557,7 @@ fn run_core_v2_storage_action_sync(
     incident_id: String,
     action: String,
 ) -> Result<StorageActionResult, ScanFailure> {
-    if !USE_MIMIR_CORE_V2 {
-        return Err(ScanFailure::new(
-            "Core v2 storage actions are not enabled in this build.",
-        ));
-    }
-
-    if action != "move_to_library" && action != "move_to_trash" {
+    if action != "move_to_library" && action != "move_to_trash" && action != "restore_from_trash" {
         return Err(ScanFailure::new("Unsupported storage action."));
     }
 
@@ -1631,15 +1568,27 @@ fn run_core_v2_storage_action_sync(
         command.arg(DEV_CORE_V2_ACTION_SCRIPT);
     }
 
-    command.arg("--incident-id").arg(&incident_id);
+    let output_dir = active_output_dir(&runtime);
+    let report_path = output_dir.join("last_action_report.json");
+    let journal_path = output_dir.join("storage_action_journal.json");
+    command
+        .arg("--session")
+        .arg(&runtime.session_path)
+        .arg("--report")
+        .arg(&report_path)
+        .arg("--journal")
+        .arg(&journal_path)
+        .arg("--incident-id")
+        .arg(&incident_id);
 
     if action == "move_to_library" {
         command.arg("--move-to-library");
-    } else {
+    } else if action == "move_to_trash" {
         command.arg("--move-to-trash");
+    } else {
+        command.arg("--restore-from-trash");
     }
 
-    let report_path = PathBuf::from(DEV_CORE_V2_ACTION_REPORT_JSON);
     let _ = fs::remove_file(&report_path);
 
     let output = command
@@ -1673,6 +1622,8 @@ fn run_core_v2_storage_action_sync(
         "Moved to Mimir Library.".to_string()
     } else if ok && action == "move_to_trash" {
         "Moved to Mimir Trash.".to_string()
+    } else if ok && action == "restore_from_trash" {
+        "Restored from Mimir Trash.".to_string()
     } else if moved_count > 0 && failed_count > 0 {
         "Some files could not be moved.".to_string()
     } else {
@@ -1684,7 +1635,7 @@ fn run_core_v2_storage_action_sync(
         action,
         incident_id,
         message,
-        updated_session: DEV_CORE_V2_LATEST_SESSION_JSON.to_string(),
+        updated_session: runtime.session_path.to_string_lossy().to_string(),
         report_json,
         backend_runner: runtime.runner_label().to_string(),
         stdout,
@@ -1784,6 +1735,151 @@ async fn save_incident_note(
         .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+fn save_manual_status_sync(
+    app: tauri::AppHandle,
+    incident_id: String,
+    status: String,
+) -> Result<ClipActionResult, ScanFailure> {
+    if !valid_status(&status) {
+        return Err(ScanFailure::new(
+            "Status must be IGNORE, REVIEW, or IMPORTANT.",
+        ));
+    }
+    let session_path = configured_output_dir(&app).join("latest_session.json");
+    let contents =
+        fs::read_to_string(&session_path).map_err(|error| ScanFailure::new(error.to_string()))?;
+    let mut session: Value =
+        serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
+    let incidents = session
+        .get_mut("incidents")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| ScanFailure::new("latest_session.json has no incidents list."))?;
+    let mut updated_incident: Option<Value> = None;
+    for (index, incident) in incidents.iter_mut().enumerate() {
+        if !incident_matches(incident, &incident_id, index) {
+            continue;
+        }
+        let object = incident
+            .as_object_mut()
+            .ok_or_else(|| ScanFailure::new("Incident entry is not an object."))?;
+        let mimir_status = object
+            .get("final_severity")
+            .and_then(Value::as_str)
+            .unwrap_or("IGNORE")
+            .to_string();
+        let is_override = status != mimir_status;
+        object.insert(
+            "manual_status_override".to_string(),
+            Value::Bool(is_override),
+        );
+        if is_override {
+            object.insert("user_status".to_string(), Value::String(status.clone()));
+        } else {
+            object.remove("user_status");
+        }
+        object.insert(
+            "user_status_updated_at".to_string(),
+            Value::String(chrono_like_now()),
+        );
+        updated_incident = Some(Value::Object(object.clone()));
+        break;
+    }
+    let updated_incident =
+        updated_incident.ok_or_else(|| ScanFailure::new("Incident was not found."))?;
+    write_json_atomically(&session_path, &session)?;
+    if let Some(path) = incident_json_path(&updated_incident) {
+        let _ = write_json_atomically(&path, &updated_incident);
+    }
+    Ok(ClipActionResult {
+        ok: true,
+        action: "set_status".to_string(),
+        incident_id,
+        message: "Status saved for this session.".to_string(),
+        updated_session: session_path.to_string_lossy().to_string(),
+        stdout: String::new(),
+        stderr: String::new(),
+    })
+}
+
+#[tauri::command]
+async fn save_manual_status(
+    app: tauri::AppHandle,
+    incident_id: String,
+    status: String,
+) -> Result<ClipActionResult, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || save_manual_status_sync(app, incident_id, status))
+        .await
+        .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
+fn save_key_moment_correction_sync(
+    app: tauri::AppHandle,
+    incident_id: String,
+    time_sec: f64,
+) -> Result<ClipActionResult, ScanFailure> {
+    if !time_sec.is_finite() || time_sec < 0.0 {
+        return Err(ScanFailure::new(
+            "The corrected key-moment time is invalid.",
+        ));
+    }
+    let session_path = configured_output_dir(&app).join("latest_session.json");
+    let contents =
+        fs::read_to_string(&session_path).map_err(|error| ScanFailure::new(error.to_string()))?;
+    let mut session: Value =
+        serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
+    let incidents = session
+        .get_mut("incidents")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| ScanFailure::new("latest_session.json has no incidents list."))?;
+    let mut updated_incident: Option<Value> = None;
+    for (index, incident) in incidents.iter_mut().enumerate() {
+        if !incident_matches(incident, &incident_id, index) {
+            continue;
+        }
+        let object = incident
+            .as_object_mut()
+            .ok_or_else(|| ScanFailure::new("Incident entry is not an object."))?;
+        object.insert(
+            "user_key_moment_sec".to_string(),
+            json!((time_sec * 1000.0).round() / 1000.0),
+        );
+        object.insert(
+            "user_key_moment_updated_at".to_string(),
+            Value::String(chrono_like_now()),
+        );
+        updated_incident = Some(Value::Object(object.clone()));
+        break;
+    }
+    let updated_incident =
+        updated_incident.ok_or_else(|| ScanFailure::new("Incident was not found."))?;
+    write_json_atomically(&session_path, &session)?;
+    if let Some(path) = incident_json_path(&updated_incident) {
+        let _ = write_json_atomically(&path, &updated_incident);
+    }
+    Ok(ClipActionResult {
+        ok: true,
+        action: "set_key_moment".to_string(),
+        incident_id,
+        message: "Actual moment saved for this session.".to_string(),
+        updated_session: session_path.to_string_lossy().to_string(),
+        stdout: String::new(),
+        stderr: String::new(),
+    })
+}
+
+#[tauri::command]
+async fn save_key_moment_correction(
+    app: tauri::AppHandle,
+    incident_id: String,
+    time_sec: f64,
+) -> Result<ClipActionResult, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        save_key_moment_correction_sync(app, incident_id, time_sec)
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
 #[tauri::command]
 async fn save_incident_feedback(
     feedback: Value,
@@ -1815,7 +1911,7 @@ async fn check_local_ai(selected_model: Option<String>) -> Result<LocalAiStatus,
 
 #[tauri::command]
 async fn pull_local_ai_model(
-    window: tauri::Window,
+    window: tauri::WebviewWindow,
     selected_model: Option<String>,
 ) -> Result<LocalAiInstallResult, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || pull_local_ai_model_sync(window, selected_model))
@@ -1843,19 +1939,74 @@ async fn load_latest_session_json(
     session_path: Option<String>,
 ) -> Result<String, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
-        let path = session_path
-            .filter(|value| !value.trim().is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                resolve_backend_runtime(&app)
-                    .map(|runtime| runtime.session_path)
-                    .unwrap_or_else(|_| PathBuf::from(DEV_CORE_V2_LATEST_SESSION_JSON))
-            });
+        let path = validated_session_path(&app, session_path)?;
 
-        fs::read_to_string(&path).map_err(|error| ScanFailure::new(error.to_string()))
+        let contents =
+            fs::read_to_string(&path).map_err(|error| ScanFailure::new(error.to_string()))?;
+        if let Ok(session) = serde_json::from_str::<Value>(&contents) {
+            allow_session_assets(&app, &session)?;
+        }
+        Ok(contents)
     })
     .await
     .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
+fn allow_session_assets(app: &tauri::AppHandle, session: &Value) -> Result<(), ScanFailure> {
+    let scope = app.asset_protocol_scope();
+    let output_dir = configured_output_dir(app);
+    scope
+        .allow_directory(&output_dir, true)
+        .map_err(|error| ScanFailure::new(error.to_string()))?;
+    if let Some(source) = session
+        .get("scan_summary")
+        .and_then(|value| value.get("source_path"))
+        .and_then(Value::as_str)
+        .or_else(|| session.get("selected_input").and_then(Value::as_str))
+    {
+        let source_path = PathBuf::from(source);
+        if source_path.exists() && source_path.is_dir() {
+            scope
+                .allow_directory(source_path, true)
+                .map_err(|error| ScanFailure::new(error.to_string()))?;
+        }
+    }
+    if let Some(incidents) = session.get("incidents").and_then(Value::as_array) {
+        for incident in incidents {
+            for field in ["video_path", "thumbnail", "hero_thumbnail", "contact_sheet"] {
+                if let Some(value) = incident.get(field).and_then(Value::as_str) {
+                    let path = PathBuf::from(value);
+                    if path.exists() && path.is_file() {
+                        scope
+                            .allow_file(path)
+                            .map_err(|error| ScanFailure::new(error.to_string()))?;
+                    }
+                }
+            }
+            if let Some(clips) = incident.get("camera_clips").and_then(Value::as_array) {
+                for clip in clips {
+                    if let Some(value) = clip.get("path").and_then(Value::as_str) {
+                        let path = PathBuf::from(value);
+                        if path.exists() && path.is_file() {
+                            scope
+                                .allow_file(path)
+                                .map_err(|error| ScanFailure::new(error.to_string()))?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_session_history(
+    app: tauri::AppHandle,
+) -> Result<Vec<SessionHistoryEntry>, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || list_session_history_sync(&app))
+        .await
+        .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
 #[tauri::command]
@@ -1918,20 +2069,70 @@ async fn log_incident_diagnostic(
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command_args(command: &Command) -> Vec<String> {
+        command
+            .get_args()
+            .map(|value| value.to_string_lossy().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn scan_modes_and_statuses_are_allowlisted() {
+        assert!(valid_scan_mode("balanced"));
+        assert!(valid_scan_mode("thorough"));
+        assert!(!valid_scan_mode("../../unsafe"));
+        assert!(valid_status("IMPORTANT"));
+        assert!(!valid_status("important; remove"));
+    }
+
+    #[test]
+    fn local_only_scan_does_not_append_ai_arguments() {
+        let mut command = Command::new("scanner");
+        append_experimental_ai_scan_args(&mut command, false, "qwen2.5vl:7b", Some(999), Some(120));
+        assert!(command_args(&command).is_empty());
+    }
+
+    #[test]
+    fn experimental_ai_arguments_are_explicit() {
+        let mut command = Command::new("scanner");
+        append_experimental_ai_scan_args(&mut command, true, "qwen2.5vl:7b", Some(999), Some(120));
+        assert_eq!(
+            command_args(&command),
+            [
+                "--vlm",
+                "qwen2.5vl:7b",
+                "--ai-review-budget",
+                "999",
+                "--ai-timeout-sec",
+                "120",
+            ]
+        );
+    }
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .manage(ActiveScanProcess::default())
         .invoke_handler(tauri::generate_handler![
             check_system_requirements,
             count_teslacam_clips,
             run_local_scan,
-            run_incident_action,
+            cancel_local_scan,
             run_core_v2_storage_action,
             save_incident_note,
+            save_manual_status,
+            save_key_moment_correction,
             save_incident_feedback,
             check_local_ai,
             pull_local_ai_model,
             open_local_ai_download_page,
             load_latest_session_json,
+            list_session_history,
             open_containing_folder,
             open_mimir_storage_folder,
             log_incident_diagnostic

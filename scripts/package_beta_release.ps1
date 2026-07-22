@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
-$ReleaseName = "Mimir-Beta-v0.1"
+$Package = Get-Content (Join-Path $Root "package.json") -Raw | ConvertFrom-Json
+$ReleaseName = "Mimir-Free-Private-Beta-v$($Package.version)"
 $ReleaseRoot = Join-Path $Root "dist-release"
 $ReleaseDir = Join-Path $ReleaseRoot $ReleaseName
 $BundleDir = Join-Path $Root "src-tauri\target\release\bundle"
@@ -35,6 +36,31 @@ function Find-Installer {
 Write-Step "Building frontend"
 Push-Location $Root
 try {
+  Write-Step "Running desktop unit and type checks"
+  npm test
+  npm run type-check
+
+  Write-Step "Running desktop shell tests"
+  Push-Location (Join-Path $Root "src-tauri")
+  try {
+    cargo test
+  }
+  finally {
+    Pop-Location
+  }
+
+  Write-Step "Building self-contained Core v2 executables"
+  npm run sidecar:build
+
+  Write-Step "Generating software bill of materials"
+  npm run sbom
+
+  Write-Step "Running dependency, secret, and packaged-content audit"
+  npm run security:audit
+  if ($LASTEXITCODE -ne 0) {
+    throw "Release security audit failed. See release_assets\security_scan_report.json."
+  }
+
   npm run build
 
   Write-Step "Building Tauri Windows installer"
@@ -42,6 +68,19 @@ try {
 }
 finally {
   Pop-Location
+}
+
+Write-Step "Running strict free-beta release gate"
+$BackendRoot = $env:MIMIR_BACKEND_ROOT
+if ([string]::IsNullOrWhiteSpace($BackendRoot)) {
+  $BackendRoot = Join-Path (Split-Path -Parent $Root) "Mimir_Backend"
+}
+$BackendRoot = [System.IO.Path]::GetFullPath($BackendRoot)
+$ReleaseCheck = Join-Path $BackendRoot "mimir_core_v2_release_check.py"
+$BackendPython = Join-Path $BackendRoot ".venv\Scripts\python.exe"
+& $BackendPython $ReleaseCheck --gate-only --frontend-root $Root
+if ($LASTEXITCODE -ne 0) {
+  throw "Strict release gate failed. This installer must not be distributed."
 }
 
 Write-Step "Creating beta release folder"
@@ -58,6 +97,8 @@ Copy-Item -Force $Installer.FullName (Join-Path $ReleaseDir $InstallerName)
 
 Copy-Item -Force (Join-Path $AssetsDir "README_START_HERE.html") (Join-Path $ReleaseDir "README_START_HERE.html")
 Copy-Item -Force (Join-Path $AssetsDir "PRIVATE_BETA_TESTING.md") (Join-Path $ReleaseDir "PRIVATE_BETA_TESTING.md")
+Copy-Item -Force (Join-Path $AssetsDir "sbom.cdx.json") (Join-Path $ReleaseDir "sbom.cdx.json")
+Copy-Item -Recurse -Force (Join-Path $Root "docs") (Join-Path $ReleaseDir "docs")
 
 $ScreenshotCandidates = @(
   (Join-Path $AssetsDir "screenshot.png"),

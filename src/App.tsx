@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
-import { open } from '@tauri-apps/api/dialog'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
-import { invoke } from '@tauri-apps/api/tauri'
-import { appWindow } from '@tauri-apps/api/window'
+import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { BetaNoticeFooter, BetaPrivacyNotice } from './components/BetaPrivacyNotice'
 import { CrashSafeBoundary } from './components/CrashSafeBoundary'
 import { ImportPanel } from './components/ImportPanel'
@@ -16,6 +16,7 @@ import type {
   LocalAiStatus,
   MimirSession,
   ScanRunState,
+  SessionHistoryEntry,
   SessionLoadState,
   SystemCheckResult,
 } from './types'
@@ -26,11 +27,11 @@ const betaNoticeAcceptedKey = 'mimir_beta_privacy_notice_accepted'
 const selectedVisionModelKey = 'mimir_selected_vision_model'
 const experimentalAiEnabledKey = 'experimental_ai_enabled'
 const experimentalAiModelKey = 'experimental_ai_model'
-const experimentalAiBudgetKey = 'experimental_ai_budget'
 const experimentalAiTimeoutSecKey = 'experimental_ai_timeout_sec'
 const defaultVisionModel = 'qwen2.5vl:7b'
-const defaultAiReviewBudget = 5
 const defaultAiTimeoutSec = 60
+const internalAiReviewBudget = 999
+const appWebview = getCurrentWebview()
 
 interface LocalScanResult {
   stdout: string
@@ -93,8 +94,7 @@ interface LocalAiInstallLineEvent {
 
 type AppView = 'import' | 'library'
 type ScanMode = 'fast' | 'balanced' | 'quality'
-type AiReviewBudget = 3 | 5 | 10
-type AiTimeoutSec = 30 | 60 | 120
+type AiTimeoutSec = 60 | 120 | 180
 
 const progressPrefix = 'MIMIR_PROGRESS'
 
@@ -193,11 +193,8 @@ export default function App() {
   const [selectedVisionModel] = useState(() => readSelectedVisionModel())
   const [experimentalAiEnabled, setExperimentalAiEnabled] = useState(() => readStoredExperimentalAiEnabled())
   const [experimentalAiModel, setExperimentalAiModel] = useState(() => readStoredExperimentalAiModel())
-  const [experimentalAiBudget, setExperimentalAiBudget] = useState<AiReviewBudget>(() =>
-    readStoredNumberOption(experimentalAiBudgetKey, [3, 5, 10] as const, defaultAiReviewBudget),
-  )
   const [experimentalAiTimeoutSec, setExperimentalAiTimeoutSec] = useState<AiTimeoutSec>(() =>
-    readStoredNumberOption(experimentalAiTimeoutSecKey, [30, 60, 120] as const, defaultAiTimeoutSec),
+    readStoredNumberOption(experimentalAiTimeoutSecKey, [60, 120, 180] as const, defaultAiTimeoutSec),
   )
   const [isLocalAiSetupOpen, setIsLocalAiSetupOpen] = useState(false)
   const [isPullingLocalAiModel, setIsPullingLocalAiModel] = useState(false)
@@ -205,6 +202,10 @@ export default function App() {
   const [localAiInstallResult, setLocalAiInstallResult] = useState<LocalAiInstallResult | null>(null)
   const [localAiSetupError, setLocalAiSetupError] = useState('')
   const [scanDiagnostics, setScanDiagnostics] = useState<FrontendScanDiagnostics | null>(null)
+  const [sessionHistory, setSessionHistory] = useState<SessionHistoryEntry[]>([])
+  const [isCancellingScan, setIsCancellingScan] = useState(false)
+  const activeProgressSessionId = useRef('')
+  const scanCancellationRequested = useRef(false)
 
   const selectFolder = async (folderPath: string) => {
     setSelectedFolder(folderPath)
@@ -227,13 +228,13 @@ export default function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined
 
-    appWindow
-      .onFileDropEvent(event => {
-        if (event.payload.type === 'hover') {
+    appWebview
+      .onDragDropEvent(event => {
+        if (event.payload.type === 'over') {
           setIsDraggingFolder(true)
         }
 
-        if (event.payload.type === 'cancel') {
+        if (event.payload.type === 'leave') {
           setIsDraggingFolder(false)
         }
 
@@ -336,6 +337,13 @@ export default function App() {
       try {
         const parsed = JSON.parse(jsonPayload) as BackendProgress
 
+        if (parsed.session_id) {
+          if (activeProgressSessionId.current && activeProgressSessionId.current !== parsed.session_id) {
+            return
+          }
+          activeProgressSessionId.current = parsed.session_id
+        }
+
         setScanProgress(previous => {
           const parsedStage = parsed.stage?.toLowerCase()
 
@@ -397,7 +405,7 @@ export default function App() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: 'Choose USB drive or footage folder',
+      title: 'Choose footage folder',
     })
 
     if (typeof selected === 'string') {
@@ -462,6 +470,27 @@ export default function App() {
     [scanDiagnostics?.latest_session_path],
   )
 
+  const refreshSessionHistory = useCallback(async () => {
+    try {
+      const history = await invoke<SessionHistoryEntry[]>('list_session_history')
+      setSessionHistory(history)
+      return history
+    } catch {
+      setSessionHistory([])
+      return []
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showOnboarding) {
+      return
+    }
+    void refreshSessionHistory()
+    if (!latestSession && sessionLoadState === 'idle') {
+      void loadLatestSession(false)
+    }
+  }, [latestSession, loadLatestSession, refreshSessionHistory, sessionLoadState, showOnboarding])
+
   const runScan = async (useEnhancedAi: boolean) => {
     if (!selectedFolder || scanState === 'running') {
       return
@@ -471,9 +500,11 @@ export default function App() {
     setScanError('')
     setScanOutput(null)
     setScanProgress(null)
+    activeProgressSessionId.current = ''
     setLastProgressMessage('')
+    setIsCancellingScan(false)
+    scanCancellationRequested.current = false
     setScanDiagnostics(null)
-    setLatestSession(null)
     setSessionLoadState('loading')
 
     const effectiveVisionModel = experimentalAiModel.trim() || defaultVisionModel
@@ -484,8 +515,8 @@ export default function App() {
         scanMode,
         useEnhancedAi,
         visionModel: useEnhancedAi ? effectiveVisionModel : selectedVisionModel,
-        aiReviewBudget: experimentalAiBudget,
-        aiTimeoutSec: experimentalAiTimeoutSec,
+        aiReviewBudget: useEnhancedAi ? internalAiReviewBudget : undefined,
+        aiTimeoutSec: useEnhancedAi ? experimentalAiTimeoutSec : undefined,
       })
       const diagnostics = diagnosticsFromScanResult(result)
       setScanDiagnostics(diagnostics)
@@ -495,7 +526,7 @@ export default function App() {
         stderr: appendBackendRunnerDetails(result.stderr, diagnostics),
       })
 
-      const loadedSession = await loadLatestSession(true, diagnostics.latest_session_path)
+      const loadedSession = await loadLatestSession(false, diagnostics.latest_session_path)
       const unsupportedSource = loadedSession?.source_report?.is_supported === false
 
       setScanState(loadedSession && !unsupportedSource ? 'complete' : 'error')
@@ -519,10 +550,20 @@ export default function App() {
         })
       } else {
         setScanProgress(null)
+        void refreshSessionHistory()
         setAppView('library')
       }
     } catch (error) {
       setSessionLoadState('idle')
+      if (scanCancellationRequested.current) {
+        setScanState('idle')
+        setScanError('')
+        setScanOutput(null)
+        setScanProgress(null)
+        setLastProgressMessage('Scan canceled.')
+        setIsCancellingScan(false)
+        return
+      }
       setScanState('error')
 
       if (isLocalScanFailure(error)) {
@@ -535,6 +576,22 @@ export default function App() {
         setScanError(error instanceof Error ? error.message : String(error))
         setScanOutput(null)
       }
+    }
+  }
+
+  const cancelScan = async () => {
+    if (scanState !== 'running' || isCancellingScan) {
+      return
+    }
+    scanCancellationRequested.current = true
+    setIsCancellingScan(true)
+    setLastProgressMessage('Stopping scan safely...')
+    try {
+      await invoke<boolean>('cancel_local_scan')
+    } catch (error) {
+      scanCancellationRequested.current = false
+      setIsCancellingScan(false)
+      setScanError(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -602,7 +659,29 @@ export default function App() {
     setScanOutput(null)
     setScanProgress(null)
     setLastProgressMessage('')
-    setScanDiagnostics(null)
+  }
+
+  const returnToLatestSession = () => {
+    if (!latestSession) {
+      return
+    }
+
+    setAppView('library')
+    setScanState('complete')
+    setSessionLoadState('loaded')
+    setScanError('')
+    setScanOutput(null)
+    setScanProgress(null)
+    setLastProgressMessage('')
+  }
+
+  const openSessionFromHistory = async (sessionPath: string) => {
+    const loaded = await loadLatestSession(false, sessionPath)
+    if (loaded) {
+      setAppView('library')
+      setScanState('complete')
+      setScanError('')
+    }
   }
 
   const updateScanMode = (mode: ScanMode) => {
@@ -630,16 +709,6 @@ export default function App() {
 
     try {
       window.localStorage.setItem(experimentalAiModelKey, model)
-    } catch {
-      // Optional preference.
-    }
-  }
-
-  const updateExperimentalAiBudget = (budget: AiReviewBudget) => {
-    setExperimentalAiBudget(budget)
-
-    try {
-      window.localStorage.setItem(experimentalAiBudgetKey, String(budget))
     } catch {
       // Optional preference.
     }
@@ -716,6 +785,10 @@ export default function App() {
           isDraggingFolder={isDraggingFolder}
           onChooseFolder={chooseFolder}
           onAnalyze={analyzeSelectedFolder}
+          onCancelScan={() => {
+            void cancelScan()
+          }}
+          isCancellingScan={isCancellingScan}
           loadState={sessionLoadState}
           scanState={scanState}
           scanError={scanError}
@@ -733,11 +806,9 @@ export default function App() {
           selectedVisionModel={selectedVisionModel}
           experimentalAiEnabled={experimentalAiEnabled}
           experimentalAiModel={experimentalAiModel}
-          experimentalAiBudget={experimentalAiBudget}
           experimentalAiTimeoutSec={experimentalAiTimeoutSec}
           onExperimentalAiEnabledChange={updateExperimentalAiEnabled}
           onExperimentalAiModelChange={updateExperimentalAiModel}
-          onExperimentalAiBudgetChange={updateExperimentalAiBudget}
           onExperimentalAiTimeoutSecChange={updateExperimentalAiTimeoutSec}
           isLocalAiSetupOpen={isLocalAiSetupOpen}
           onOpenLocalAiSetup={() => setIsLocalAiSetupOpen(true)}
@@ -754,6 +825,12 @@ export default function App() {
           localAiInstallLine={localAiInstallLine}
           localAiInstallResult={localAiInstallResult}
           localAiSetupError={localAiSetupError}
+          hasLatestSession={Boolean(latestSession)}
+          onReturnToLatestSession={returnToLatestSession}
+          sessionHistory={sessionHistory}
+          onOpenSession={sessionPath => {
+            void openSessionFromHistory(sessionPath)
+          }}
         />
       </div>
       {betaNoticeChrome}

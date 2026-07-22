@@ -1,8 +1,12 @@
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
-$BackendRoot = "C:\Mimir_Backend"
-$BackendPython = Join-Path $BackendRoot ".venv\Scripts\python.exe"
+$BackendRoot = $env:MIMIR_BACKEND_ROOT
+if ([string]::IsNullOrWhiteSpace($BackendRoot)) {
+  $SiblingBackend = Join-Path (Split-Path -Parent $Root) "Mimir_Backend"
+  $BackendRoot = if (Test-Path $SiblingBackend) { $SiblingBackend } else { "C:\Mimir_Backend" }
+}
+$BackendPython = Join-Path $BackendRoot ".venv-runtime\Scripts\python.exe"
 $BackendBuildScript = Join-Path $BackendRoot "build_backend_exe.py"
 $BackendDist = Join-Path $BackendRoot "dist_backend"
 $ResourceBackend = Join-Path $Root "src-tauri\resources\mimir-backend"
@@ -16,17 +20,21 @@ if (!(Test-Path $BackendBuildScript)) {
 }
 
 if (!(Test-Path $BackendPython)) {
-  $BackendPython = "python"
+  throw "Clean backend runtime environment not found: $BackendPython. Create .venv-runtime and install requirements-build.txt."
 }
 
-& $BackendPython -m pip install --upgrade "pyinstaller>=6.21.0"
+& $BackendPython -m PyInstaller --version
+if ($LASTEXITCODE -ne 0) {
+  throw "PyInstaller is not installed in the backend virtual environment. Install requirements-core-v2.txt first."
+}
 & $BackendPython $BackendBuildScript
 
 New-Item -ItemType Directory -Force -Path $ResourceBackend | Out-Null
 
 $RequiredExecutables = @(
   "mimir-core-v2-scan.exe",
-  "mimir-core-v2-actions.exe"
+  "mimir-core-v2-actions.exe",
+  "mimir-core-v2-release-check.exe"
 )
 
 foreach ($ExecutableName in $RequiredExecutables) {
@@ -35,11 +43,6 @@ foreach ($ExecutableName in $RequiredExecutables) {
     throw "Expected backend executable was not built: $Source"
   }
   Copy-Item -Force $Source (Join-Path $ResourceBackend $ExecutableName)
-}
-
-$ReleaseCheck = Join-Path $BackendDist "mimir-core-v2-release-check.exe"
-if (Test-Path $ReleaseCheck) {
-  Copy-Item -Force $ReleaseCheck (Join-Path $ResourceBackend "mimir-core-v2-release-check.exe")
 }
 
 Write-Host "Built Core v2 backend resources: $ResourceBackend"

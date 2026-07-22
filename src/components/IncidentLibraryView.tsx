@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/tauri'
-import { invoke } from '@tauri-apps/api/tauri'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { documentDir } from '@tauri-apps/api/path'
 import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
+import {
+  incidentOverrideKey,
+  normalizeSeverity,
+  resolveIncidentSeverity,
+  sessionIdentity,
+  type ManualStatusOverrides,
+  type SeverityGroup,
+  type SeverityResolution,
+} from '../lib/incidentStatus'
 import type {
   FrontendScanDiagnostics,
   MimirCameraClip,
@@ -15,7 +23,6 @@ import type {
 } from '../types'
 
 type LibraryFilter = 'IMPORTANT' | 'REVIEW' | 'IGNORE' | 'ALL' | 'TRASH'
-type SeverityGroup = 'IMPORTANT' | 'REVIEW' | 'IGNORE'
 type ReviewPage = 'review' | 'library'
 
 interface IncidentLibraryViewProps {
@@ -49,16 +56,6 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-function normalizeSeverity(severity?: string): SeverityGroup {
-  const value = String(severity ?? '').toUpperCase()
-
-  if (value === 'IMPORTANT' || value === 'REVIEW') {
-    return value
-  }
-
-  return 'IGNORE'
-}
-
 function severityCopy(severity: string) {
   const normalized = normalizeSeverity(severity)
 
@@ -77,14 +74,14 @@ function severityClass(severity: string) {
   const normalized = normalizeSeverity(severity)
 
   if (normalized === 'IMPORTANT') {
-    return 'border-[rgba(185,101,97,0.26)] bg-[rgba(185,101,97,0.12)] text-red-100/90'
+    return 'border-[rgba(196,119,114,0.28)] bg-[rgba(196,119,114,0.115)] text-red-100/92'
   }
 
   if (normalized === 'REVIEW') {
-    return 'border-[rgba(173,139,85,0.28)] bg-[rgba(173,139,85,0.12)] text-amber-100/90'
+    return 'border-[rgba(195,160,98,0.28)] bg-[rgba(195,160,98,0.115)] text-amber-100/92'
   }
 
-  return 'border-[rgba(127,133,136,0.22)] bg-[rgba(127,133,136,0.10)] text-[var(--mimir-text-muted)]'
+  return 'border-[rgba(133,139,139,0.20)] bg-[rgba(133,139,139,0.085)] text-[var(--mimir-text-muted)]'
 }
 
 function formatEventType(value?: string) {
@@ -181,7 +178,7 @@ function scanResultCopy(session: MimirSession) {
 }
 
 function reviewModeCopy(session: MimirSession) {
-  return session.ai_enabled ? 'Experimental AI used' : 'Local review'
+  return session.ai_enabled ? 'Local review + AI second opinion' : 'Local review'
 }
 
 function scanAccountingCopy(session: MimirSession) {
@@ -204,11 +201,22 @@ function sessionClipsScanned(session: MimirSession) {
   return session.scan_summary?.clips_scanned ?? session.clips_scanned ?? session.clips_processed ?? null
 }
 
+function sessionFeatureFlags(session: MimirSession) {
+  return session.feature_flags && typeof session.feature_flags === 'object' ? session.feature_flags : {}
+}
+
 function sessionMayBeStale(session: MimirSession) {
   const incidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
   const clipsScanned = sessionClipsScanned(session)
+  const featureFlags = sessionFeatureFlags(session)
 
-  return incidentCount > 0 && (!session.scan_summary || clipsScanned === null || clipsScanned === 0)
+  return (
+    !session.core_version ||
+    !session.scan_summary ||
+    (incidentCount > 0 && clipsScanned === 0) ||
+    featureFlags.no_yolo_crash_fallback !== true ||
+    featureFlags.key_moments !== true
+  )
 }
 
 function formatTechnicalValue(value?: string | number | null) {
@@ -346,10 +354,11 @@ function storageMetrics(session: MimirSession) {
   ]
 }
 
-function sortIncidents(incidents: MimirIncident[]) {
+function sortIncidents(incidents: MimirIncident[], manualOverrides: ManualStatusOverrides, identity: string) {
   return [...incidents].sort((left, right) => {
     const severityDelta =
-      severityRank[normalizeSeverity(left.severity)] - severityRank[normalizeSeverity(right.severity)]
+      severityRank[resolveIncidentSeverity(left, manualOverrides, identity).displaySeverity] -
+      severityRank[resolveIncidentSeverity(right, manualOverrides, identity).displaySeverity]
 
     if (severityDelta !== 0) {
       return severityDelta
@@ -375,8 +384,8 @@ function IncidentImage({ incident, large = false }: { incident: MimirIncident; l
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg bg-black/42 ${
-        large ? 'min-h-[320px]' : 'h-[128px]'
+      className={`relative overflow-hidden rounded-md bg-black/32 ${
+        large ? 'min-h-[320px]' : 'h-[154px]'
       }`}
     >
       {imagePath ? (
@@ -387,7 +396,7 @@ function IncidentImage({ incident, large = false }: { incident: MimirIncident; l
           className="h-full w-full object-cover"
         />
       ) : (
-        <div className="flex h-full items-center justify-center px-4 text-center text-[12px] text-[var(--mimir-text-subtle)]">
+        <div className="flex h-full items-center justify-center px-4 text-center text-[12px] text-[var(--mimir-text-subtle)] opacity-75">
           Thumbnail unavailable
         </div>
       )}
@@ -431,9 +440,9 @@ function signalBadges(incident: MimirIncident) {
 
 function SummaryMetric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-xl border border-white/[0.055] bg-white/[0.022] px-4 py-3">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--mimir-text-subtle)]">{label}</div>
-      <div className="mt-2 text-[24px] font-semibold text-[var(--mimir-text)]">{value}</div>
+    <div className="rounded-xl bg-white/[0.026] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
+      <div className="text-[11px] font-medium text-[var(--mimir-text-subtle)]">{label}</div>
+      <div className="mt-1 text-[21px] font-semibold text-[var(--mimir-text)]">{value}</div>
     </div>
   )
 }
@@ -452,10 +461,10 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`h-10 rounded-full border px-4 text-[13px] font-medium transition ${
+      className={`h-9 rounded-full border px-3.5 text-[13px] font-medium transition ${
         active
-          ? 'border-white/24 bg-white/[0.095] text-[var(--mimir-text)]'
-          : 'border-[var(--mimir-border)] bg-white/[0.02] text-[var(--mimir-text-muted)] hover:bg-white/[0.05] hover:text-[var(--mimir-text)]'
+          ? 'border-[rgba(157,183,170,0.28)] bg-[var(--mimir-accent-soft)] text-[var(--mimir-text)]'
+          : 'border-white/[0.055] bg-white/[0.014] text-[var(--mimir-text-muted)] hover:bg-white/[0.045] hover:text-[var(--mimir-text)]'
       }`}
     >
       {label} <span className="ml-1 text-[var(--mimir-text-subtle)]">{count}</span>
@@ -582,6 +591,34 @@ function eventLabel(incident: MimirIncident) {
   return 'Review moment'
 }
 
+function incidentCardTitle(severity: SeverityGroup) {
+  if (severity === 'IMPORTANT') {
+    return 'Impact/contact detected'
+  }
+
+  if (severity === 'REVIEW') {
+    return 'Needs review'
+  }
+
+  return 'No issue found'
+}
+
+function incidentCardSubtitle(incident: MimirIncident) {
+  const explicitTitle = incident.display_title || incident.source_stem || ''
+  const fileName =
+    incident.source_filename ||
+    sourceFilename(incident.source_video || incident.original_source_video || incident.video_path || '') ||
+    ''
+  const timestamp = formatDateTime(sourceEventTimestamp(incident))
+  const source = explicitTitle || fileName
+
+  return [timestamp, source].filter(Boolean).join(' - ')
+}
+
+function isGenericBestEffortIncident(incident: MimirIncident) {
+  return incident.filename_timestamp_detected === false
+}
+
 function currentStorageState(incident: MimirIncident) {
   if (incident.user_deleted || incident.storage_state === 'trash') {
     return 'In Mimir Trash'
@@ -652,30 +689,37 @@ function sourceClipsRemain(incidents: MimirIncident[]) {
   })
 }
 
-function incidentsForSeverity(incidents: MimirIncident[], severity: SeverityGroup) {
-  return incidents.filter(incident => normalizeSeverity(incident.severity) === severity)
+function incidentsForSeverity(
+  incidents: MimirIncident[],
+  severity: SeverityGroup,
+  manualOverrides: ManualStatusOverrides,
+  identity: string,
+) {
+  return incidents.filter(incident => resolveIncidentSeverity(incident, manualOverrides, identity).displaySeverity === severity)
 }
 
 function IncidentCard({
   incident,
+  severityResolution,
   selected,
   selectionMode,
   onOpen,
   onToggleSelected,
 }: {
   incident: MimirIncident
+  severityResolution: SeverityResolution
   selected: boolean
   selectionMode: boolean
   onOpen: (incident: MimirIncident) => void
   onToggleSelected: (incident: MimirIncident) => void
 }) {
-  const timestamp = formatDateTime(sourceEventTimestamp(incident))
-  const title = eventLabel(incident)
+  const title = incidentCardTitle(severityResolution.displaySeverity)
+  const subtitle = incidentCardSubtitle(incident)
 
   return (
     <article
-      className={`group min-w-0 overflow-hidden rounded-lg border bg-[linear-gradient(180deg,rgba(255,255,255,0.032),rgba(255,255,255,0.012))] shadow-[0_14px_38px_rgba(0,0,0,0.2)] transition hover:-translate-y-0.5 hover:bg-white/[0.045] ${
-        selected ? 'border-white/28 ring-1 ring-white/20' : 'border-white/[0.055]'
+      className={`group min-w-0 overflow-hidden rounded-xl border bg-[linear-gradient(180deg,rgba(255,255,255,0.032),rgba(255,255,255,0.014))] shadow-[0_16px_42px_rgba(0,0,0,0.20)] transition hover:-translate-y-0.5 hover:border-white/[0.12] hover:bg-white/[0.038] ${
+        selected ? 'border-[rgba(157,183,170,0.42)] ring-1 ring-[rgba(157,183,170,0.22)]' : 'border-white/[0.05]'
       }`}
     >
       <button
@@ -690,43 +734,61 @@ function IncidentCard({
         className="block w-full text-left"
       >
         <div className="relative">
-        <IncidentImage incident={incident} />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/72 to-transparent opacity-70 transition group-hover:opacity-88" />
-        {selectionMode && (
-          <label
-            className="absolute left-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-full border border-white/18 bg-black/55 backdrop-blur"
-            onClick={event => event.stopPropagation()}
+          <IncidentImage incident={incident} />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/82 via-black/28 to-transparent opacity-75 transition group-hover:opacity-95" />
+          {selectionMode && (
+            <label
+              className="absolute left-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-full border border-white/16 bg-black/50 backdrop-blur"
+              onClick={event => event.stopPropagation()}
+            >
+              <span className="sr-only">Select incident</span>
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => onToggleSelected(incident)}
+                className="h-4 w-4 accent-white"
+              />
+            </label>
+          )}
+          <span
+            className={`absolute right-2.5 top-2.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md ${severityClass(
+              severityResolution.displaySeverity,
+            )}`}
           >
-            <span className="sr-only">Select incident</span>
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggleSelected(incident)}
-              className="h-4 w-4 accent-white"
-            />
-          </label>
-        )}
-        <span
-          className={`absolute right-2.5 top-2.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md ${severityClass(
-            incident.severity,
-          )}`}
-        >
-          {severityCopy(incident.severity)}
-        </span>
-        </div>
-
-        <div className="min-w-0 px-3 pb-2 pt-3">
-        <div className="flex min-w-0 items-start justify-between gap-2">
-          <div className="min-w-0 truncate text-[13px] font-semibold text-[var(--mimir-text)]">{title}</div>
-        </div>
-
-        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-4 text-[var(--mimir-text-subtle)]">
-          <span className="rounded-full bg-white/[0.045] px-2 py-0.5 text-[var(--mimir-text-muted)]">
-            {cameraCountLabel(incident)}
+            {severityCopy(severityResolution.displaySeverity)}
           </span>
-          {timestamp && <span>{timestamp}</span>}
         </div>
-      </div>
+
+        <div className="min-w-0 px-3.5 pb-3.5 pt-3">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0 truncate text-[15px] font-semibold text-[var(--mimir-text)]">{title}</div>
+          </div>
+
+          {subtitle && (
+            <div className="mt-1.5 truncate text-[12px] text-[var(--mimir-text-subtle)]">
+              {subtitle}
+            </div>
+          )}
+
+          <div className="mt-3 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-4 text-[var(--mimir-text-subtle)]">
+            <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[var(--mimir-text-muted)]">
+              {cameraCountLabel(incident)}
+            </span>
+            {isGenericBestEffortIncident(incident) && (
+              <span
+                className="rounded-full bg-white/[0.035] px-2 py-0.5 text-[var(--mimir-text-subtle)]"
+                title="Generic MP4 review is best-effort. Tesla Sentry camera groups receive full support."
+              >
+                Generic video · best effort
+              </span>
+            )}
+            {severityResolution.isManualOverride && (
+              <span className="rounded-full bg-[var(--mimir-accent-soft)] px-2 py-0.5 text-[var(--mimir-text-muted)]">
+                Changed by you
+              </span>
+            )}
+          </div>
+        </div>
       </button>
     </article>
   )
@@ -744,10 +806,12 @@ function StorageStateBadge({ incident }: { incident: MimirIncident }) {
 
 function LibraryItem({
   incident,
+  severityResolution,
   onOpen,
   onOpenFiles,
 }: {
   incident: MimirIncident
+  severityResolution: SeverityResolution
   onOpen: (incident: MimirIncident) => void
   onOpenFiles: (incident: MimirIncident) => void
 }) {
@@ -761,9 +825,14 @@ function LibraryItem({
 
       <button type="button" onClick={() => onOpen(incident)} className="min-w-0 text-left">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${severityClass(incident.severity)}`}>
-            {severityCopy(incident.severity)}
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${severityClass(severityResolution.displaySeverity)}`}>
+            {severityCopy(severityResolution.displaySeverity)}
           </span>
+          {severityResolution.isManualOverride && (
+            <span className="rounded-full bg-white/[0.045] px-2 py-0.5 text-[11px] text-[var(--mimir-text-muted)]">
+              Changed by you
+            </span>
+          )}
           <StorageStateBadge incident={incident} />
           <span className="rounded-full bg-white/[0.045] px-2 py-0.5 text-[11px] text-[var(--mimir-text-muted)]">
             {cameraCountLabel(incident)}
@@ -796,11 +865,15 @@ function LibraryItem({
 function LibrarySection({
   title,
   incidents,
+  manualOverrides,
+  identity,
   onOpen,
   onOpenFiles,
 }: {
   title: string
   incidents: MimirIncident[]
+  manualOverrides: ManualStatusOverrides
+  identity: string
   onOpen: (incident: MimirIncident) => void
   onOpenFiles: (incident: MimirIncident) => void
 }) {
@@ -821,6 +894,7 @@ function LibrarySection({
             <LibraryItem
               key={incidentActionId(incident)}
               incident={incident}
+              severityResolution={resolveIncidentSeverity(incident, manualOverrides, identity)}
               onOpen={onOpen}
               onOpenFiles={onOpenFiles}
             />
@@ -951,48 +1025,48 @@ function EmptyLibraryState({ filter, incidentCount }: { filter: LibraryFilter; i
   const copy = (() => {
     if (filter === 'ALL' && incidentCount === 0) {
       return {
-        title: 'No reviewable incidents found. Your clips were scanned and nothing suspicious was detected.',
-        body: '',
+        title: 'Nothing needs review.',
+        body: 'Mimir scanned the clips and did not find concerning moments.',
       }
     }
 
     if (filter === 'IMPORTANT') {
       return {
-        title: 'No important incidents found.',
-        body: 'Review and All may still include moments worth checking.',
+        title: 'No important incidents.',
+        body: 'Moments worth a closer look may still appear under Review.',
       }
     }
 
     if (filter === 'REVIEW') {
       return {
-        title: 'No review incidents found.',
-        body: 'Important and All may still include detected moments.',
+        title: 'No review items.',
+        body: 'Important moments and ignored clips are available in the other filters.',
       }
     }
 
     if (filter === 'ALL') {
       return {
-        title: 'No reviewable incidents found.',
-        body: 'Your clips were scanned and nothing suspicious was detected.',
+        title: 'Nothing needs review.',
+        body: 'Mimir scanned the clips and did not find concerning moments.',
       }
     }
 
     if (filter === 'TRASH') {
       return {
-        title: 'No clips in Mimir Trash.',
-        body: 'Clips moved to Mimir Trash will appear here.',
+        title: 'Mimir Trash is empty.',
+        body: 'Clips you move to trash will appear here.',
       }
     }
 
     if (filter === 'IGNORE') {
       return {
-        title: 'No ignored incident cards.',
-        body: 'Ignored clips are counted in the scan summary. Mimir does not create fake cards for ignored clips.',
+        title: 'No ignored clips to show.',
+        body: 'Ignored activity will appear here when a scan includes it.',
       }
     }
 
     return {
-      title: 'No incident cards found.',
+      title: 'No incidents found.',
       body: 'Try another filter or load a newer scan.',
     }
   })()
@@ -1001,8 +1075,8 @@ function EmptyLibraryState({ filter, incidentCount }: { filter: LibraryFilter; i
     <div className="grid min-h-[340px] place-items-center rounded-xl bg-white/[0.018] p-10 text-center">
       <div>
         <div className="mx-auto mb-5 h-1 w-14 rounded-full bg-white/20" />
-        <h3 className="text-[24px] font-semibold text-[var(--mimir-text)]">{copy.title}</h3>
-        <p className="mt-3 text-[15px] text-[var(--mimir-text-muted)]">{copy.body}</p>
+        <h3 className="text-[22px] font-semibold text-[var(--mimir-text)]">{copy.title}</h3>
+        {copy.body && <p className="mt-3 text-[14px] text-[var(--mimir-text-muted)]">{copy.body}</p>}
       </div>
     </div>
   )
@@ -1030,9 +1104,56 @@ export function IncidentLibraryView({
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState('')
   const [storageOpenError, setStorageOpenError] = useState('')
+  const [manualOverrides, setManualOverrides] = useState<ManualStatusOverrides>({})
   const isLoading = loadState === 'loading'
+  const identity = useMemo(() => sessionIdentity(session, scanDiagnostics), [scanDiagnostics, session])
 
-  const allSortedIncidents = useMemo(() => sortIncidents(session.incidents ?? []), [session.incidents])
+  useEffect(() => {
+    setManualOverrides({})
+    setSelectedIds(new Set())
+    setBulkMessage('')
+    setStorageOpenError('')
+  }, [identity])
+
+  const setManualIncidentStatus = (incident: MimirIncident, status: SeverityGroup) => {
+    const key = incidentOverrideKey(incident, identity)
+    const mimirSeverity = normalizeSeverity(incident.final_severity || incident.severity)
+
+    setManualOverrides(current => {
+      const next = { ...current }
+
+      if (status === mimirSeverity) {
+        delete next[key]
+      } else {
+        next[key] = status
+      }
+
+      return next
+    })
+
+    setSelectedIncident(current => {
+      if (!current) {
+        return current
+      }
+
+      return incidentActionId(current) === incidentActionId(incident) ? current : current
+    })
+
+    const id = incidentActionId(incident)
+    if (id) {
+      void invoke('save_manual_status', {
+        incidentId: id,
+        status,
+      }).catch(error => {
+        setStorageOpenError(`Status could not be saved: ${errorMessage(error)}`)
+      })
+    }
+  }
+
+  const allSortedIncidents = useMemo(
+    () => sortIncidents(session.incidents ?? [], manualOverrides, identity),
+    [identity, manualOverrides, session.incidents],
+  )
   const sortedIncidents = useMemo(
     () => allSortedIncidents.filter(incident => !incident.user_deleted),
     [allSortedIncidents],
@@ -1042,16 +1163,22 @@ export function IncidentLibraryView({
     [allSortedIncidents],
   )
   const incidentCount = sortedIncidents.length
-  const counts = useMemo(
-    () => ({
-      important: session.important ?? 0,
-      review: session.review ?? 0,
-      ignore: session.ignore ?? 0,
+  const counts = useMemo(() => {
+    const severityCounts = sortedIncidents.reduce(
+      (accumulator, incident) => {
+        const severity = resolveIncidentSeverity(incident, manualOverrides, identity).displaySeverity
+        accumulator[severity.toLowerCase() as 'important' | 'review' | 'ignore'] += 1
+        return accumulator
+      },
+      { important: 0, review: 0, ignore: 0 },
+    )
+
+    return {
+      ...severityCounts,
       all: incidentCount,
       trash: deletedIncidents.length,
-    }),
-    [deletedIncidents.length, incidentCount, session.ignore, session.important, session.review],
-  )
+    }
+  }, [deletedIncidents.length, identity, incidentCount, manualOverrides, sortedIncidents])
 
   const visibleIncidents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -1059,12 +1186,14 @@ export function IncidentLibraryView({
 
     return baseIncidents.filter(incident => {
       const severityMatches =
-        filter === 'ALL' || filter === 'TRASH' || normalizeSeverity(incident.severity) === filter
+        filter === 'ALL' ||
+        filter === 'TRASH' ||
+        resolveIncidentSeverity(incident, manualOverrides, identity).displaySeverity === filter
       const queryMatches = !normalizedQuery || searchText(incident).includes(normalizedQuery)
 
       return severityMatches && queryMatches
     })
-  }, [deletedIncidents, filter, query, sortedIncidents])
+  }, [deletedIncidents, filter, identity, manualOverrides, query, sortedIncidents])
   const filterDescription =
     filter === 'ALL'
       ? `Showing ${visibleIncidents.length} ${pluralize(visibleIncidents.length, 'incident card')}.`
@@ -1081,12 +1210,12 @@ export function IncidentLibraryView({
   const hasSourceClips = useMemo(() => sourceClipsRemain(sortedIncidents), [sortedIncidents])
   const librarySections = useMemo(
     () => ({
-      important: incidentsForSeverity(sortedIncidents, 'IMPORTANT'),
-      review: incidentsForSeverity(sortedIncidents, 'REVIEW'),
-      ignore: incidentsForSeverity(sortedIncidents, 'IGNORE'),
+      important: incidentsForSeverity(sortedIncidents, 'IMPORTANT', manualOverrides, identity),
+      review: incidentsForSeverity(sortedIncidents, 'REVIEW', manualOverrides, identity),
+      ignore: incidentsForSeverity(sortedIncidents, 'IGNORE', manualOverrides, identity),
       trash: deletedIncidents,
     }),
-    [deletedIncidents, sortedIncidents],
+    [deletedIncidents, identity, manualOverrides, sortedIncidents],
   )
 
   useEffect(() => {
@@ -1140,12 +1269,20 @@ export function IncidentLibraryView({
 
     const failures: string[] = []
 
+    if (action === 'set_status' && status) {
+      actionable.forEach(incident => setManualIncidentStatus(incident, status))
+      setBulkMessage(`${actionable.length} ${pluralize(actionable.length, 'incident')} marked ${severityCopy(status)}.`)
+      setSelectedIds(new Set())
+      setShowFreeUpModal(false)
+      setBulkBusy(false)
+      return
+    }
+
     for (const incident of actionable) {
       try {
-        await invoke('run_incident_action', {
+        await invoke('run_core_v2_storage_action', {
           incidentId: incidentActionId(incident),
-          action,
-          status: status ?? null,
+          action: action === 'delete' ? 'move_to_trash' : 'move_to_library',
         })
       } catch (error) {
         failures.push(`${eventLabel(incident)}: ${errorMessage(error)}`)
@@ -1223,14 +1360,16 @@ export function IncidentLibraryView({
         onBack={() => setSelectedIncident(null)}
         onOpenFolder={path => void openContainingFolder(path)}
       >
-        <IncidentViewerScreen
-          incident={selectedIncident}
-          session={session}
-          onBack={() => setSelectedIncident(null)}
-          onReloadSession={onReloadSession}
-          onIncidentUpdated={updatedIncident => {
-            setSelectedIncident(updatedIncident)
-          }}
+          <IncidentViewerScreen
+            incident={selectedIncident}
+            session={session}
+            severityResolution={resolveIncidentSeverity(selectedIncident, manualOverrides, identity)}
+            onBack={() => setSelectedIncident(null)}
+            onReloadSession={onReloadSession}
+            onManualStatusChange={status => setManualIncidentStatus(selectedIncident, status)}
+            onIncidentUpdated={updatedIncident => {
+              setSelectedIncident(updatedIncident)
+            }}
         />
       </CrashSafeBoundary>
     )
@@ -1238,18 +1377,18 @@ export function IncidentLibraryView({
 
   return (
     <CrashSafeBoundary title="Incident library error" onBack={onImportNew}>
-    <main className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1440px] flex-col overflow-hidden rounded-xl border border-[var(--mimir-border)] bg-[var(--mimir-bg-depth)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] sm:min-h-[calc(100vh-48px)]">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.055] px-5 py-5 lg:px-7">
+    <main className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1480px] flex-col overflow-hidden rounded-2xl border border-white/[0.065] bg-[radial-gradient(circle_at_50%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] shadow-[0_34px_110px_rgba(0,0,0,0.54)] sm:min-h-[calc(100vh-48px)]">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.04] px-5 py-4 lg:px-7">
         <div className="flex min-w-0 items-center gap-4">
-          <img src={mimirLockup} alt="Mimir" className="h-8 w-auto shrink-0 opacity-95" />
+          <img src={mimirLockup} alt="Mimir" className="h-7 w-auto shrink-0 opacity-95" />
           <div className="min-w-0">
-            <div className="text-[14px] font-semibold text-[var(--mimir-text)]">
+            <div className="text-[13px] font-semibold text-[var(--mimir-text)]">
               {page === 'library' ? 'Mimir Library' : 'Current scan'}
             </div>
-            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[var(--mimir-text-subtle)]">
-              <span>{counts.important} Important</span>
-              <span>{counts.review} Review</span>
-              <span>{counts.ignore} Ignore</span>
+            <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-[var(--mimir-text-subtle)]">
+              <span className="rounded-full bg-[rgba(196,119,114,0.08)] px-2 py-0.5">{counts.important} Important</span>
+              <span className="rounded-full bg-[rgba(195,160,98,0.08)] px-2 py-0.5">{counts.review} Review</span>
+              <span className="rounded-full bg-white/[0.024] px-2 py-0.5">{counts.ignore} Ignore</span>
             </div>
           </div>
         </div>
@@ -1265,10 +1404,10 @@ export function IncidentLibraryView({
                   setSelectionMode(true)
                 }
               }}
-              className={`h-10 rounded-lg px-4 text-[13px] font-semibold transition ${
+              className={`h-9 rounded-lg border px-3.5 text-[12px] font-semibold transition ${
                 selectionMode
-                  ? 'border border-white/[0.08] bg-white/[0.035] text-[var(--mimir-text-muted)] hover:bg-white/[0.065] hover:text-[var(--mimir-text)]'
-                  : 'bg-[var(--mimir-text)] text-black hover:bg-white'
+                  ? 'border-white/18 bg-white/[0.075] text-[var(--mimir-text)] hover:bg-white/[0.1]'
+                  : 'border-white/[0.065] bg-white/[0.022] text-[var(--mimir-text-muted)] hover:bg-white/[0.055] hover:text-[var(--mimir-text)]'
               }`}
             >
               {selectionMode ? 'Cancel' : 'Select'}
@@ -1278,7 +1417,7 @@ export function IncidentLibraryView({
             <button
               type="button"
               onClick={() => setMoreOpen(open => !open)}
-              className="h-10 rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 text-[13px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.065] hover:text-[var(--mimir-text)]"
+              className="h-9 rounded-lg border border-transparent bg-transparent px-3 text-[12px] font-medium text-[var(--mimir-text-subtle)] transition hover:border-white/[0.055] hover:bg-white/[0.035] hover:text-[var(--mimir-text)]"
             >
               More
             </button>
@@ -1384,7 +1523,7 @@ export function IncidentLibraryView({
         </div>
       </header>
 
-      <section className="flex-1 overflow-y-auto px-5 pb-7 pt-3 lg:px-7">
+      <section className="flex-1 overflow-y-auto px-5 pb-7 pt-4 lg:px-7">
         {page === 'library' ? (
           <>
             <div className="mb-5">
@@ -1412,53 +1551,83 @@ export function IncidentLibraryView({
             )}
 
             <div className="grid gap-6 xl:grid-cols-2">
-              <LibrarySection title="Important" incidents={librarySections.important} onOpen={setSelectedIncident} onOpenFiles={setFilesIncident} />
-              <LibrarySection title="Review" incidents={librarySections.review} onOpen={setSelectedIncident} onOpenFiles={setFilesIncident} />
-              <LibrarySection title="Ignore" incidents={librarySections.ignore} onOpen={setSelectedIncident} onOpenFiles={setFilesIncident} />
-              <LibrarySection title="Trash" incidents={librarySections.trash} onOpen={setSelectedIncident} onOpenFiles={setFilesIncident} />
+              <LibrarySection
+                title="Important"
+                incidents={librarySections.important}
+                manualOverrides={manualOverrides}
+                identity={identity}
+                onOpen={setSelectedIncident}
+                onOpenFiles={setFilesIncident}
+              />
+              <LibrarySection
+                title="Review"
+                incidents={librarySections.review}
+                manualOverrides={manualOverrides}
+                identity={identity}
+                onOpen={setSelectedIncident}
+                onOpenFiles={setFilesIncident}
+              />
+              <LibrarySection
+                title="Ignore"
+                incidents={librarySections.ignore}
+                manualOverrides={manualOverrides}
+                identity={identity}
+                onOpen={setSelectedIncident}
+                onOpenFiles={setFilesIncident}
+              />
+              <LibrarySection
+                title="Trash"
+                incidents={librarySections.trash}
+                manualOverrides={manualOverrides}
+                identity={identity}
+                onOpen={setSelectedIncident}
+                onOpenFiles={setFilesIncident}
+              />
             </div>
           </>
         ) : (
           <>
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--mimir-text-subtle)]">
-              Scan summary
+        <div className="mb-5 rounded-2xl border border-white/[0.045] bg-white/[0.018] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            <div className="min-w-[260px] flex-1">
+              <div className="text-[12px] font-medium text-[var(--mimir-text-subtle)]">
+                Current scan
+              </div>
+              <h1 className="mt-1 text-[30px] font-semibold text-[var(--mimir-text)]">Review incidents</h1>
+              <p className="mt-2 max-w-[760px] text-[14px] leading-6 text-[var(--mimir-text-muted)]">
+                {scanResultCopy(session)}
+              </p>
+              <div className="mt-3 inline-flex rounded-full border border-[rgba(157,183,170,0.16)] bg-[var(--mimir-accent-soft)] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
+                {reviewModeCopy(session)}
+              </div>
             </div>
-            <h1 className="mt-1 text-[30px] font-semibold text-[var(--mimir-text)]">Review incidents</h1>
-            <p className="mt-2 max-w-[780px] text-[14px] leading-6 text-[var(--mimir-text-muted)]">
-              {scanResultCopy(session)}
-            </p>
-            <div className="mt-3 inline-flex rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
-              {reviewModeCopy(session)}
+            <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[330px]">
+              <SummaryMetric label="Important" value={counts.important} />
+              <SummaryMetric label="Review" value={counts.review} />
+              <SummaryMetric label="Ignore" value={counts.ignore} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <SummaryMetric label="Important" value={counts.important} />
-            <SummaryMetric label="Review" value={counts.review} />
-            <SummaryMetric label="Ignore" value={counts.ignore} />
-          </div>
-        </div>
 
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            <FilterChip label="Important" count={counts.important} active={filter === 'IMPORTANT'} onClick={() => setFilter('IMPORTANT')} />
-            <FilterChip label="Review" count={counts.review} active={filter === 'REVIEW'} onClick={() => setFilter('REVIEW')} />
-            <FilterChip label="Ignore" count={counts.ignore} active={filter === 'IGNORE'} onClick={() => setFilter('IGNORE')} />
-            <FilterChip label="All" count={counts.all} active={filter === 'ALL'} onClick={() => setFilter('ALL')} />
-            {counts.trash > 0 && (
-              <FilterChip label="Trash" count={counts.trash} active={filter === 'TRASH'} onClick={() => setFilter('TRASH')} />
-            )}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.045] pt-4">
+            <div className="flex flex-wrap gap-2 rounded-full bg-black/16 p-1">
+              <FilterChip label="Important" count={counts.important} active={filter === 'IMPORTANT'} onClick={() => setFilter('IMPORTANT')} />
+              <FilterChip label="Review" count={counts.review} active={filter === 'REVIEW'} onClick={() => setFilter('REVIEW')} />
+              <FilterChip label="Ignore" count={counts.ignore} active={filter === 'IGNORE'} onClick={() => setFilter('IGNORE')} />
+              <FilterChip label="All" count={counts.all} active={filter === 'ALL'} onClick={() => setFilter('ALL')} />
+              {counts.trash > 0 && (
+                <FilterChip label="Trash" count={counts.trash} active={filter === 'TRASH'} onClick={() => setFilter('TRASH')} />
+              )}
+            </div>
+            <label className="relative block w-full max-w-[360px]">
+              <span className="sr-only">Search incidents</span>
+              <input
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search incidents"
+                className="h-10 w-full rounded-full border border-white/[0.055] bg-black/16 px-4 text-[13px] text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-[rgba(157,183,170,0.28)] focus:bg-white/[0.045]"
+              />
+            </label>
           </div>
-          <label className="relative block w-full max-w-[360px]">
-            <span className="sr-only">Search incidents</span>
-            <input
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search incidents"
-              className="h-10 w-full rounded-lg bg-white/[0.03] px-3 text-[13px] text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:bg-white/[0.055]"
-            />
-          </label>
         </div>
 
         {selectionMode && (
@@ -1494,11 +1663,12 @@ export function IncidentLibraryView({
         {visibleIncidents.length === 0 ? (
           <EmptyLibraryState filter={filter} incidentCount={incidentCount} />
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-3.5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(238px,1fr))] gap-4">
             {visibleIncidents.map(incident => (
               <IncidentCard
                 key={incidentActionId(incident)}
                 incident={incident}
+                severityResolution={resolveIncidentSeverity(incident, manualOverrides, identity)}
                 selected={selectedIds.has(incidentActionId(incident))}
                 selectionMode={selectionMode}
                 onOpen={setSelectedIncident}
@@ -1541,7 +1711,11 @@ export function IncidentLibraryView({
                 disabled={bulkBusy}
                 onClick={() =>
                   void runBulkAction(
-                    sortedIncidents.filter(incident => ['IMPORTANT', 'REVIEW'].includes(normalizeSeverity(incident.severity))),
+                    sortedIncidents.filter(incident =>
+                      ['IMPORTANT', 'REVIEW'].includes(
+                        resolveIncidentSeverity(incident, manualOverrides, identity).displaySeverity,
+                      ),
+                    ),
                     'move_to_library',
                   )
                 }
@@ -1621,9 +1795,14 @@ function TechnicalDetailsModal({
   onClose: () => void
 }) {
   const featureFlags = {
+    ...(sessionFeatureFlags(session)),
     schema_version: session.schema_version,
     scanner_version: session.scanner_version,
     core_version: session.core_version,
+    core_build_id: session.core_build_id,
+    generated_by: session.generated_by,
+    backend_runtime: session.backend_runtime,
+    scan_command_version: session.scan_command_version,
     evidence_version: session.evidence_version,
     thumbnail_version: session.thumbnail_version,
     key_moment_version: session.key_moment_version,
@@ -1642,7 +1821,7 @@ function TechnicalDetailsModal({
           <h2 className="mt-2 text-[24px] font-semibold text-[var(--mimir-text)]">Technical details</h2>
           {staleWarning && (
             <div className="mt-4 rounded-lg border border-amber-300/18 bg-amber-400/10 p-3 text-[12px] leading-5 text-amber-100/90">
-              Session may be stale or from an older backend.
+              Session may be stale or generated by an older backend.
             </div>
           )}
         </div>
@@ -1658,7 +1837,13 @@ function TechnicalDetailsModal({
               label="latest_session modified time"
               value={diagnostics?.latest_session_modified_time}
             />
-            <TechnicalDetailRow label="core_version" value={session.core_version || session.scanner_version} />
+            <TechnicalDetailRow label="core_version" value={session.core_version} />
+            <TechnicalDetailRow label="core_build_id" value={session.core_build_id} />
+            <TechnicalDetailRow label="backend_runtime" value={session.backend_runtime} />
+            <TechnicalDetailRow label="session_created_at" value={session.session_created_at} />
+            <TechnicalDetailRow label="output_path" value={session.output_path} />
+            <TechnicalDetailRow label="generated_by" value={session.generated_by} />
+            <TechnicalDetailRow label="scan_command_version" value={session.scan_command_version} />
           </div>
 
           <TechnicalBlock label="backend_command" value={diagnostics?.backend_command || 'Not reported'} />

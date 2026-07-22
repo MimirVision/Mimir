@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type SyntheticEvent } from 'react'
-import { invoke } from '@tauri-apps/api/tauri'
-import { convertFileSrc } from '@tauri-apps/api/tauri'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { CrashSafeBoundary, logIncidentDiagnostic } from './CrashSafeBoundary'
 import type { MimirCameraClip, MimirIncident, MimirSession, MimirTimelineMarker } from '../types'
 
 interface IncidentViewerScreenProps {
   incident: MimirIncident
   session?: MimirSession
+  severityResolution: SeverityResolution
   onBack: () => void
   onReloadSession: () => Promise<MimirSession | null>
   onIncidentUpdated: (incident: MimirIncident) => void
+  onManualStatusChange: (status: SeverityGroup) => void
 }
 
 interface ClipActionResult {
@@ -44,8 +45,16 @@ interface StorageActionReport {
 }
 
 type MediaMode = 'video' | 'image' | 'empty'
-type IncidentAction = 'set_status_IGNORE' | 'set_status_REVIEW' | 'set_status_IMPORTANT' | 'move_to_library' | 'move_to_trash' | 'delete' | 'save_note' | 'save_feedback'
+type IncidentAction = 'set_status_IGNORE' | 'set_status_REVIEW' | 'set_status_IMPORTANT' | 'move_to_library' | 'move_to_trash' | 'restore_from_trash' | 'delete' | 'save_note' | 'save_feedback' | 'save_key_moment'
 type AiFeedbackChoice = 'Correct' | 'Should be Important' | 'Should be Review' | 'Should be Ignore' | 'Weird AI flag' | 'Missed obvious event'
+type SeverityGroup = 'IMPORTANT' | 'REVIEW' | 'IGNORE'
+
+interface SeverityResolution {
+  mimirSeverity: SeverityGroup
+  displaySeverity: SeverityGroup
+  isManualOverride: boolean
+  source: 'manual' | 'mimir'
+}
 
 interface ViewerMediaChoice {
   mode: MediaMode
@@ -414,14 +423,14 @@ function severityClass(severity?: string) {
   const value = normalizeSeverity(severity)
 
   if (value === 'IMPORTANT') {
-    return 'border-[rgba(185,101,97,0.26)] bg-[rgba(185,101,97,0.12)] text-red-100/90'
+    return 'border-[rgba(196,119,114,0.28)] bg-[rgba(196,119,114,0.115)] text-red-100/92'
   }
 
   if (value === 'REVIEW') {
-    return 'border-[rgba(173,139,85,0.28)] bg-[rgba(173,139,85,0.12)] text-amber-100/90'
+    return 'border-[rgba(195,160,98,0.28)] bg-[rgba(195,160,98,0.115)] text-amber-100/92'
   }
 
-  return 'border-[rgba(127,133,136,0.22)] bg-[rgba(127,133,136,0.10)] text-[var(--mimir-text-muted)]'
+  return 'border-[rgba(133,139,139,0.20)] bg-[rgba(133,139,139,0.085)] text-[var(--mimir-text-muted)]'
 }
 
 function markerClass(severity?: string) {
@@ -440,6 +449,9 @@ function markerClass(severity?: string) {
 
 function markerVisualClass(marker: MimirTimelineMarker) {
   const type = String(marker.type || '').toLowerCase()
+  if (type === 'user_corrected') {
+    return 'border-emerald-100/70 bg-[var(--mimir-accent)] shadow-[0_0_0_7px_rgba(157,183,170,0.15),0_0_26px_rgba(157,183,170,0.20)]'
+  }
   if (type === 'impact_contact' || type.includes('impact') || type.includes('contact')) {
     return 'border-red-100/70 bg-[var(--mimir-status-red)] shadow-[0_0_0_7px_rgba(185,101,97,0.16),0_0_28px_rgba(185,101,97,0.22)]'
   }
@@ -744,7 +756,7 @@ function aiConfidenceCopy(incident: MimirIncident) {
 }
 
 function reviewBadgeCopy(incident: MimirIncident) {
-  return aiReviewed(incident) ? 'Experimental AI used' : 'Local review'
+  return aiReviewed(incident) ? 'Local review + AI second opinion' : 'Local review'
 }
 
 function reviewBadgeDescription(incident: MimirIncident) {
@@ -881,6 +893,8 @@ function incidentFeedbackPayload(
     include_video_clip: includeVideo,
     video_included_by_user: includeVideo,
     automatic_upload: false,
+    user_key_moment_sec: incident.user_key_moment_sec ?? null,
+    mimir_primary_key_moment_sec: incident.primary_key_moment_sec ?? null,
   }
 }
 
@@ -958,8 +972,8 @@ function actionButtonTone(status: string, active: boolean) {
 
   if (severity === 'IMPORTANT') {
     return active
-      ? 'border-[rgba(185,101,97,0.42)] bg-[rgba(185,101,97,0.18)] text-red-100'
-      : 'border-[rgba(185,101,97,0.18)] bg-[rgba(185,101,97,0.07)] text-red-100/78 hover:bg-[rgba(185,101,97,0.12)]'
+      ? 'border-[rgba(185,101,97,0.36)] bg-[rgba(185,101,97,0.14)] text-red-100'
+      : 'border-white/[0.075] bg-white/[0.025] text-[var(--mimir-text-muted)] hover:bg-white/[0.05] hover:text-[var(--mimir-text)]'
   }
 
   if (severity === 'REVIEW') {
@@ -1249,6 +1263,27 @@ function readableMarkerLabel(marker: MimirTimelineMarker) {
 }
 
 function markerLabel(marker: MimirTimelineMarker, incident?: MimirIncident) {
+  const type = String(marker.type || '').toLowerCase()
+
+  if (incident && (type === 'impact_contact' || (type.includes('impact') && type.includes('contact')))) {
+    const local = localEvidence(incident)
+    const impactLevel = impactEvidenceLevel(incident)
+    if (
+      local.strong_impact_like_motion === true ||
+      local.crash_safety_triggered === true ||
+      local.no_yolo_motion_impact_candidate === true ||
+      impactLevel === 'HIGH'
+    ) {
+      return 'Impact'
+    }
+
+    return 'Impact/contact'
+  }
+
+  if (incident && markerIsPrimaryMoment(marker, incident)) {
+    return type.includes('review') ? 'Review point' : 'Key moment'
+  }
+
   if (incident && marker.type === 'possible_contact' && !hasSupportedContactEvidence(incident)) {
     return calmerPersonNearWording(incident) ? 'Person nearby' : 'Activity near vehicle'
   }
@@ -1474,6 +1509,18 @@ function deriveReviewTimelineMarkers(incident: MimirIncident, videoDuration = 0)
     }
 
     markers.push(normalized)
+  }
+
+  const userCorrectedTime = finiteNumber(incident.user_key_moment_sec)
+  if (userCorrectedTime !== null && userCorrectedTime >= 0) {
+    addMarker({
+      type: 'user_corrected',
+      severity: 'NEUTRAL',
+      label: 'Actual moment',
+      reason: 'Moment corrected by you.',
+      source: 'user',
+      time_sec: userCorrectedTime,
+    })
   }
 
   for (const marker of validTimelineMarkers(incident.key_moments)) {
@@ -2267,29 +2314,155 @@ function markerKey(marker: MimirTimelineMarker, index: number) {
   return `${marker.type || 'marker'}-${index}-${marker.time_sec ?? 'no-time'}-${marker.frame_index ?? 'no-frame'}`
 }
 
+function markerIsPrimaryMoment(marker: MimirTimelineMarker, incident: MimirIncident) {
+  const primaryTime = finiteNumber(incident.primary_key_moment_sec)
+  const markerValue = markerTime(marker)
+  return primaryTime !== null && markerValue !== null && Math.abs(primaryTime - markerValue) <= 1
+}
+
+function markerPresentationPriority(marker: MimirTimelineMarker, incident: MimirIncident) {
+  const type = String(marker.type || '').toLowerCase()
+  const label = markerLabel(marker, incident).toLowerCase()
+
+  if (type === 'user_corrected') {
+    return 110
+  }
+
+  if (markerIsPrimaryMoment(marker, incident)) {
+    return 100
+  }
+
+  if (label === 'impact' || type === 'impact' || type.includes('strong_impact')) {
+    return 95
+  }
+
+  if (label.includes('impact/contact') || type === 'impact_contact') {
+    return 92
+  }
+
+  if (label.includes('possible contact') || type.includes('contact')) {
+    return 88
+  }
+
+  if (label.includes('review point') || type.includes('review')) {
+    return 52
+  }
+
+  if (label.includes('key moment')) {
+    return 50
+  }
+
+  if (type.includes('motion') || label.includes('motion')) {
+    return 35
+  }
+
+  if (type.includes('person') || type.includes('vehicle') || type.includes('start') || label.includes('nearby') || label.includes('starts')) {
+    return 20
+  }
+
+  return 30
+}
+
+function markerIsHighValue(marker: MimirTimelineMarker, incident: MimirIncident) {
+  if (String(marker.type || '').toLowerCase() === 'user_corrected') {
+    return true
+  }
+  const priority = markerPresentationPriority(marker, incident)
+  return priority >= 80 || markerIsPrimaryMoment(marker, incident)
+}
+
+function markersAreNear(left: MimirTimelineMarker, right: MimirTimelineMarker, tolerance = 1) {
+  const leftTime = markerTime(left)
+  const rightTime = markerTime(right)
+  return leftTime !== null && rightTime !== null && Math.abs(leftTime - rightTime) <= tolerance
+}
+
+function sameMarkerLabel(left: MimirTimelineMarker, right: MimirTimelineMarker, incident: MimirIncident) {
+  return markerLabel(left, incident).toLowerCase() === markerLabel(right, incident).toLowerCase()
+}
+
+function dedupeMarkersByPriority(markers: MimirTimelineMarker[], incident: MimirIncident, options: { allMoments: boolean }) {
+  const sortedByPriority = [...markers].sort((left, right) => {
+    const priorityDelta = markerPresentationPriority(right, incident) - markerPresentationPriority(left, incident)
+    if (priorityDelta !== 0) {
+      return priorityDelta
+    }
+
+    return (markerTime(left) ?? 0) - (markerTime(right) ?? 0)
+  })
+  const kept: MimirTimelineMarker[] = []
+
+  for (const marker of sortedByPriority) {
+    const duplicate = kept.some(existing => {
+      if (!markersAreNear(existing, marker, 1)) {
+        return false
+      }
+
+      return !options.allMoments || sameMarkerLabel(existing, marker, incident)
+    })
+
+    if (!duplicate) {
+      kept.push(marker)
+    }
+  }
+
+  return timedMarkers(kept)
+}
+
+function presentationTimelineMarkers(markers: MimirTimelineMarker[], incident: MimirIncident, showAllMoments: boolean) {
+  if (showAllMoments) {
+    return dedupeMarkersByPriority(markers, incident, { allMoments: true })
+  }
+
+  const highValue = markers.filter(marker => markerIsHighValue(marker, incident))
+  const betterThanReviewPoint = highValue.some(marker => {
+    const label = markerLabel(marker, incident).toLowerCase()
+    const type = String(marker.type || '').toLowerCase()
+    return !label.includes('review point') && !type.includes('review')
+  })
+  const filtered = betterThanReviewPoint
+    ? highValue.filter(marker => {
+        const label = markerLabel(marker, incident).toLowerCase()
+        const type = String(marker.type || '').toLowerCase()
+        return !label.includes('review point') && !type.includes('review')
+      })
+    : highValue
+  const candidates = filtered.length > 0 ? filtered : markers.slice(0, 1)
+
+  return dedupeMarkersByPriority(candidates, incident, { allMoments: false }).slice(0, 3)
+}
+
 function IncidentTimelineMarkers({
   markers,
   incident,
   currentTime,
   duration,
   onSeek,
+  onSetActualMoment,
 }: {
   markers: MimirTimelineMarker[]
   incident: MimirIncident
   currentTime: number
   duration: number
   onSeek: (time: number) => void
+  onSetActualMoment: (time: number) => void
 }) {
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null)
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<number | null>(null)
+  const [showAllMoments, setShowAllMoments] = useState(false)
   const knownDuration = reviewTimelineDuration(incident, duration)
+  const displayedMarkers = useMemo(
+    () => presentationTimelineMarkers(markers, incident, showAllMoments),
+    [incident, markers, showAllMoments],
+  )
   const canSeekRail = Number.isFinite(knownDuration) && knownDuration > 0
   const effectiveDuration = canSeekRail ? knownDuration : 0
   const progressPercent =
     effectiveDuration > 0 ? Math.max(0, Math.min(100, (currentTime / effectiveDuration) * 100)) : 0
-  const selectedMarker = selectedMarkerIndex === null ? null : markers[selectedMarkerIndex]
+  const selectedMarker = selectedMarkerIndex === null ? null : displayedMarkers[selectedMarkerIndex]
+  const hasHiddenMoments = markers.length > displayedMarkers.length
   const selectMarker = (index: number) => {
-    const marker = markers[index]
+    const marker = displayedMarkers[index]
     setSelectedMarkerIndex(index)
 
     const time = markerTime(marker)
@@ -2298,7 +2471,7 @@ function IncidentTimelineMarkers({
     }
   }
   const selectAdjacentMarker = (direction: 'previous' | 'next') => {
-    if (markers.length === 0) {
+    if (displayedMarkers.length === 0) {
       return
     }
 
@@ -2306,27 +2479,31 @@ function IncidentTimelineMarkers({
     const nextIndex =
       direction === 'previous'
         ? Math.max(0, currentIndex - 1)
-        : Math.min(markers.length - 1, currentIndex + 1)
+        : Math.min(displayedMarkers.length - 1, currentIndex + 1)
 
     selectMarker(nextIndex)
   }
 
   useEffect(() => {
     setHoveredMarkerIndex(null)
-    setSelectedMarkerIndex(markers.length > 0 ? 0 : null)
-  }, [incident.id, markers.length])
+    setSelectedMarkerIndex(displayedMarkers.length > 0 ? 0 : null)
+  }, [incident.id, displayedMarkers.length, showAllMoments])
+
+  useEffect(() => {
+    setShowAllMoments(false)
+  }, [incident.id, incident.primary_key_moment_sec, incident.key_moment_version, markers.length])
 
   if (!canSeekRail) {
     return (
-      <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.016] p-5">
+      <div className="rounded-2xl bg-white/[0.014] p-5">
         <div className="text-[13px] text-[var(--mimir-text-muted)]">Loading key moments...</div>
       </div>
     )
   }
 
-  if (markers.length === 0) {
+  if (displayedMarkers.length === 0) {
     return (
-      <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.016] p-5">
+      <div className="rounded-2xl bg-white/[0.014] p-5">
         <div className="text-[13px] text-[var(--mimir-text-muted)]">No key moments found.</div>
       </div>
     )
@@ -2349,32 +2526,53 @@ function IncidentTimelineMarkers({
   }
 
   return (
-    <div className="rounded-[18px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.022),rgba(255,255,255,0.01))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+    <div className="rounded-2xl bg-black/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--mimir-text-subtle)]">
-            {markers.length} {markers.length === 1 ? 'moment' : 'moments'}
+          <div className="text-[12px] font-semibold text-[var(--mimir-text-subtle)]">
+            {showAllMoments ? 'All moments' : 'Primary moments'}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => selectAdjacentMarker('previous')}
-            disabled={markers.length <= 1 || selectedMarkerIndex === 0}
-            className="h-8 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.055] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => onSetActualMoment(currentTime)}
+            className="h-8 rounded-full border border-white/[0.06] bg-white/[0.018] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] hover:text-[var(--mimir-text)]"
+            title="Save the current video position as the actual moment"
           >
-            Previous
+            Use current time
           </button>
-          <button
-            type="button"
-            onClick={() => selectAdjacentMarker('next')}
-            disabled={markers.length <= 1 || selectedMarkerIndex === markers.length - 1}
-            className="h-8 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.055] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Next
-          </button>
-          <div className="flex items-center gap-2 rounded-full bg-black/18 px-3 py-1 text-[12px] text-[var(--mimir-text-subtle)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-white/35" />
+          {displayedMarkers.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => selectAdjacentMarker('previous')}
+                disabled={selectedMarkerIndex === 0}
+                className="h-8 rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => selectAdjacentMarker('next')}
+                disabled={selectedMarkerIndex === displayedMarkers.length - 1}
+                className="h-8 rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Next
+              </button>
+            </>
+          )}
+          {hasHiddenMoments && (
+            <button
+              type="button"
+              onClick={() => setShowAllMoments(value => !value)}
+              className="h-8 rounded-full border border-white/[0.06] bg-white/[0.018] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] hover:text-[var(--mimir-text)]"
+            >
+              {showAllMoments ? 'Show fewer' : 'Show all moments'}
+            </button>
+          )}
+          <div className="flex items-center gap-2 rounded-full bg-white/[0.025] px-3 py-1 text-[12px] text-[var(--mimir-text-subtle)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--mimir-accent)]" />
             {formatTime(currentTime)} / {formatTime(effectiveDuration)}
           </div>
         </div>
@@ -2386,18 +2584,18 @@ function IncidentTimelineMarkers({
         className={`relative mx-2 h-[138px] ${canSeekRail ? 'cursor-pointer' : 'cursor-default'}`}
       >
         <div className="absolute left-0 right-0 top-[48px] h-px bg-white/[0.08]" />
-        <div className="absolute left-0 right-0 top-[46px] h-3 rounded-full bg-black/24 shadow-[inset_0_1px_1px_rgba(0,0,0,0.32)]" />
+        <div className="absolute left-0 right-0 top-[46px] h-3 rounded-full bg-black/28 shadow-[inset_0_1px_1px_rgba(0,0,0,0.34)]" />
         <div
-          className="absolute left-0 top-[46px] h-3 rounded-full bg-white/20 transition-[width]"
+          className="absolute left-0 top-[46px] h-3 rounded-full bg-[rgba(157,183,170,0.34)] transition-[width]"
           style={{ width: `${progressPercent}%` }}
         />
         <div
           className="absolute top-[34px] h-12 w-px bg-white/42"
           style={{ left: `${progressPercent}%` }}
         />
-        {markers.map((marker, index) => {
+        {displayedMarkers.map((marker, index) => {
           const time = markerTime(marker)
-          const position = markerPosition(marker, index, markers.length, effectiveDuration)
+          const position = markerPosition(marker, index, displayedMarkers.length, effectiveDuration)
           const isHovered = hoveredMarkerIndex === index
           const isSelected = selectedMarkerIndex === index
           const isTimed = time !== null
@@ -2414,7 +2612,7 @@ function IncidentTimelineMarkers({
                 selectMarker(index)
               }}
               onMouseLeave={() => setHoveredMarkerIndex(null)}
-              title={`${markerLabel(marker, incident)} · ${isTimed ? formatTime(time) : 'time unavailable'}${markerDescription(marker, incident) ? `\n${markerDescription(marker, incident)}` : ''}`}
+              title={`${markerLabel(marker, incident)} - ${isTimed ? formatTime(time) : 'time unavailable'}${markerDescription(marker, incident) ? `\n${markerDescription(marker, incident)}` : ''}`}
               className="group absolute top-[22px] flex -translate-x-1/2 cursor-pointer flex-col items-center rounded-full outline-none"
               style={{ left: `${position}%` }}
               aria-label={`${markerLabel(marker, incident)} ${isTimed ? formatTime(time) : 'time unavailable'}`}
@@ -2447,8 +2645,8 @@ function IncidentTimelineMarkers({
 
               {isHovered && (
                 <span className="pointer-events-none absolute bottom-[108px] left-1/2 z-10 block w-56 -translate-x-1/2 rounded-lg bg-[var(--mimir-surface-soft)] p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
-                  <span className="block text-[11px] uppercase tracking-[0.16em] text-[var(--mimir-text-subtle)]">
-                    {markerLabel(marker, incident)} · {time === null ? 'time unavailable' : formatTime(time)}
+                  <span className="block text-[11px] font-semibold text-[var(--mimir-text-subtle)]">
+                    {markerLabel(marker, incident)} - {time === null ? 'time unavailable' : formatTime(time)}
                   </span>
                   <span className="mt-2 block text-[12px] leading-5 text-[var(--mimir-text-muted)]">
                     {markerDescription(marker, incident)}
@@ -2462,12 +2660,12 @@ function IncidentTimelineMarkers({
         <div className="absolute bottom-0 right-0 text-[11px] text-[var(--mimir-text-subtle)]">{formatTime(knownDuration)}</div>
       </div>
 
-      <div className="mt-3 rounded-xl border border-white/[0.055] bg-black/16 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="mt-3 rounded-xl bg-white/[0.018] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.015)]">
         {selectedMarker ? (
           <div className="relative flex flex-wrap items-start gap-4 pl-4">
             <div className={`absolute bottom-1 left-0 top-1 w-1 rounded-full ${markerAccentForMarker(selectedMarker)}`} />
             <div className="min-w-[74px]">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--mimir-text-subtle)]">Marker</div>
+              <div className="text-[10px] font-medium text-[var(--mimir-text-subtle)]">Marker</div>
               <div className="mt-1 text-[18px] font-semibold text-[var(--mimir-text)]">
                 {formatTimecode(markerTime(selectedMarker))}
               </div>
@@ -2490,7 +2688,15 @@ function IncidentTimelineMarkers({
   )
 }
 
-function DetailsPanel({ incident }: { incident: MimirIncident }) {
+function DetailsPanel({
+  incident,
+  session,
+  severityResolution,
+}: {
+  incident: MimirIncident
+  session?: MimirSession
+  severityResolution: SeverityResolution
+}) {
   const evidence = safeTextList(incident.evidence)
   const impactReasons = safeTextList(incident.impact_reasons)
   const contactReasons = safeTextList(incident.contact_reasons)
@@ -2512,32 +2718,74 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
   const reviewBadgeTone = aiReviewed(incident)
     ? 'border-sky-200/18 bg-sky-300/10 text-sky-100/88'
     : 'border-white/[0.07] bg-white/[0.035] text-[var(--mimir-text-muted)]'
+  const severity = severityResolution.displaySeverity
+  const reviewCopy =
+    severity === 'IMPORTANT'
+      ? 'Possible impact/contact detected.'
+      : severity === 'REVIEW'
+        ? 'Uncertain activity worth checking.'
+        : 'No concerning evidence found.'
+  const keyReasons = [
+    ...resolverReasons,
+    ...displayEvidence,
+    ...(showImpactReasons ? impactReasons : []),
+    ...(showContactReasons ? contactReasons : []),
+    severityCapReason,
+    severityFloorReason,
+  ].filter(Boolean)
+  const localSummary = [
+    `Impact: ${calmPersonNear && !supportedImpact ? 'No clear impact detected' : incident.impact_level || evidenceMetricValue(local, 'impact_level')}`,
+    `Contact: ${contactLevelCopy(incident)}`,
+    `Motion: ${evidenceMetricValue(local, 'max_motion_score')}`,
+    `Person detected: ${evidenceMetricValue(local, 'person_detected')}`,
+    `Vehicle detected: ${evidenceMetricValue(local, 'vehicle_detected')}`,
+  ].filter(item => !item.endsWith('Not provided') && !item.endsWith(''))
+  const filePaths = {
+    video_path: incident.video_path || null,
+    source_video: incident.source_video || null,
+    original_source_video: incident.original_source_video || null,
+    library_video_path: incident.library_video_path || null,
+    trash_video_path: incident.trash_video_path || null,
+    thumbnail: incident.thumbnail || null,
+    hero_thumbnail: incident.hero_thumbnail || null,
+    contact_sheet: incident.contact_sheet || null,
+  }
+  const backendMetadata = {
+    schema_version: session?.schema_version,
+    scanner_version: session?.scanner_version,
+    core_version: session?.core_version,
+    core_build_id: session?.core_build_id,
+    backend_runtime: session?.backend_runtime,
+    session_created_at: session?.session_created_at,
+    output_path: session?.output_path,
+    feature_flags: session?.feature_flags,
+  }
 
   return (
-    <aside className="rounded-[18px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.026),rgba(255,255,255,0.01))] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.18)] xl:sticky xl:top-5 xl:self-start">
-      <div className="mb-5 flex flex-wrap gap-2">
-        <span className={`rounded-full border px-3 py-1 text-[12px] font-semibold ${severityClass(incident.severity)}`}>
-          {severityCopy(incident.severity)}
+    <aside className="mb-3 rounded-2xl border border-white/[0.04] bg-white/[0.016] p-4 shadow-[0_12px_34px_rgba(0,0,0,0.14)]">
+      <div className="mb-4 flex flex-wrap gap-2">
+        <span className={`rounded-full border px-3 py-1 text-[12px] font-semibold ${severityClass(severityResolution.displaySeverity)}`}>
+          {severityCopy(severityResolution.displaySeverity)}
         </span>
+        {severityResolution.isManualOverride && (
+          <span className="rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
+            Changed by you
+          </span>
+        )}
         <span className={`rounded-full border px-3 py-1 text-[12px] font-medium ${reviewBadgeTone}`}>
           {reviewBadgeCopy(incident)}
         </span>
-        {incident.possible_impact && (!calmPersonNear || supportedImpact) && (
-          <span className="rounded-full border border-amber-300/25 bg-amber-400/10 px-3 py-1 text-[12px] font-medium text-amber-100">
-            Possible impact
-          </span>
-        )}
       </div>
 
-      <div className="mb-5">
-        <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-          Mimir assessment
+      <div className="rounded-xl bg-black/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
+        <div className="text-[12px] font-semibold text-[var(--mimir-text-subtle)]">
+          Mimir review
         </div>
-        <p className="mt-3 text-[14px] leading-6 text-[var(--mimir-text)]">
-          {assessmentCopy(incident)}
+        <p className="mt-3 text-[15px] font-medium leading-6 text-[var(--mimir-text)]">
+          {reviewCopy}
         </p>
-        <p className="mt-2 text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
-          {reviewBadgeDescription(incident)}
+        <p className="mt-1.5 text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
+          Based on local evidence.
         </p>
         {importantNotAppliedNote(incident) && (
           <div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.026] px-3 py-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
@@ -2546,29 +2794,19 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
         )}
       </div>
 
-      <details className="rounded-xl border border-white/[0.045] bg-black/12 p-4">
+      <details className="mt-3 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
         <summary className="cursor-pointer text-[13px] font-semibold text-[var(--mimir-text)]">
-          Review details
+          Why?
         </summary>
         <div className="mt-4 grid gap-4">
-          <div className="rounded-lg border border-white/[0.045] bg-white/[0.012] px-3">
-            <DetailMetric label="Event type" value={eventDisplayTitle(incident)} />
-            <DetailMetric label="Impact level" value={calmPersonNear && !supportedImpact ? 'No clear impact detected' : incident.impact_level || evidenceMetricValue(local, 'impact_level')} />
-            <DetailMetric label="Contact level" value={contactLevelCopy(incident)} />
-            <DetailMetric label="Motion score" value={evidenceMetricValue(local, 'max_motion_score')} />
-            <DetailMetric label="Person detected" value={evidenceMetricValue(local, 'person_detected')} />
-            <DetailMetric label="Vehicle detected" value={evidenceMetricValue(local, 'vehicle_detected')} />
-            <DetailMetric label="Normal traffic evidence" value={evidenceMetricValue(local, 'normal_traffic_evidence')} />
-          </div>
-
-          {resolverReasons.length > 0 && (
+          {keyReasons.length > 0 && (
             <div>
-              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-                Resolver reasons
+              <div className="mb-2 text-[12px] font-medium text-[var(--mimir-text-subtle)]">
+                Key reasons
               </div>
               <ul className="space-y-2">
-                {resolverReasons.map((item, index) => (
-                  <li key={`${incident.id}-resolver-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                {keyReasons.slice(0, 8).map((item, index) => (
+                  <li key={`${incident.id}-why-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
                     <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/35" />
                     <span>{item}</span>
                   </li>
@@ -2577,147 +2815,58 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
             </div>
           )}
 
-          {(severityCapReason || severityFloorReason) && (
-            <div className="rounded-lg border border-white/[0.045] bg-white/[0.016] px-3">
-              {severityCapReason && <DetailMetric label="Severity cap" value={severityCapReason} />}
-              {severityFloorReason && <DetailMetric label="Severity floor" value={severityFloorReason} />}
+          {localSummary.length > 0 && (
+            <div className="rounded-lg bg-white/[0.012] px-3">
+              <DetailMetric label="Mimir result" value={severityCopy(severityResolution.mimirSeverity)} />
+              <DetailMetric label="Local evidence" value={localSummary.join(' / ')} />
             </div>
           )}
-        </div>
-      </details>
 
-      {experimentalAiUsed(incident) && (
-        <details className="mt-5 rounded-xl border border-sky-200/10 bg-sky-300/[0.035] p-4">
-          <summary className="cursor-pointer text-[13px] font-semibold text-sky-50/85">
-            Experimental AI second opinion
-          </summary>
-          <div className="mt-4 grid gap-4">
-            <div className="rounded-lg border border-white/[0.045] bg-black/14 px-3">
-              <DetailMetric label="Model" value={aiModelName(incident) || 'Not provided'} />
-              <DetailMetric label="Scene type" value={aiSceneType(incident) || 'Not provided'} />
-              <DetailMetric label="Recommended severity" value={aiRecommendedSeverity(incident)} />
-              <DetailMetric label="Confidence" value={aiConfidenceCopy(incident)} />
-            </div>
-
-            {aiWarning && (
-              <div className="rounded-lg border border-amber-200/16 bg-amber-300/8 p-3 text-[12px] leading-5 text-amber-50/78">
-                {aiWarning}
+          {experimentalAiUsed(incident) && (
+            <div className="rounded-lg border border-sky-200/10 bg-sky-300/[0.035] p-3">
+              <div className="text-[12px] font-semibold text-sky-50/85">AI second opinion</div>
+              <div className="mt-2 grid gap-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+                <div>Model: {aiModelName(incident) || 'Not provided'}</div>
+                {aiSceneType(incident) && <div>Scene: {aiSceneType(incident)}</div>}
+                <div>Suggested severity: {aiRecommendedSeverity(incident)}</div>
+                <div>Confidence: {aiConfidenceCopy(incident)}</div>
+                {aiWarning && <div className="text-amber-50/78">{aiWarning}</div>}
               </div>
-            )}
-
-            {aiEvidenceItems.length > 0 && (
-              <div>
-                <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-                  Evidence
-                </div>
-                <ul className="space-y-2">
+              {aiEvidenceItems.length > 0 && (
+                <ul className="mt-3 space-y-2">
                   {aiEvidenceItems.map((item, index) => (
-                    <li key={`${incident.id}-ai-evidence-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                    <li key={`${incident.id}-ai-evidence-${index}`} className="flex gap-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
                       <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-200/45" />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
-
-            {aiConcernItems.length > 0 && (
-              <div>
-                <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-                  Concerns
-                </div>
-                <ul className="space-y-2">
+              )}
+              {aiConcernItems.length > 0 && (
+                <ul className="mt-3 space-y-2">
                   {aiConcernItems.map((item, index) => (
-                    <li key={`${incident.id}-ai-concern-${index}`} className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
+                    <li key={`${incident.id}-ai-concern-${index}`} className="flex gap-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
                       <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-200/45" />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
-          </div>
-        </details>
-      )}
-
-      <div className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
-        <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-          Evidence
+              )}
+            </div>
+          )}
         </div>
-        {displayEvidence.length > 0 ? (
-          <ul className="space-y-2">
-            {displayEvidence.map((item, index) => (
-              <li
-                key={`${incident.id}-viewer-evidence-${index}`}
-                className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]"
-              >
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/35" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="text-[13px] text-[var(--mimir-text-muted)]">
-            No evidence points were included.
-          </div>
-        )}
-      </div>
+      </details>
 
-      <div className="mt-5 rounded-xl border border-white/[0.045] bg-white/[0.014] p-4">
-        <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-          Recommended action
-        </div>
-        <div className="text-[14px] leading-6 text-[var(--mimir-text-muted)]">
-          {incident.recommended_action || 'No recommended action was included.'}
-        </div>
-      </div>
-
-      {showImpactReasons && (
-        <div className="mt-5 rounded-xl border border-white/[0.045] bg-white/[0.014] p-4">
-          <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-            Impact reasons
-          </div>
-          <ul className="space-y-2">
-            {impactReasons.map((item, index) => (
-              <li
-                key={`${incident.id}-viewer-impact-${index}`}
-                className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]"
-              >
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-200/45" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {showContactReasons && (
-        <div className="mt-5 rounded-xl border border-white/[0.045] bg-white/[0.014] p-4">
-          <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-            Contact reasons
-          </div>
-          <ul className="space-y-2">
-            {contactReasons.map((item, index) => (
-              <li
-                key={`${incident.id}-viewer-contact-${index}`}
-                className="flex gap-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]"
-              >
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-200/45" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <details className="mt-5 rounded-xl border border-white/[0.045] bg-white/[0.012] p-4">
+      <details className="mt-3 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
         <summary className="cursor-pointer text-[13px] font-medium text-[var(--mimir-text-muted)]">
           Technical details
         </summary>
         <div className="mt-4 grid gap-3">
           <DetailMetric label="Incident ID" value={safeText(incident.id, 'Not provided')} />
-          <DetailMetric label="AI parse error" value={yesNo(incident.ai_parse_error)} />
-          <DetailMetric label="AI skipped reason" value={safeText(incident.ai_review_skipped_reason, 'Not provided')} />
+          <DetailMetric label="Event type" value={eventDisplayTitle(incident)} />
+          <DetailMetric label="Mimir result" value={severityCopy(severityResolution.mimirSeverity)} />
+          <DetailMetric label="Displayed status" value={severityCopy(severityResolution.displaySeverity)} />
+          <DetailMetric label="Manual override" value={yesNo(severityResolution.isManualOverride)} />
           <DetailMetric label="Score" value={formatNumber(incident.score)} />
           <DetailMetric label="Persons" value={formatNumber(incident.persons)} />
           <DetailMetric label="Vehicles" value={formatNumber(incident.vehicles)} />
@@ -2728,8 +2877,17 @@ function DetailsPanel({ incident }: { incident: MimirIncident }) {
             label="Source event timestamp"
             value={formatDateTime(sourceEventTimestamp(incident)) || 'Not provided'}
           />
+          <TechnicalJsonBlock label="Backend metadata" value={backendMetadata} />
+          <TechnicalJsonBlock label="File paths" value={filePaths} />
           <TechnicalJsonBlock label="Classification debug" value={incident.classification_debug} />
           <TechnicalJsonBlock label="Local evidence JSON" value={incident.local_evidence ?? incident.local_evidence_summary} />
+          {experimentalAiUsed(incident) && (
+            <>
+              <DetailMetric label="AI parse error" value={yesNo(incident.ai_parse_error)} />
+              <DetailMetric label="AI skipped reason" value={safeText(incident.ai_review_skipped_reason, 'Not provided')} />
+              <TechnicalJsonBlock label="AI raw result" value={incident.ai_evidence_review ?? incident.ai_raw_response ?? incident.ai_evidence} />
+            </>
+          )}
         </div>
       </details>
     </aside>
@@ -2760,7 +2918,7 @@ function AiFeedbackPanel({
   onSubmit: () => void
 }) {
   return (
-    <div className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
+    <div className="mt-4 rounded-xl bg-black/10 p-3.5">
       <div className="mb-3">
         <div className="text-[12px] font-semibold text-[var(--mimir-text)]">AI feedback</div>
       </div>
@@ -2831,6 +2989,9 @@ function AiFeedbackPanel({
 
 function ReviewActionsPanel({
   incident,
+  currentSeverity,
+  mimirSeverity,
+  isManualOverride,
   busyAction,
   actionMessage,
   actionError,
@@ -2853,9 +3014,13 @@ function ReviewActionsPanel({
   onSetStatus,
   onMoveToLibrary,
   onConfirmDelete,
+  onRestoreFromTrash,
   onOpenFiles,
 }: {
   incident: MimirIncident
+  currentSeverity: SeverityGroup
+  mimirSeverity: SeverityGroup
+  isManualOverride: boolean
   busyAction: IncidentAction | null
   actionMessage: string
   actionError: string
@@ -2875,12 +3040,12 @@ function ReviewActionsPanel({
   onEditNote: () => void
   onCancelNote: () => void
   onSaveNote: () => void
-  onSetStatus: (status: 'IGNORE' | 'REVIEW' | 'IMPORTANT') => void
+  onSetStatus: (status: SeverityGroup) => void
   onMoveToLibrary: () => void
   onConfirmDelete: () => void
+  onRestoreFromTrash: () => void
   onOpenFiles: () => void
 }) {
-  const currentSeverity = normalizeSeverity(incident.severity)
   const disabled = busyAction !== null
   const [showActionDetails, setShowActionDetails] = useState(false)
   const currentStorageState = storageState(incident)
@@ -2894,15 +3059,17 @@ function ReviewActionsPanel({
           : 'border-white/[0.08] bg-white/[0.035] text-[var(--mimir-text-muted)]'
 
   return (
-    <section className="mb-5 rounded-[18px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.012))] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+    <section className="rounded-2xl border border-white/[0.04] bg-white/[0.016] p-4 shadow-[0_12px_34px_rgba(0,0,0,0.14)]">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-            Review controls
+          <div className="text-[12px] font-semibold text-[var(--mimir-text-subtle)]">
+            Status
           </div>
-          <p className="mt-2 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
-            Update this event after reviewing the evidence.
-          </p>
+          {isManualOverride && (
+            <div className="mt-1 text-[11px] font-medium text-[var(--mimir-text-subtle)]">
+              Changed by you
+            </div>
+          )}
         </div>
         <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${storageBadgeTone}`}>
           {currentStorageState === 'Mimir Library'
@@ -2913,22 +3080,7 @@ function ReviewActionsPanel({
         </span>
       </div>
 
-      <div className="mb-4 rounded-xl border border-white/[0.045] bg-black/12 px-3 py-2.5">
-        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--mimir-text-subtle)]">
-          Current status
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${severityClass(currentSeverity)}`}>
-            {severityCopy(currentSeverity)}
-          </span>
-          <span className="text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
-            Shortcuts: 1 important, 2 review, 3 ignore.
-          </span>
-        </div>
-      </div>
-
       <div>
-        <div className="mb-2 text-[12px] font-semibold text-[var(--mimir-text)]">Status</div>
         <div className="grid grid-cols-3 gap-2">
           {(['IGNORE', 'REVIEW', 'IMPORTANT'] as const).map(status => {
             const actionKey = `set_status_${status}` as IncidentAction
@@ -2953,6 +3105,11 @@ function ReviewActionsPanel({
       </div>
 
       <div className="mt-4 grid gap-2">
+        {isManualOverride && (
+          <div className="rounded-lg bg-white/[0.02] px-3 py-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+            Mimir result: {severityCopy(mimirSeverity)}
+          </div>
+        )}
         <button
           onClick={onOpenFiles}
           disabled={disabled}
@@ -2960,7 +3117,18 @@ function ReviewActionsPanel({
         >
           Files
         </button>
-        <button
+        {incident.user_deleted || currentStorageState.includes('Trash') ? (
+          <button
+            onClick={onRestoreFromTrash}
+            disabled={disabled}
+            className="h-10 rounded-lg border border-white/[0.085] bg-white/[0.035] px-3 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.065] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            <span className="inline-flex items-center gap-2">
+              {busyAction === 'restore_from_trash' && <SmallSpinner />}
+              Restore from Mimir Trash
+            </span>
+          </button>
+        ) : <button
           onClick={onMoveToLibrary}
           disabled={disabled || incident.user_deleted}
           className="h-10 rounded-lg border border-white/[0.085] bg-white/[0.035] px-3 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.065] disabled:cursor-not-allowed disabled:opacity-55"
@@ -2969,20 +3137,20 @@ function ReviewActionsPanel({
             {busyAction === 'move_to_library' && <SmallSpinner />}
             Move to Mimir Library
           </span>
-        </button>
-        <button
+        </button>}
+        {!incident.user_deleted && !currentStorageState.includes('Trash') && <button
           onClick={onConfirmDelete}
           disabled={disabled || incident.user_deleted}
-          className="h-10 rounded-lg border border-red-300/18 bg-red-500/8 px-3 text-[12px] font-semibold text-red-100/86 transition hover:bg-red-500/12 disabled:cursor-not-allowed disabled:opacity-55"
+          className="h-10 rounded-lg border border-red-300/14 bg-red-500/[0.045] px-3 text-[12px] font-semibold text-red-100/82 transition hover:bg-red-500/[0.075] disabled:cursor-not-allowed disabled:opacity-55"
         >
           <span className="inline-flex items-center gap-2">
             {busyAction === 'move_to_trash' && <SmallSpinner />}
             Move to Mimir Trash
           </span>
-        </button>
+        </button>}
       </div>
 
-      <details className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
+      <details className="mt-4 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
         <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
           Feedback
         </summary>
@@ -3000,16 +3168,16 @@ function ReviewActionsPanel({
         />
       </details>
 
-      <div className="mt-5 rounded-xl border border-white/[0.045] bg-black/12 p-4">
+      <div className="mt-4 rounded-xl bg-black/10 p-3.5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-[12px] font-semibold text-[var(--mimir-text)]">Note</div>
           <button
             onClick={onEditNote}
             disabled={disabled}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.04] text-[15px] text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)] disabled:cursor-wait disabled:opacity-60"
+            className="h-8 rounded-lg bg-white/[0.035] px-2.5 text-[11px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.065] hover:text-[var(--mimir-text)] disabled:cursor-wait disabled:opacity-60"
             title="Edit note"
           >
-            ✎
+            Edit
           </button>
         </div>
         {isEditingNote ? (
@@ -3082,15 +3250,18 @@ function ReviewActionsPanel({
 export function IncidentViewerScreen({
   incident,
   session,
+  severityResolution,
   onBack,
   onReloadSession,
   onIncidentUpdated,
+  onManualStatusChange,
 }: IncidentViewerScreenProps) {
   const title = eventDisplayTitle(incident)
   const timestamp = formatDateTime(sourceEventTimestamp(incident))
   const sourceLabel =
     sourceFilename(cleanPath(incident.source_video) || cleanPath(incident.original_source_video) || cleanPath(incident.video_path)) ||
     'Source filename not provided'
+  const isGenericBestEffort = incident.filename_timestamp_detected === false
   const attemptedVideoPath = attemptedVideoPathForIncident(incident)
   const viewerRef = useRef<HTMLElement>(null)
   const [currentTime, setCurrentTime] = useState(0)
@@ -3147,53 +3318,20 @@ export function IncidentViewerScreen({
     setActionMessage(fallbackMessage)
   }
 
-  const successMessageForAction = (
-    action: 'set_status' | 'move_to_library' | 'delete',
-    status?: 'IGNORE' | 'REVIEW' | 'IMPORTANT',
-  ) => {
-    if (action === 'move_to_library') {
-      return 'Moved to Mimir Library'
-    }
-
-    if (action === 'delete') {
-      return 'Moved to Mimir Trash'
-    }
-
-    if (status) {
-      return `Status changed to ${severityCopy(status)}`
-    }
-
-    return 'Action completed.'
-  }
-
-  const runBackendAction = async (
-    action: 'set_status' | 'move_to_library' | 'delete',
-    busyKey: IncidentAction,
-    status?: 'IGNORE' | 'REVIEW' | 'IMPORTANT',
-  ) => {
-    setBusyAction(busyKey)
+  const updateManualStatus = (status: SeverityGroup) => {
+    onManualStatusChange(status)
     setActionError('')
     setActionDetails('')
-    setActionMessage('')
-
-    try {
-      const result = await invoke<ClipActionResult>('run_incident_action', {
-        incidentId: incidentActionId(incident),
-        action,
-        status: status ?? null,
-      })
-
-      await refreshCurrentIncident(successMessageForAction(action, status) || result.message || 'Action completed.')
-    } catch (error) {
-      setActionError(actionErrorMessage(error))
-    } finally {
-      setBusyAction(null)
-    }
+    setActionMessage(`Status changed to ${severityCopy(status)}.`)
   }
 
-  const runCoreV2StorageAction = async (action: 'move_to_library' | 'move_to_trash') => {
+  const runCoreV2StorageAction = async (action: 'move_to_library' | 'move_to_trash' | 'restore_from_trash') => {
     const busyKey: IncidentAction = action
-    const successMessage = action === 'move_to_library' ? 'Moved to Mimir Library' : 'Moved to Mimir Trash'
+    const successMessage = action === 'move_to_library'
+      ? 'Moved to Mimir Library'
+      : action === 'restore_from_trash'
+        ? 'Restored from Mimir Trash'
+        : 'Moved to Mimir Trash'
 
     setBusyAction(busyKey)
     setActionError('')
@@ -3213,11 +3351,11 @@ export function IncidentViewerScreen({
 
       if (status.partial) {
         setActionMessage('')
-        setActionError('Some files could not be moved.')
+        setActionError('The file action could not finish cleanly. Mimir kept the recovery details below.')
         setActionDetails(details)
       } else if (status.failed || !result.ok) {
         setActionMessage('')
-        setActionError(result.message || 'Mimir could not move this incident.')
+        setActionError(result.message || 'Mimir could not complete this file action.')
         setActionDetails(details)
       } else {
         setActionError('')
@@ -3248,6 +3386,24 @@ export function IncidentViewerScreen({
       await refreshCurrentIncident(result.message || 'Note saved.')
       setIsEditingNote(false)
     } catch (error) {
+      setActionError(actionErrorMessage(error))
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const saveActualMoment = async (timeSec: number) => {
+    setBusyAction('save_key_moment')
+    setActionError('')
+    setActionDetails('')
+    try {
+      const result = await invoke<ClipActionResult>('save_key_moment_correction', {
+        incidentId: incidentActionId(incident),
+        timeSec,
+      })
+      await refreshCurrentIncident(result.message || 'Actual moment saved.')
+    } catch (error) {
+      setActionMessage('')
       setActionError(actionErrorMessage(error))
     } finally {
       setBusyAction(null)
@@ -3369,7 +3525,7 @@ export function IncidentViewerScreen({
     }
 
     const key = event.key.toLowerCase()
-    const currentSeverity = normalizeSeverity(incident.severity)
+    const currentSeverity = severityResolution.displaySeverity
 
     if (event.code === 'Space') {
       event.preventDefault()
@@ -3392,7 +3548,7 @@ export function IncidentViewerScreen({
     if (key === 'i' || key === '1') {
       event.preventDefault()
       if (currentSeverity !== 'IMPORTANT') {
-        void runBackendAction('set_status', 'set_status_IMPORTANT', 'IMPORTANT')
+        updateManualStatus('IMPORTANT')
       }
       return
     }
@@ -3400,7 +3556,7 @@ export function IncidentViewerScreen({
     if (key === 'r' || key === '2') {
       event.preventDefault()
       if (currentSeverity !== 'REVIEW') {
-        void runBackendAction('set_status', 'set_status_REVIEW', 'REVIEW')
+        updateManualStatus('REVIEW')
       }
       return
     }
@@ -3408,7 +3564,7 @@ export function IncidentViewerScreen({
     if (key === 'g' || key === '3') {
       event.preventDefault()
       if (currentSeverity !== 'IGNORE') {
-        void runBackendAction('set_status', 'set_status_IGNORE', 'IGNORE')
+        updateManualStatus('IGNORE')
       }
       return
     }
@@ -3424,39 +3580,47 @@ export function IncidentViewerScreen({
       ref={viewerRef}
       tabIndex={-1}
       onKeyDown={handleViewerKeyDown}
-      className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1480px] flex-col overflow-hidden rounded-xl border border-[var(--mimir-border)] bg-[radial-gradient(circle_at_48%_0%,rgba(255,255,255,0.045),transparent_34%),var(--mimir-bg-depth)] shadow-[0_28px_90px_rgba(0,0,0,0.5)] outline-none sm:min-h-[calc(100vh-48px)]"
+      className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-white/[0.065] bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] shadow-[0_34px_110px_rgba(0,0,0,0.54)] outline-none sm:min-h-[calc(100vh-48px)]"
     >
       <header className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-7">
         <button
           onClick={onBack}
-          className="h-10 rounded-lg bg-white/[0.035] px-4 text-[13px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.065] hover:text-[var(--mimir-text)]"
+          className="h-9 rounded-lg bg-white/[0.03] px-3.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)]"
         >
           Back to Library
         </button>
 
-        <div className="flex items-center gap-2 rounded-full bg-white/[0.03] px-4 py-2 text-[13px] text-[var(--mimir-text-muted)]">
+        <div className="flex items-center gap-2 rounded-full border border-[rgba(157,183,170,0.14)] bg-[var(--mimir-accent-soft)] px-3 py-1.5 text-[12px] text-[var(--mimir-text-muted)]">
           <span className="h-2 w-2 rounded-full bg-[var(--mimir-status-green)]" />
           Local evidence
         </div>
       </header>
 
       <section className="flex-1 overflow-y-auto px-5 pb-7 pt-2 lg:px-7">
-        <div className="mb-5">
-          <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--mimir-text-subtle)]">
+        <div className="mb-4">
+          <div className="mb-2 text-[12px] font-medium text-[var(--mimir-text-subtle)]">
             Incident viewer
           </div>
-          <h1 className="text-[32px] font-semibold leading-tight text-[var(--mimir-text)] lg:text-[38px]">
+          <h1 className="text-[28px] font-semibold leading-tight text-[var(--mimir-text)] lg:text-[34px]">
             {title}
           </h1>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[var(--mimir-text-muted)]">
             {timestamp && <span>{timestamp}</span>}
             <span className="max-w-full truncate">{sourceLabel}</span>
+            {isGenericBestEffort && (
+              <span
+                className="rounded-full bg-white/[0.035] px-2 py-0.5 text-[11px] text-[var(--mimir-text-subtle)]"
+                title="Generic MP4 review is best-effort. Tesla Sentry camera groups receive full support."
+              >
+                Generic video · best effort
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_348px]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_352px]">
           <div className="min-w-0">
-            <section className="rounded-[26px] border border-white/[0.07] bg-[linear-gradient(180deg,rgba(255,255,255,0.032),rgba(255,255,255,0.012))] p-3 shadow-[0_30px_86px_rgba(0,0,0,0.34)]">
+            <section className="rounded-[24px] border border-white/[0.045] bg-black/16 p-2.5 shadow-[0_24px_78px_rgba(0,0,0,0.32)]">
               <CrashSafeBoundary
                 title="Video player error"
                 incidentId={incidentActionId(incident)}
@@ -3474,7 +3638,7 @@ export function IncidentViewerScreen({
                   onDurationChange={value => setDuration(Number.isFinite(value) ? value : 0)}
                 />
               </CrashSafeBoundary>
-              <section className="mt-3 rounded-[18px] border border-white/[0.055] bg-white/[0.014] p-3">
+              <section className="mt-3 rounded-2xl bg-white/[0.008] p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
                   <div>
                     <h2 className="text-[15px] font-semibold text-[var(--mimir-text)]">Key moments</h2>
@@ -3504,6 +3668,7 @@ export function IncidentViewerScreen({
                       currentTime={currentTime}
                       duration={duration}
                       onSeek={handleSeek}
+                      onSetActualMoment={time => void saveActualMoment(time)}
                     />
                   </CrashSafeBoundary>
                 )}
@@ -3513,6 +3678,15 @@ export function IncidentViewerScreen({
 
           <div className="xl:sticky xl:top-5 xl:self-start">
             <CrashSafeBoundary
+              title="Incident details error"
+              incidentId={incidentActionId(incident)}
+              attemptedVideoPath={attemptedVideoPath}
+              onBack={onBack}
+              onOpenFolder={path => void openContainingFolder(path, 'Video path is not available.')}
+            >
+              <DetailsPanel incident={incident} session={session} severityResolution={severityResolution} />
+            </CrashSafeBoundary>
+            <CrashSafeBoundary
               title="Action panel error"
               incidentId={incidentActionId(incident)}
               attemptedVideoPath={attemptedVideoPath}
@@ -3521,6 +3695,9 @@ export function IncidentViewerScreen({
             >
               <ReviewActionsPanel
                 incident={incident}
+                currentSeverity={severityResolution.displaySeverity}
+                mimirSeverity={severityResolution.mimirSeverity}
+                isManualOverride={severityResolution.isManualOverride}
                 busyAction={busyAction}
                 actionMessage={actionMessage}
                 actionError={actionError}
@@ -3543,22 +3720,12 @@ export function IncidentViewerScreen({
                   setIsEditingNote(false)
                 }}
                 onSaveNote={saveNote}
-                onSetStatus={status =>
-                  void runBackendAction(`set_status`, `set_status_${status}` as IncidentAction, status)
-                }
+                onSetStatus={updateManualStatus}
                 onMoveToLibrary={() => setShowLibraryConfirm(true)}
                 onConfirmDelete={() => setShowDeleteConfirm(true)}
+                onRestoreFromTrash={() => void runCoreV2StorageAction('restore_from_trash')}
                 onOpenFiles={() => setShowFilesDrawer(true)}
               />
-            </CrashSafeBoundary>
-            <CrashSafeBoundary
-              title="Incident details error"
-              incidentId={incidentActionId(incident)}
-              attemptedVideoPath={attemptedVideoPath}
-              onBack={onBack}
-              onOpenFolder={path => void openContainingFolder(path, 'Video path is not available.')}
-            >
-              <DetailsPanel incident={incident} />
             </CrashSafeBoundary>
           </div>
         </div>

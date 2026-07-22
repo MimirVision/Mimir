@@ -1,113 +1,73 @@
 {
-  "package": {
-    "productName": "Mimir",
-    "version": "0.1.0"
-  },
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mimir",
+  "version": "0.5.0-beta.1",
+  "identifier": "com.mimir.scanner",
+  "mainBinaryName": "mimir",
   "build": {
     "beforeDevCommand": "node ./node_modules/vite/bin/vite.js",
     "beforeBuildCommand": "node ./node_modules/vite/bin/vite.js build",
-    "devPath": "http://localhost:1420",
-    "distDir": "../dist"
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
   },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "dialog": {
-        "open": true
-      },
-      "fs": {
-        "readFile": true,
-        "scope": [
-          "C:\\Mimir_Backend\\MimirOutput\\latest_session.json",
-          "C:\\Mimir_Backend\\MimirOutputV2\\latest_session.json"
-        ]
-      },
-      "protocol": {
-        "asset": true,
-        "assetScope": [
-          "C:\\Mimir_Backend\\Frames\\*",
-          "C:\\Mimir_Backend\\MimirOutput\\**",
-          "C:\\Mimir_Backend\\MimirOutputV2\\**",
-          "C:\\**",
-          "D:\\**",
-          "E:\\**",
-          "F:\\**",
-          "G:\\**",
-          "H:\\**",
-          "I:\\**",
-          "J:\\**",
-          "K:\\**",
-          "L:\\**",
-          "M:\\**",
-          "N:\\**",
-          "O:\\**",
-          "P:\\**",
-          "Q:\\**",
-          "R:\\**",
-          "S:\\**",
-          "T:\\**",
-          "U:\\**",
-          "V:\\**",
-          "W:\\**",
-          "X:\\**",
-          "Y:\\**",
-          "Z:\\**"
-        ]
-      },
-      "shell": {
-        "sidecar": true,
-        "scope": [
-          {
-            "name": "binaries/mimir-backend",
-            "sidecar": true
-          }
-        ]
-      }
-    },
-    "bundle": {
-      "active": true,
-      "category": "Utility",
-      "copyright": "",
-      "externalBin": [
-        "binaries/mimir-backend"
-      ],
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.png",
-        "icons/icon.ico"
-      ],
-      "identifier": "com.mimir.scanner",
-      "longDescription": "AI incident review for vehicle footage.",
-      "publisher": "Mimir",
-      "resources": [
-        "resources/mimir-backend/**"
-      ],
-      "shortDescription": "AI incident review for vehicle footage",
-      "targets": [
-        "nsis"
-      ],
-      "windows": {
-        "webviewInstallMode": {
-          "silent": true,
-          "type": "downloadBootstrapper"
-        }
-      }
-    },
+  "app": {
     "security": {
-      "csp": null
+      "csp": "default-src 'self' customprotocol: asset:; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "$APPDATA/**",
+            "$APPLOCALDATA/**"
+          ],
+          "deny": [
+            "**/.git/**",
+            "**/.env*"
+          ],
+          "requireLiteralLeadingDot": true
+        }
+      },
+      "capabilities": ["main-capability"]
     },
     "windows": [
       {
-        "fullscreen": false,
-        "height": 820,
-        "minHeight": 720,
-        "minWidth": 1080,
-        "resizable": true,
+        "label": "main",
         "title": "Mimir",
-        "width": 1280
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1080,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": true
       }
     ]
+  },
+  "bundle": {
+    "active": true,
+    "category": "Utility",
+    "copyright": "Copyright Mimir",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "longDescription": "Private, local-first incident review for Tesla Sentry footage.",
+    "publisher": "Mimir",
+    "resources": [
+      "resources/mimir-backend/mimir-core-v2-scan.exe",
+      "resources/mimir-backend/mimir-core-v2-actions.exe",
+      "resources/mimir-backend/mimir-core-v2-release-check.exe"
+    ],
+    "shortDescription": "Local incident review for vehicle footage",
+    "targets": ["nsis"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    }
   }
 }
