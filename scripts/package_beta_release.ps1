@@ -80,7 +80,10 @@ if ([string]::IsNullOrWhiteSpace($BackendRoot)) {
 }
 $BackendRoot = [System.IO.Path]::GetFullPath($BackendRoot)
 $ReleaseCheck = Join-Path $BackendRoot "mimir_core_v2_release_check.py"
-$BackendPython = Join-Path $BackendRoot ".venv\Scripts\python.exe"
+$BackendPython = Join-Path $BackendRoot ".venv-runtime\Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $BackendPython)) {
+  throw "Clean backend runtime environment not found: $BackendPython"
+}
 & $BackendPython $ReleaseCheck --gate-only --frontend-root $Root
 if ($LASTEXITCODE -ne 0) {
   throw "Strict release gate failed. This installer must not be distributed."

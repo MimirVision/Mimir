@@ -41,9 +41,9 @@ New-Item -ItemType Directory -Force -Path $ResolvedResourceBackend | Out-Null
 
 $RequiredExecutables = @(
   "mimir-core-v2-scan.exe",
+  "mimir-core-v2-ai-enrich.exe",
   "mimir-core-v2-actions.exe",
-  "mimir-core-v2-dataset.exe",
-  "mimir-core-v2-release-check.exe"
+  "mimir-core-v2-dataset.exe"
 )
 
 foreach ($ExecutableName in $RequiredExecutables) {

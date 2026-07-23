@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import mimirMark from '../assets/mimir-mark.png'
-
-type ScanMode = 'fast' | 'balanced' | 'quality'
+import type { ScanMode } from '../types'
 
 interface OnboardingFlowProps {
   initialScanMode: ScanMode

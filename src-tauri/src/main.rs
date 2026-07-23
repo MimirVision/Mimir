@@ -20,17 +20,22 @@ const DEV_BACKEND_PYTHON: &str = r"C:\Mimir_Backend\.venv\Scripts\python.exe";
 #[allow(dead_code)]
 const DEV_CORE_V2_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_scan.py";
 #[allow(dead_code)]
+const DEV_CORE_V2_AI_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_ai_enrich.py";
+#[allow(dead_code)]
 const DEV_CORE_V2_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_actions.py";
 #[allow(dead_code)]
 const DEV_CORE_V2_DATASET_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_dataset.py";
 #[allow(dead_code)]
 const DEV_CORE_V2_SCAN_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe";
 #[allow(dead_code)]
+const DEV_CORE_V2_AI_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-ai-enrich.exe";
+#[allow(dead_code)]
 const DEV_CORE_V2_ACTIONS_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe";
 #[allow(dead_code)]
 const DEV_CORE_V2_DATASET_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-dataset.exe";
 const BACKEND_RESOURCE_FOLDER: &str = "mimir-backend";
 const CORE_V2_SCAN_EXE_NAME: &str = "mimir-core-v2-scan.exe";
+const CORE_V2_AI_EXE_NAME: &str = "mimir-core-v2-ai-enrich.exe";
 const CORE_V2_ACTIONS_EXE_NAME: &str = "mimir-core-v2-actions.exe";
 const CORE_V2_DATASET_EXE_NAME: &str = "mimir-core-v2-dataset.exe";
 const AGE_EXE_NAME: &str = "age.exe";
@@ -387,6 +392,36 @@ fn resolve_core_v2_actions_runtime(app: &tauri::AppHandle) -> Result<BackendRunt
     ))
 }
 
+fn resolve_core_v2_ai_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
+    #[cfg(debug_assertions)]
+    {
+        let session_path = configured_output_dir(app).join("latest_session.json");
+        if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_AI_SCRIPT).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_BACKEND_PYTHON),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path,
+                mode: BackendMode::CoreV2Python,
+            });
+        }
+        if Path::new(DEV_CORE_V2_AI_EXE).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_CORE_V2_AI_EXE),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path,
+                mode: BackendMode::CoreV2Exe,
+            });
+        }
+    }
+    if let Some(runtime) = resource_core_v2_runtime(app, CORE_V2_AI_EXE_NAME) {
+        return Ok(runtime);
+    }
+    Err(backend_missing_failure(
+        "AI enrichment",
+        &[DEV_CORE_V2_AI_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_AI_SCRIPT],
+    ))
+}
+
 fn resolve_core_v2_dataset_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
     #[cfg(debug_assertions)]
     {
@@ -679,7 +714,8 @@ fn append_experimental_ai_scan_args(
         .arg("--ai-review-budget")
         .arg(ai_review_budget.unwrap_or(5).to_string())
         .arg("--ai-timeout-sec")
-        .arg(ai_timeout_sec.unwrap_or(60).to_string());
+        .arg(ai_timeout_sec.unwrap_or(60).to_string())
+        .arg("--defer-ai");
 }
 
 fn valid_scan_mode(value: &str) -> bool {
@@ -1378,6 +1414,103 @@ fn incident_json_path(incident: &Value) -> Option<PathBuf> {
     })
 }
 
+fn emit_ai_enrichment_failure(window: &tauri::WebviewWindow, message: &str) {
+    let payload = json!({
+        "protocol_version": "mimir_progress_v2",
+        "phase": "ai_enrichment",
+        "stage": "ai_enrichment_error",
+        "message": message,
+        "local_results_ready": true,
+        "ai_enrichment_status": "failed"
+    });
+    let _ = window.emit(
+        "mimir-progress",
+        ScanProgressLine {
+            line: format!("MIMIR_PROGRESS {}", payload),
+        },
+    );
+}
+
+fn spawn_ai_enrichment(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    session_path: PathBuf,
+    vision_model: String,
+    ai_review_budget: Option<u32>,
+    ai_timeout_sec: Option<u32>,
+) {
+    thread::spawn(move || {
+        let runtime = match resolve_core_v2_ai_runtime(&app) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                emit_ai_enrichment_failure(&window, &error.message);
+                return;
+            }
+        };
+        let mut command = backend_command(&runtime);
+        if runtime.is_python_fallback() {
+            command.arg(DEV_CORE_V2_AI_SCRIPT);
+        }
+        command
+            .arg("--session")
+            .arg(&session_path)
+            .arg("--vlm")
+            .arg(&vision_model)
+            .arg("--ai-review-budget")
+            .arg(ai_review_budget.unwrap_or(999).to_string())
+            .arg("--ai-timeout-sec")
+            .arg(ai_timeout_sec.unwrap_or(60).to_string())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                emit_ai_enrichment_failure(
+                    &window,
+                    &format!("Experimental AI could not start: {}", error),
+                );
+                return;
+            }
+        };
+        let stderr_pipe = child.stderr.take();
+        let stderr_handle = thread::spawn(move || {
+            let mut stderr = String::new();
+            if let Some(pipe) = stderr_pipe {
+                let mut reader = BufReader::new(pipe);
+                let _ = reader.read_to_string(&mut stderr);
+            }
+            stderr
+        });
+        if let Some(stdout) = child.stdout.take() {
+            for line in BufReader::new(stdout).lines().flatten() {
+                let progress_line = line.trim_start();
+                if progress_line.starts_with("MIMIR_PROGRESS") {
+                    let _ = window.emit(
+                        "mimir-progress",
+                        ScanProgressLine {
+                            line: progress_line.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+        let status = child.wait();
+        let stderr = stderr_handle.join().unwrap_or_default();
+        match status {
+            Ok(value) if value.success() => {}
+            Ok(value) => emit_ai_enrichment_failure(
+                &window,
+                &format!("Experimental AI ended with exit code {:?}. {}", value.code(), stderr.trim()),
+            ),
+            Err(error) => emit_ai_enrichment_failure(
+                &window,
+                &format!("Experimental AI could not finish: {}", error),
+            ),
+        }
+    });
+}
+
 fn run_scan_sync(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
@@ -1506,6 +1639,17 @@ fn run_scan_sync(
             stdout,
             stderr,
         ));
+    }
+
+    if use_enhanced_ai {
+        spawn_ai_enrichment(
+            app.clone(),
+            window.clone(),
+            runtime.session_path.clone(),
+            vision_model.clone(),
+            ai_review_budget,
+            ai_timeout_sec,
+        );
     }
 
     Ok(ScanResult {
@@ -2294,6 +2438,7 @@ mod tests {
                 "999",
                 "--ai-timeout-sec",
                 "120",
+                "--defer-ai",
             ]
         );
     }
