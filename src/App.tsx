@@ -10,11 +10,13 @@ import { IncidentLibraryView } from './components/IncidentLibraryView'
 import { OnboardingFlow } from './components/OnboardingFlow'
 import { FULL_AI_BETA, USE_MIMIR_CORE_V2 } from './config'
 import type {
+  AiTimeoutSec,
   BackendProgress,
   FrontendScanDiagnostics,
   LocalAiInstallResult,
   LocalAiStatus,
   MimirSession,
+  ScanMode,
   ScanRunState,
   SessionHistoryEntry,
   SessionLoadState,
@@ -92,8 +94,6 @@ interface LocalAiInstallLineEvent {
 }
 
 type AppView = 'import' | 'library'
-type ScanMode = 'fast' | 'balanced' | 'quality'
-type AiTimeoutSec = 60 | 120 | 180
 
 const progressPrefix = 'MIMIR_PROGRESS'
 
@@ -203,6 +203,7 @@ export default function App() {
   const [scanDiagnostics, setScanDiagnostics] = useState<FrontendScanDiagnostics | null>(null)
   const [sessionHistory, setSessionHistory] = useState<SessionHistoryEntry[]>([])
   const [isCancellingScan, setIsCancellingScan] = useState(false)
+  const [aiEnrichmentRefreshToken, setAiEnrichmentRefreshToken] = useState(0)
   const activeProgressSessionId = useRef('')
   const scanCancellationRequested = useRef(false)
 
@@ -371,6 +372,9 @@ export default function App() {
         if (parsed.message) {
           setLastProgressMessage(parsed.message)
         }
+        if (parsed.phase === 'ai_enrichment' && parsed.stage === 'ai_enrichment_complete') {
+          setAiEnrichmentRefreshToken(value => value + 1)
+        }
       } catch {
         setLastProgressMessage(line)
       }
@@ -486,6 +490,13 @@ export default function App() {
       return []
     }
   }, [])
+
+  useEffect(() => {
+    if (aiEnrichmentRefreshToken > 0) {
+      void loadLatestSession(false)
+      void refreshSessionHistory()
+    }
+  }, [aiEnrichmentRefreshToken, loadLatestSession, refreshSessionHistory])
 
   useEffect(() => {
     if (showOnboarding) {

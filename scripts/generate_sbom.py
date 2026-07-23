@@ -67,18 +67,39 @@ def model_components(backend_root: Path) -> list[dict[str, Any]]:
     manifest = read_json(backend_root / "mimir_core_v2" / "model_manifest.json")
     if not manifest:
         return []
-    return [
+    license_id = str(manifest.get("license") or "NOASSERTION")
+    manifest_version = str(manifest.get("detector_version") or manifest.get("manifest_version") or "unknown")
+    components = [
         {
             "type": "machine-learning-model",
             "name": str(manifest.get("detector_id") or "unknown_detector"),
-            "version": str(manifest.get("manifest_version") or "unknown"),
-            "licenses": [{"license": {"id": str(manifest.get("license") or "NOASSERTION")}}],
+            "version": manifest_version,
+            "licenses": [{"license": {"id": license_id}}],
             "properties": [
                 {"name": "mimir:release_blocker", "value": str(bool(manifest.get("release_blocker"))).lower()},
                 {"name": "mimir:runtime", "value": str(manifest.get("runtime") or "unknown")},
             ],
         }
     ]
+    for model in manifest.get("models", []):
+        if not isinstance(model, dict) or not model.get("filename"):
+            continue
+        sha256 = str(model.get("sha256") or "")
+        component: dict[str, Any] = {
+            "type": "machine-learning-model",
+            "name": Path(str(model["filename"])).name,
+            "version": manifest_version,
+            "licenses": [{"license": {"id": license_id}}],
+            "properties": [
+                {"name": "mimir:detector_id", "value": str(manifest.get("detector_id") or "unknown")},
+                {"name": "mimir:size_bytes", "value": str(int(model.get("size_bytes") or 0))},
+                {"name": "mimir:upstream_model", "value": str(model.get("upstream_model") or "unknown")},
+            ],
+        }
+        if len(sha256) == 64:
+            component["hashes"] = [{"alg": "SHA-256", "content": sha256.lower()}]
+        components.append(component)
+    return components
 
 
 def main() -> int:

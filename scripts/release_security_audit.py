@@ -37,8 +37,16 @@ def run_json(command: list[str], cwd: Path) -> tuple[bool, Any, str]:
     return result.returncode == 0, payload, result.stderr.strip()
 
 
-def tracked_files(root: Path) -> list[str]:
-    result = subprocess.run(["git", "-C", str(root), "ls-files"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def repository_files(root: Path) -> list[str]:
+    # Include non-ignored working-tree files as well as committed files. Local
+    # release builds can consume an untracked source/config file, so limiting
+    # this audit to the Git index would leave a real packaged-content blind spot.
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     return result.stdout.splitlines() if result.returncode == 0 else []
 
 
@@ -75,9 +83,9 @@ def scan_packaged_runtimes(frontend: Path) -> list[dict[str, str]]:
     runtime_dir = frontend / "src-tauri" / "resources" / "mimir-backend"
     packaged_names = (
         "mimir-core-v2-scan.exe",
+        "mimir-core-v2-ai-enrich.exe",
         "mimir-core-v2-actions.exe",
         "mimir-core-v2-dataset.exe",
-        "mimir-core-v2-release-check.exe",
     )
     allowed_names = {*packaged_names, "age.exe", "AGE-LICENSE.txt"}
     if runtime_dir.exists():
@@ -126,8 +134,8 @@ def main() -> int:
         backend,
     )
 
-    front_files = tracked_files(frontend)
-    back_files = tracked_files(backend)
+    front_files = repository_files(frontend)
+    back_files = repository_files(backend)
     secrets = scan_secrets(frontend, front_files) + scan_secrets(backend, back_files)
     forbidden = forbidden_content(front_files) + forbidden_content(back_files)
     runtime_findings = scan_packaged_runtimes(frontend)

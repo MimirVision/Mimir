@@ -185,6 +185,8 @@ export interface MimirSession {
   feature_flags?: Record<string, boolean | string | number | null | undefined>
   session_created_at?: string
   session_id?: string
+  session_revision?: number
+  session_updated_at?: string
   session_output_dir?: string
   session_archive_path?: string
   output_path?: string
@@ -260,6 +262,32 @@ export interface MimirSession {
     frames_sampled?: number
     ai_calls?: number
     incidents_created?: number
+    version?: string
+    cold_cache?: boolean
+    local_results_ready_sec?: number
+    object_detector_runtime_sec?: number
+    object_detector_inference_count?: number
+    object_detector_provider?: string
+    object_detector_cpu_threads?: number
+    detector_cache_hits?: number
+    detector_cache_misses?: number
+    analysis_cache_hits?: number
+    analysis_cache_misses?: number
+    parts_sec?: Record<string, number>
+    progress_protocol?: string
+    stage_runtime_sec?: Record<string, number>
+  }
+  local_results_ready?: boolean
+  ai_requested?: boolean
+  ai_enrichment?: {
+    status?: string
+    model?: string
+    requested?: boolean
+    can_change_final_severity?: boolean
+    session_revision?: number
+    started_from_revision?: number
+    completed_at?: string
+    wall_runtime_sec?: number
   }
   ai_enabled?: boolean | null
   ai_model?: string | null
@@ -286,9 +314,15 @@ export type SessionLoadState = 'idle' | 'loading' | 'loaded' | 'missing' | 'erro
 
 export type ScanRunState = 'idle' | 'running' | 'complete' | 'error'
 
+export type ScanMode = 'fast' | 'balanced' | 'quality'
+
+export type AiTimeoutSec = 60 | 120 | 180
+
 export interface BackendProgress {
   protocol_version?: string
   session_id?: string
+  session_revision?: number
+  phase?: 'local_scan' | 'ai_enrichment' | string
   stage?: string
   message?: string
   current_video?: string
@@ -302,6 +336,8 @@ export interface BackendProgress {
   ai_calls?: number
   scan_engine?: string
   enhanced_ai_available?: boolean
+  local_results_ready?: boolean
+  ai_enrichment_status?: string
 }
 
 export interface SessionHistoryEntry {
