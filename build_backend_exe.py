@@ -16,12 +16,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DIST_DIR = ROOT / "dist_backend"
 BUILD_DIR = ROOT / "build_backend"
-ENTRYPOINT_DIR = BUILD_DIR / "entrypoints"
 SPEC_DIR = BUILD_DIR / "specs"
 WORK_DIR = BUILD_DIR / "work"
 
 REQUIRED_FILES = [
     ROOT / "mimir_core_v2_scan.py",
+    ROOT / "mimir_core_v2_ai_enrich.py",
     ROOT / "mimir_core_v2_actions.py",
     ROOT / "mimir_core_v2_dataset.py",
 ]
@@ -36,6 +36,9 @@ CORE_MODULES = [
     ROOT / "mimir_core_v2" / "source_discovery.py",
     ROOT / "mimir_core_v2" / "event_grouping.py",
     ROOT / "mimir_core_v2" / "frame_sampler.py",
+    ROOT / "mimir_core_v2" / "video_decode.py",
+    ROOT / "mimir_core_v2" / "detector_cache.py",
+    ROOT / "mimir_core_v2" / "motion_analysis.py",
     ROOT / "mimir_core_v2" / "evidence_extractor.py",
     ROOT / "mimir_core_v2" / "ego_vehicle.py",
     ROOT / "mimir_core_v2" / "key_moment_refiner.py",
@@ -45,6 +48,7 @@ CORE_MODULES = [
     ROOT / "mimir_core_v2" / "runtime_paths.py",
     ROOT / "mimir_core_v2" / "thumbnailer.py",
     ROOT / "mimir_core_v2" / "ai_reviewer.py",
+    ROOT / "mimir_core_v2" / "ai_enrichment.py",
     ROOT / "mimir_core_v2" / "severity_resolver.py",
     ROOT / "mimir_core_v2" / "output_writer.py",
     ROOT / "mimir_core_v2" / "validators.py",
@@ -118,68 +122,6 @@ def compile_checks() -> None:
         run([sys.executable, "-m", "py_compile", str(target)], f"compile {target.name}")
 
 
-def write_script_wrapper(wrapper_path: Path, source_script: Path) -> None:
-    """Write a packaging-only wrapper that executes a backend source script.
-
-    The wrapper lets one-file executables keep beta output paths anchored at
-    C:\\Mimir_Backend without changing the existing backend scripts.
-    """
-
-    wrapper_path.parent.mkdir(parents=True, exist_ok=True)
-    escaped_root = str(ROOT).replace("\\", "\\\\")
-    script_name = source_script.name
-    wrapper_path.write_text(
-        f'''"""PyInstaller wrapper for {script_name}."""
-
-from __future__ import annotations
-
-import argparse
-import json
-import os
-import shutil
-import subprocess
-import sys
-import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
-
-
-_PACKAGING_IMPORTS = (
-    argparse,
-    json,
-    os,
-    shutil,
-    subprocess,
-    sys,
-    time,
-    datetime,
-    timezone,
-    Path,
-    Any,
-)
-
-
-BACKEND_ROOT = Path(os.environ.get("MIMIR_BACKEND_ROOT", r"{escaped_root}"))
-SOURCE_SCRIPT = BACKEND_ROOT / "{script_name}"
-
-if not SOURCE_SCRIPT.exists():
-    raise SystemExit(f"Backend source script not found: {{SOURCE_SCRIPT}}")
-
-sys.path.insert(0, str(BACKEND_ROOT))
-code = compile(SOURCE_SCRIPT.read_text(encoding="utf-8"), str(SOURCE_SCRIPT), "exec")
-globals_dict = {{
-    "__name__": "__main__",
-    "__file__": str(SOURCE_SCRIPT),
-    "__package__": None,
-    "__cached__": None,
-}}
-exec(code, globals_dict)
-''',
-        encoding="utf-8",
-    )
-
-
 def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
     command = [
         sys.executable,
@@ -198,7 +140,8 @@ def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
         str(SPEC_DIR),
         str(entrypoint),
     ]
-    if name == "mimir-core-v2-scan":
+    manifest_data: dict[str, object] = {}
+    if name in {"mimir-core-v2-scan", "mimir-core-v2-release-check"}:
         manifest = ROOT / "mimir_core_v2" / "model_manifest.json"
         if not manifest.exists():
             raise PackagingError(f"Model manifest is missing: {manifest}")
@@ -207,12 +150,7 @@ def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
             manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise PackagingError(f"Model manifest is invalid: {exc}") from exc
-        for model_name in manifest_data.get("model_files", []):
-            model_path = ROOT / str(model_name)
-            if not model_path.exists():
-                raise PackagingError(f"Required release model is missing: {model_path}")
-            destination = str(Path(str(model_name)).parent).replace("\\", "/") or "."
-            command[-1:-1] = ["--add-data", f"{model_path};{destination}"]
+
         license_name = str(manifest_data.get("license_file") or "")
         if license_name:
             license_path = ROOT / license_name
@@ -220,6 +158,14 @@ def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
                 raise PackagingError(f"Required model license is missing: {license_path}")
             destination = str(Path(license_name).parent).replace("\\", "/") or "."
             command[-1:-1] = ["--add-data", f"{license_path};{destination}"]
+
+    if name == "mimir-core-v2-scan":
+        for model_name in manifest_data.get("model_files", []):
+            model_path = ROOT / str(model_name)
+            if not model_path.exists():
+                raise PackagingError(f"Required release model is missing: {model_path}")
+            destination = str(Path(str(model_name)).parent).replace("\\", "/") or "."
+            command[-1:-1] = ["--add-data", f"{model_path};{destination}"]
         command[-1:-1] = ["--hidden-import", "onnxruntime", "--collect-binaries", "onnxruntime"]
     return command
 
@@ -257,10 +203,10 @@ def main() -> int:
         verify_runtime_environment()
         DIST_DIR.mkdir(parents=True, exist_ok=True)
         SPEC_DIR.mkdir(parents=True, exist_ok=True)
-        ENTRYPOINT_DIR.mkdir(parents=True, exist_ok=True)
         compile_checks()
 
         build_executable("mimir-core-v2-scan", ROOT / "mimir_core_v2_scan.py")
+        build_executable("mimir-core-v2-ai-enrich", ROOT / "mimir_core_v2_ai_enrich.py")
         build_executable("mimir-core-v2-actions", ROOT / "mimir_core_v2_actions.py")
         build_executable("mimir-core-v2-dataset", ROOT / "mimir_core_v2_dataset.py")
 
@@ -272,6 +218,7 @@ def main() -> int:
         print("Backend executable build complete")
         print(f"Output folder: {DIST_DIR}")
         print(f"- {DIST_DIR / 'mimir-core-v2-scan.exe'}")
+        print(f"- {DIST_DIR / 'mimir-core-v2-ai-enrich.exe'}")
         print(f"- {DIST_DIR / 'mimir-core-v2-actions.exe'}")
         print(f"- {DIST_DIR / 'mimir-core-v2-dataset.exe'}")
         return 0

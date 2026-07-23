@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/otw_auxiliary_manifest_v1.schema.json",
+  "title": "Mimir OTW stationary door-activity auxiliary manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_id",
+    "source_role",
+    "promotion_eligible",
+    "contact_ground_truth_available",
+    "license",
+    "attribution",
+    "videos",
+    "activities"
+  ],
+  "properties": {
+    "schema_version": {"const": "mimir_otw_auxiliary_manifest_v1"},
+    "source_id": {"const": "otw_stationary_door_activity"},
+    "source_role": {"const": "auxiliary"},
+    "promotion_eligible": {"const": false},
+    "contact_ground_truth_available": {"const": false},
+    "physical_contact_claim_allowed": {"const": false},
+    "license": {"const": "CC-BY-4.0"},
+    "attribution": {"type": "string", "minLength": 1},
+    "videos": {"type": "array"},
+    "activities": {"type": "array"}
+  },
+  "additionalProperties": true
+}

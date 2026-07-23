@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-FEATURE_VERSION = "mimir_temporal_features_v1"
+FEATURE_VERSION = "mimir_temporal_features_v2"
 TRAINING_SEED = 20260722
 TEMPORAL_ARCHITECTURE = "dilated_conv_v3_alert_window_6s"
 FEATURE_NAMES = (
@@ -171,16 +171,25 @@ def _annotation_geometry(
         ego_box = [float(value) for value in ego[0]["bbox_xyxy"]]
         for item in foreign:
             box = [float(value) for value in item["bbox_xyxy"]]
-            mask_geometry = _mask_geometry(ego[0], item, frame_width, frame_height)
-            if mask_geometry is not None:
-                pair_intersection, pair_distance = mask_geometry
-            else:
-                pair_intersection = min(
-                    1.0,
-                    _box_intersection(ego_box, box)
-                    / max(1.0, min(_box_area(ego_box), _box_area(box))),
+            if item.get("pair_geometry_source") == "carla_instance_actor_masks":
+                pair_intersection = 1.0 if item.get("pair_mask_adjacency") else 0.0
+                raw_distance = item.get("pair_mask_distance_norm")
+                pair_distance = (
+                    max(0.0, min(1.0, float(raw_distance)))
+                    if raw_distance is not None
+                    else 1.0
                 )
-                pair_distance = _box_distance(ego_box, box, frame_width, frame_height)
+            else:
+                mask_geometry = _mask_geometry(ego[0], item, frame_width, frame_height)
+                if mask_geometry is not None:
+                    pair_intersection, pair_distance = mask_geometry
+                else:
+                    pair_intersection = min(
+                        1.0,
+                        _box_intersection(ego_box, box)
+                        / max(1.0, min(_box_area(ego_box), _box_area(box))),
+                    )
+                    pair_distance = _box_distance(ego_box, box, frame_width, frame_height)
             intersection = max(intersection, pair_intersection)
             distance = min(distance, pair_distance)
             if item.get("class_name") == "vehicle_door":

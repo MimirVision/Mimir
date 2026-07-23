@@ -155,6 +155,112 @@ python mimir_core_v2_dataset.py blind-relabel `
   --apparent-contact-time-sec 12.4
 ```
 
+## Licensed MEVA Auxiliary Pretraining
+
+MEVA is kept outside the consented target dataset and is never contact truth. A
+curated pilot may be resumed, checksummed, and source-isolated with:
+
+```powershell
+python mimir_stationary_data.py download-meva `
+  --manifest C:\Mimir_Data\external_sources\meva_kf1\stationary_auxiliary_manifest.json `
+  --output C:\Mimir_Data\external_sources\meva_kf1\selected_video `
+  --max-gib 15 --workers 4 --retries 5 --reserve-gib 25
+
+python mimir_stationary_data.py repair-splits `
+  --manifest C:\Mimir_Data\external_sources\meva_kf1\stationary_auxiliary_manifest.json
+
+python mimir_core_v2_train_auxiliary.py `
+  --manifest C:\Mimir_Data\external_sources\meva_kf1\stationary_auxiliary_manifest.json `
+  --output C:\Mimir_Data\training_runs\meva_auxiliary_shadow
+```
+
+The resulting model is explicitly non-promotable. It can measure whether
+licensed person/vehicle tracks contain useful stationary door-activity context,
+but it cannot classify physical contact and is never loaded by the production
+scanner.
+
+## Licensed OTW Door-Activity Pretraining
+
+[Out the Window](https://stresearch.github.io/otw/) is CC BY 4.0 fixed-camera
+footage with opening/closing side doors, trunks, loading, people, bicycles, and
+other hard negatives. It is closer to parked activity than a moving dashcam, but
+it still has no physical-contact truth. Mimir therefore trains it only as a
+three-way shadow model: side-door activity, other vehicle access, and unrelated
+activity.
+
+```powershell
+python mimir_otw_data.py catalog `
+  --metadata-repo C:\Mimir_Data\external_sources\otw\metadata_repo `
+  --output C:\Mimir_Data\external_sources\otw\otw_auxiliary_manifest.json `
+  --max-videos 320
+
+python mimir_otw_data.py extract `
+  --manifest C:\Mimir_Data\external_sources\otw\otw_auxiliary_manifest.json `
+  --archive C:\Mimir_Data\external_sources\otw\otw.tar.gz `
+  --output C:\Mimir_Data\external_sources\otw\selected_video
+
+python mimir_core_v2_train_otw.py build-cache `
+  --manifest C:\Mimir_Data\external_sources\otw\otw_auxiliary_manifest.json `
+  --output C:\Mimir_Data\features\otw_temporal_crops_v1.npz
+
+python mimir_core_v2_train_otw.py train `
+  --manifest C:\Mimir_Data\external_sources\otw\otw_auxiliary_manifest.json `
+  --cache C:\Mimir_Data\features\otw_temporal_crops_v1.npz `
+  --output C:\Mimir_Data\training_runs\otw_door_articulation_shadow
+```
+
+The archive must match the publisher's MD5
+`9096bad6ff78056b505fafb4cded1734`. Extraction is restricted to the
+source-isolated selected-video manifest. The output ONNX and checkpoint remain
+`promotion_eligible: false` and `physical_contact_claim_allowed: false`.
+
+## CARLA Synthetic Collision-Timing Pretraining
+
+CARLA 0.9.16 provides exact simulator collision frames, actor identity, and
+normal impulse. CARLA code is MIT licensed and CARLA-specific assets are CC BY.
+Generated sequences remain synthetic auxiliary data: they cannot establish
+real-world contact accuracy or unlock production promotion.
+
+```powershell
+python mimir_carla_data.py download `
+  --output C:\Mimir_Data\external_sources\carla
+
+python mimir_carla_data.py verify `
+  --root C:\Mimir_Data\external_sources\carla `
+  --report C:\Mimir_Data\external_sources\carla\integrity_report.json
+
+python mimir_carla_data.py extract `
+  --root C:\Mimir_Data\external_sources\carla `
+  --output C:\Mimir_Data\external_sources\carla\CARLA_0.9.16
+
+python mimir_carla_batch.py `
+  --carla-root C:\Mimir_Data\external_sources\carla\CARLA_0.9.16 `
+  --output C:\Mimir_Data\prepared\carla_stationary_collision_v2 `
+  --total-scenarios 60 --chunk-size 3
+
+python mimir_carla_data.py verify-prepared `
+  --root C:\Mimir_Data\prepared\carla_stationary_collision_v2 `
+  --expected-scenarios 60 `
+  --report C:\Mimir_Data\prepared\carla_stationary_collision_v2\integrity_report.json
+
+python mimir_core_v2_train_carla.py extract `
+  --prepared C:\Mimir_Data\prepared\carla_stationary_collision_v2 `
+  --output C:\Mimir_Data\features\carla_stationary_collision_v2 `
+  --sample-fps 10 --workers 4
+
+python mimir_core_v2_train_carla.py train `
+  --prepared C:\Mimir_Data\prepared\carla_stationary_collision_v2 `
+  --features C:\Mimir_Data\features\carla_stationary_collision_v2 `
+  --output C:\Mimir_Data\training_runs\carla_collision_timing_shadow
+```
+
+The generated manifest labels an impact only when CARLA's collision sensor
+records it. Intended scenarios that fail to collide are retained by their actual
+sensor outcome. The prepared-data verifier checks video and mask hashes,
+readability, collision-time consistency, and class coverage in every split.
+A synthetic held-out split measures simulator learning only;
+consented Tesla fine-tuning and locked Tesla evaluation remain mandatory.
+
 ## Audit, Prepare, And Train Candidates
 
 ```powershell

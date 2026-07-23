@@ -6,10 +6,13 @@ boxes are supporting proximity evidence; they never prove physical contact.
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from .detector_cache import shared_cache
 from .model_manifest import active_detector_manifest
 
 
@@ -18,6 +21,8 @@ _LOAD_ATTEMPTED = False
 _LAST_ERROR = ""
 _INFERENCE_COUNT = 0
 _INFERENCE_RUNTIME_SEC = 0.0
+_CPU_THREADS = 0
+_DETECTOR_CACHE = shared_cache()
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -46,7 +51,7 @@ def _configuration() -> tuple[dict, Path | None]:
 
 
 def _load_session(model_path: Path) -> Any:
-    global _SESSION, _LOAD_ATTEMPTED, _LAST_ERROR
+    global _SESSION, _LOAD_ATTEMPTED, _LAST_ERROR, _CPU_THREADS
     if _LOAD_ATTEMPTED:
         return _SESSION
     _LOAD_ATTEMPTED = True
@@ -54,8 +59,17 @@ def _load_session(model_path: Path) -> Any:
         import onnxruntime as ort  # type: ignore
 
         available = ort.get_available_providers()
-        preferred = [name for name in ("CUDAExecutionProvider", "CPUExecutionProvider") if name in available]
-        _SESSION = ort.InferenceSession(str(model_path), providers=preferred or ["CPUExecutionProvider"])
+        requested = os.environ.get("MIMIR_ONNX_PROVIDER", "CPUExecutionProvider").strip()
+        provider = requested if requested in available else "CPUExecutionProvider"
+        options = ort.SessionOptions()
+        configured_threads = os.environ.get("MIMIR_ONNX_INTRA_OP_THREADS", "").strip()
+        logical_cpus = max(1, os.cpu_count() or 1)
+        _CPU_THREADS = max(1, int(configured_threads)) if configured_threads else min(10, max(1, logical_cpus - 2))
+        options.intra_op_num_threads = _CPU_THREADS
+        options.inter_op_num_threads = 1
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        _SESSION = ort.InferenceSession(str(model_path), sess_options=options, providers=[provider])
         _LAST_ERROR = ""
     except Exception as exc:
         _SESSION = None
@@ -172,6 +186,28 @@ def detect_samples(samples: list[dict]) -> tuple[list[dict], bool, bool]:
         person_ids = {int(value) for value in manifest.get("person_class_ids", [1])}
         vehicle_ids = {int(value) for value in manifest.get("vehicle_class_ids", [3, 4, 6, 8])}
         max_detections = max(1, int(manifest.get("max_detections_per_frame") or 20))
+        model_sha256 = next(
+            (
+                str(item.get("sha256") or item.get("expected_sha256") or "")
+                for item in manifest.get("resolved_model_files", [])
+                if isinstance(item, dict) and str(item.get("filename") or "").lower().endswith(".onnx")
+            ),
+            "",
+        )
+        provider = str((session.get_providers() or ["unknown"])[0])
+        cache_policy = json.dumps(
+            {
+                "preprocess": "imagenet_rgb_resize_v1",
+                "input_height": int(input_height),
+                "input_width": int(input_width),
+                "confidence_threshold": confidence_threshold,
+                "person_ids": sorted(person_ids),
+                "vehicle_ids": sorted(vehicle_ids),
+                "max_detections": max_detections,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     except Exception as exc:
         _LAST_ERROR = f"{type(exc).__name__}: {exc}"
         return [], False, True
@@ -180,6 +216,22 @@ def detect_samples(samples: list[dict]) -> tuple[list[dict], bool, bool]:
     for sample in samples:
         frame = sample.get("frame")
         if frame is None:
+            continue
+        source_sha256 = _DETECTOR_CACHE.source_sha256(str(sample.get("source_video") or ""))
+        cache_key = _DETECTOR_CACHE.cache_key(
+            source_sha256,
+            int(sample.get("frame_index") or 0),
+            model_sha256,
+            cache_policy,
+            provider,
+        ) if source_sha256 and model_sha256 else ""
+        sample_detections = _DETECTOR_CACHE.get(cache_key) if cache_key else None
+        if sample_detections is not None:
+            for detection in sample_detections:
+                detection = dict(detection)
+                detection["camera"] = sample.get("camera", "unknown")
+                detection["time_sec"] = _safe_float(sample.get("time_sec"))
+                detections.append(detection)
             continue
         started = perf_counter()
         try:
@@ -197,6 +249,8 @@ def detect_samples(samples: list[dict]) -> tuple[list[dict], bool, bool]:
                 vehicle_ids,
                 max_detections,
             )
+            if cache_key:
+                _DETECTOR_CACHE.put(cache_key, sample_detections)
         except Exception as exc:
             _LAST_ERROR = f"{type(exc).__name__}: {exc}"
             return detections, False, True
@@ -223,15 +277,19 @@ def runtime_diagnostics() -> dict:
         "object_detector_inference_count": int(_INFERENCE_COUNT),
         "object_detector_runtime_sec": round(_INFERENCE_RUNTIME_SEC, 3),
         "object_detector_last_error": _LAST_ERROR,
+        "object_detector_cpu_threads": int(_CPU_THREADS),
+        **_DETECTOR_CACHE.diagnostics(),
     }
 
 
 def reset_runtime() -> None:
     """Reset process-local state; used when tests toggle object detection."""
 
-    global _SESSION, _LOAD_ATTEMPTED, _LAST_ERROR, _INFERENCE_COUNT, _INFERENCE_RUNTIME_SEC
+    global _SESSION, _LOAD_ATTEMPTED, _LAST_ERROR, _INFERENCE_COUNT, _INFERENCE_RUNTIME_SEC, _CPU_THREADS
+    _DETECTOR_CACHE.close()
     _SESSION = None
     _LOAD_ATTEMPTED = False
     _LAST_ERROR = ""
     _INFERENCE_COUNT = 0
     _INFERENCE_RUNTIME_SEC = 0.0
+    _CPU_THREADS = 0

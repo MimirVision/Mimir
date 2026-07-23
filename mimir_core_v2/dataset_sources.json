@@ -17,6 +17,36 @@
       "notes": "Primary source for parked-car door dings and Tesla Sentry camera geometry. No background collection or upload."
     },
     {
+      "id": "meva_kf1_stationary_auxiliary",
+      "name": "MEVA KF1 stationary vehicle-activity pilot",
+      "status": "eligible_auxiliary_cc_by_4_0",
+      "temporal_contact_value": "auxiliary_only",
+      "url": "https://mevadata.org/resources/README-meva-kf1-data.html",
+      "license": "CC-BY-4.0",
+      "license_url": "https://mevadata.org/resources/MEVA-data-license.txt",
+      "attribution": "MEVA dataset by Kitware Inc. and IARPA DIVA",
+      "automatic_download": false,
+      "promotion_eligible": false,
+      "contact_ground_truth_available": false,
+      "notes": "May teach vehicle-door motion, tracking, proximity, and hard-negative behavior. It must not be treated as physical-contact truth or unlock production promotion."
+    },
+    {
+      "id": "otw_stationary_door_activity",
+      "name": "Out the Window stationary door-activity dataset",
+      "status": "eligible_auxiliary_cc_by_4_0",
+      "temporal_contact_value": "auxiliary_only",
+      "url": "https://stresearch.github.io/otw/",
+      "repository": "stresearch/otw",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Castanon, Shnidman, Anderson and Byrne, Out the Window: A Crowd-Sourced Dataset for Activity Classification in Security Video (2019).",
+      "reported_download_size_gb": 48,
+      "automatic_download": false,
+      "promotion_eligible": false,
+      "contact_ground_truth_available": false,
+      "notes": "Fixed-camera footage with opening/closing door, trunk, loading, people, and vehicle activities. It may teach door articulation and close-activity hard negatives, but it does not establish physical contact with an ego vehicle."
+    },
+    {
       "id": "nexar_collision_prediction",
       "name": "Nexar Collision Prediction Dataset",
       "status": "eligible_after_explicit_license_acceptance",
@@ -28,6 +58,23 @@
       "reported_training_clips": 1500,
       "automatic_download": false,
       "notes": "Useful for collision timing and hard negatives, but it is moving dashcam footage rather than parked Tesla door-ding footage. License attribution, no-resale, and ethical-use conditions must be retained."
+    },
+    {
+      "id": "carla_stationary_collision_synthetic",
+      "name": "CARLA stationary collision simulation",
+      "status": "eligible_synthetic_auxiliary",
+      "temporal_contact_value": "auxiliary_exact_simulation_only",
+      "url": "https://github.com/carla-simulator/carla/releases/tag/0.9.16",
+      "version": "0.9.16",
+      "code_license": "MIT",
+      "asset_license": "CC-BY-4.0",
+      "license_url": "https://github.com/carla-simulator/carla/blob/0.9.16/LICENSE",
+      "attribution": "CARLA Simulator, Computer Vision Center (CVC), Universitat Autonoma de Barcelona (UAB).",
+      "automatic_download": false,
+      "promotion_eligible": false,
+      "simulated_collision_ground_truth": true,
+      "real_world_contact_ground_truth": false,
+      "notes": "May provide exact simulated collision frame, impulse, actor identity, masks, and hard negatives. Simulation cannot replace consented Tesla footage or unlock production promotion."
     },
     {
       "id": "open_images_v7",
@@ -61,6 +108,44 @@
       "temporal_contact_value": "low",
       "url": "https://www.nuscenes.org/terms-of-use-commercial",
       "automatic_download": false
+    },
+    {
+      "id": "accidentbench",
+      "name": "ACCIDENT CCTV accident benchmark",
+      "status": "blocked_noncommercial_sharealike_license",
+      "temporal_contact_value": "medium",
+      "url": "https://accidentbench.github.io/",
+      "license": "CC-BY-NC-SA-4.0",
+      "license_evidence_url": "https://www.kaggle.com/api/v1/datasets/view/picekl/accident",
+      "automatic_download": false,
+      "notes": "The fixed-camera accident labels are relevant, but the noncommercial license is incompatible with preserving a future commercial option for Mimir."
+    },
+    {
+      "id": "tumtraf_accid3nd",
+      "name": "TUM Traffic Accid3nD",
+      "status": "blocked_noncommercial_license",
+      "temporal_contact_value": "medium",
+      "url": "https://accident-dataset.github.io/",
+      "license": "CC-BY-NC-SA-4.0",
+      "automatic_download": false
+    },
+    {
+      "id": "tu_dat",
+      "name": "Temple University TU-DAT",
+      "status": "blocked_research_only_and_web_video_provenance",
+      "temporal_contact_value": "medium",
+      "url": "https://www.mdpi.com/1424-8220/25/11/3259",
+      "automatic_download": false,
+      "notes": "The dataset terms prohibit profit and the collection includes scraped news and YouTube footage. The article's CC BY license does not remove those dataset restrictions."
+    },
+    {
+      "id": "tad_surveillance_accidents",
+      "name": "TAD traffic accident surveillance benchmark",
+      "status": "blocked_without_dataset_level_rights_confirmation",
+      "temporal_contact_value": "medium",
+      "url": "https://github.com/yajunbaby/A-Large-scale-benchmark-for-traffic-accidents-detection-from-video-surveillance",
+      "automatic_download": false,
+      "notes": "The paper is CC BY, but the public dataset repository does not establish a dataset-level license for all internet-sourced videos."
     },
     {
       "id": "ccd_dota_web_video_sets",

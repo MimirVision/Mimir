@@ -12,7 +12,7 @@
       "name": "known_person_near_set",
       "input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
       "source_set": "known_person_near_set",
-      "required": false
+      "required": true
     },
     {
       "name": "known_grouping_set",

@@ -27,9 +27,16 @@ MIN_HARD_NEGATIVES = 300
 
 COMPILE_TARGETS = [
     "mimir_core_v2_scan.py",
+    "mimir_core_v2_ai_enrich.py",
     "mimir_core_v2_actions.py",
     "mimir_core_v2_dataset.py",
     "mimir_core_v2_training.py",
+    "mimir_core_v2_train_otw.py",
+    "mimir_otw_data.py",
+    "mimir_carla_data.py",
+    "mimir_carla_generate.py",
+    "mimir_carla_batch.py",
+    "mimir_core_v2_train_carla.py",
     "mimir_core_v2_cvat.py",
     "mimir_core_v2_evaluate.py",
     "mimir_core_v2_reliability.py",
@@ -42,17 +49,26 @@ COMPILE_TARGETS = [
     "mimir_core_v2/key_moment_refiner.py",
     "mimir_core_v2/event_grouping.py",
     "mimir_core_v2/frame_sampler.py",
+    "mimir_core_v2/video_decode.py",
+    "mimir_core_v2/detector_cache.py",
+    "mimir_core_v2/motion_analysis.py",
     "mimir_core_v2/evidence_extractor.py",
     "mimir_core_v2/thumbnailer.py",
+    "mimir_core_v2/ai_enrichment.py",
     "mimir_core_v2/severity_resolver.py",
     "mimir_core_v2/output_writer.py",
     "mimir_core_v2/cvat_client.py",
     "mimir_core_v2/dataset_package.py",
     "mimir_core_v2/temporal_training.py",
     "mimir_core_v2/candidate_perception.py",
+    "mimir_core_v2/otw_auxiliary.py",
+    "mimir_core_v2/carla_auxiliary.py",
     "mimir_core_v2/test_data_pipeline.py",
     "mimir_core_v2/test_grouping.py",
     "mimir_core_v2/test_evidence.py",
+    "mimir_core_v2/test_contact_semantics.py",
+    "mimir_core_v2/test_otw_auxiliary.py",
+    "mimir_core_v2/test_carla_data.py",
     "mimir_core_v2/test_thumbnails.py",
     "mimir_core_v2/test_key_moments.py",
     "mimir_core_v2/test_resolver.py",
@@ -89,15 +105,21 @@ def source_video_hashes(input_path: str | Path) -> dict[str, dict[str, Any]]:
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.suffix.lower() != ".mp4":
             continue
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
         hashes[str(path.relative_to(root))] = {
             "size_bytes": path.stat().st_size,
-            "sha256": digest.hexdigest(),
+            "sha256": sha256_file(path),
         }
     return hashes
+
+
+def sha256_file(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class ReleaseCheckFailed(Exception):
@@ -131,11 +153,11 @@ def add_check(checks: list[dict[str, Any]], name: str, passed: bool, detail: str
     checks.append({"name": name, "passed": bool(passed), "blocking": blocking, "detail": detail})
 
 
-def git_tracked_files(root: Path) -> list[str] | None:
+def repository_files(root: Path) -> list[str] | None:
     if not (root / ".git").exists():
         return None
     result = subprocess.run(
-        ["git", "-C", str(root), "ls-files"],
+        ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard"],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -233,8 +255,8 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
     add_check(checks, "locked_positive_coverage", locked_positives >= MIN_POSITIVE_LABELS, f"{locked_positives} / {MIN_POSITIVE_LABELS} positives")
     add_check(checks, "locked_hard_negative_coverage", locked_negatives >= MIN_HARD_NEGATIVES, f"{locked_negatives} / {MIN_HARD_NEGATIVES} hard negatives")
 
-    backend_findings = forbidden_tracked(git_tracked_files(ROOT))
-    frontend_findings = forbidden_tracked(git_tracked_files(frontend_root))
+    backend_findings = forbidden_tracked(repository_files(ROOT))
+    frontend_findings = forbidden_tracked(repository_files(frontend_root))
     all_findings = backend_findings + frontend_findings
     add_check(
         checks,
@@ -257,9 +279,9 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
 
     executables = [
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-scan.exe",
+        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-ai-enrich.exe",
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-actions.exe",
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-dataset.exe",
-        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-release-check.exe",
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "age.exe",
     ]
     installer_path = locate_installer(frontend_root, installer)
@@ -302,6 +324,15 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
     candidate_metrics = evaluation.get("candidate") if isinstance(evaluation.get("candidate"), dict) else {}
     timing_metrics = candidate_metrics.get("timing_error_distribution_sec") if isinstance(candidate_metrics.get("timing_error_distribution_sec"), dict) else {}
     reliability = read_json(frontend_root / "release_assets" / "reliability_report.json")
+    reliability_report_valid = reliability.get("schema_version") == "mimir_reliability_report_v1"
+    reliability_runs = reliability.get("runs") if isinstance(reliability.get("runs"), list) else []
+    packaged_scanner = frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-scan.exe"
+    reported_scanner = Path(str(reliability.get("scanner") or ""))
+    reliability_scanner_matches_candidate = (
+        reported_scanner.suffix.lower() == ".exe"
+        and len(str(reliability.get("scanner_sha256") or "")) == 64
+        and str(reliability.get("scanner_sha256") or "").lower() == sha256_file(packaged_scanner).lower()
+    )
     evaluation_requirements = {
         "candidate_promotion_allowed": bool(evaluation.get("promotion_allowed")),
         "critical_impact_recall": float(candidate_metrics.get("critical_recall") or 0) >= 0.99,
@@ -311,6 +342,16 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
         "key_moment_median_error_sec": float(timing_metrics.get("median") if timing_metrics.get("median") is not None else 999) <= 0.5,
         "key_moment_p95_error_sec": float(timing_metrics.get("p95") if timing_metrics.get("p95") is not None else 999) <= 1.0,
         "automated_e2e_scans": int(reliability.get("completed_runs") or 0) >= 500,
+        "reliability_report_schema": reliability_report_valid,
+        "reliability_run_records": len(reliability_runs) >= 500,
+        "reliability_zero_failed_runs": reliability_report_valid and int(reliability.get("failed_runs") or 0) == 0,
+        "reliability_required_fixtures": bool(reliability.get("required_fixtures_complete")),
+        "reliability_required_scenarios": bool(reliability.get("required_scenarios_complete")),
+        "reliability_packaged_scanner_parity": reliability_scanner_matches_candidate,
+        "reliability_zero_classification_failures": reliability_report_valid and all(
+            int(reliability.get(name) or 0) == 0
+            for name in ("critical_failures", "false_importants", "false_ignores")
+        ),
         "media_availability": float(reliability.get("thumbnail_video_availability") or 0) >= 0.995,
         "source_byte_identical": bool(reliability.get("source_byte_identical")),
         "reliability_gate": bool(reliability.get("release_gate_passed")),
@@ -332,6 +373,8 @@ def run_operational_checks(args: argparse.Namespace, output_dir: Path) -> dict[s
         "mimir_core_v2.test_resolver",
         "mimir_core_v2.test_ai_guardrails",
         "mimir_core_v2.test_data_pipeline",
+        "mimir_core_v2.test_otw_auxiliary",
+        "mimir_core_v2.test_carla_data",
     ):
         run_required([sys.executable, "-m", module], module)
 

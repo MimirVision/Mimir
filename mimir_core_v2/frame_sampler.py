@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .video_decode import read_frames_at_indexes
+
 
 def _load_cv2() -> Any:
     try:
@@ -66,11 +68,7 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
                 indexes = [0]
 
             sampled = 0
-            for frame_index in indexes:
-                capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-                ok, frame = capture.read()
-                if not ok or frame is None:
-                    continue
+            for frame_index, frame in read_frames_at_indexes(capture, indexes, cv2):
                 sampled += 1
                 samples.append(
                     {
