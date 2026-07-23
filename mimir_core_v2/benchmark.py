@@ -229,7 +229,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"No benchmark labels found for source_set: {args.source_set}")
         else:
             print("No benchmark labels found. Add rows to benchmark_labels.csv.")
-        return 0
+        report = {
+            "session_path": str(session_path),
+            "labels_path": str(labels_path),
+            "source_set": args.source_set,
+            "labels_loaded_total": len(labels_loaded),
+            "labels_loaded": 0,
+            "labels_matched": 0,
+            "skipped_unmatched": 0,
+            "passed": 0,
+            "failed": 0,
+            "critical_failures": 0,
+            "false_importants": 0,
+            "false_ignores": 0,
+            "results": [],
+            "status": "no_labels_for_source_set" if args.source_set else "no_labels",
+        }
+        write_report(report, report_path)
+        print(f"report: {report_path}")
+        return 2 if require_all_labels else 0
 
     results = [evaluate_label(label, incidents, require_all_labels=require_all_labels) for label in labels]
     for result in results:

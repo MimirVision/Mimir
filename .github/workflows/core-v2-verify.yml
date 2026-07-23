@@ -1,0 +1,20 @@
+name: Core v2 verification
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Core v2 runtime
+        run: python -m pip install -r requirements-core-v2.txt
+      - name: Verify Core v2 contracts
+        run: python mimir_core_v2_verify.py --level quick

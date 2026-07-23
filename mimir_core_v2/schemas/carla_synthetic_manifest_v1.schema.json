@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/carla_synthetic_manifest_v1.schema.json",
+  "title": "Mimir CARLA Synthetic Collision Scenario",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "source_role",
+    "promotion_eligible",
+    "real_world_contact_ground_truth",
+    "simulated_collision_ground_truth",
+    "scenario_kind",
+    "split",
+    "actual_collision",
+    "contact_outcome",
+    "media"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "mimir_carla_stationary_collision_v1"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_role": {
+      "const": "synthetic_auxiliary"
+    },
+    "promotion_eligible": {
+      "const": false
+    },
+    "real_world_contact_ground_truth": {
+      "const": false
+    },
+    "simulated_collision_ground_truth": {
+      "const": true
+    },
+    "scenario_kind": {
+      "enum": [
+        "rear_impact",
+        "front_impact",
+        "side_impact",
+        "rear_near_miss",
+        "side_near_miss",
+        "neighbor_door_activity"
+      ]
+    },
+    "split": {
+      "enum": [
+        "train",
+        "validation",
+        "test"
+      ]
+    },
+    "actual_collision": {
+      "type": "boolean"
+    },
+    "contact_outcome": {
+      "enum": [
+        "impact",
+        "no_contact"
+      ]
+    },
+    "impact_time_sec": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "collision_events": {
+      "type": "array"
+    },
+    "media": {
+      "type": "array",
+      "minItems": 1
+    }
+  },
+  "additionalProperties": true
+}

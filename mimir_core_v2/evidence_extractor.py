@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .motion_analysis import analyze_motion
 from .onnx_object_detector import detect_samples as detect_samples_onnx
 from .onnx_object_detector import reset_runtime as reset_object_detector_runtime
 from .onnx_object_detector import runtime_diagnostics as object_detector_runtime_diagnostics
@@ -14,9 +15,9 @@ PERSON_LINGER_MIN_SEC = 4.0
 VEHICLE_PASSBY_MAX_SEC = 2.0
 VEHICLE_LINGER_MIN_SEC = 4.0
 
-EVIDENCE_VERSION = "local_evidence_v2_0_2"
-IMPACT_DETECTION_VERSION = "impact_motion_v2_0_3"
-KEY_MOMENT_VERSION = "key_moments_v3_two_pass_contact_timing"
+EVIDENCE_VERSION = "local_evidence_v2_0_3"
+IMPACT_DETECTION_VERSION = "impact_motion_v2_0_4_group_corroboration"
+KEY_MOMENT_VERSION = "key_moments_v4_contact_semantics"
 
 MOTION_LOW_THRESHOLD = 0.28
 MOTION_MEDIUM_THRESHOLD = 0.55
@@ -66,6 +67,9 @@ EGO_ZONE_MIN_MOTION = 0.16
 EGO_ZONE_MOTION_RATIO = 0.50
 OBJECT_DETECTION_UNIFORM_INTERVAL_SEC = 1.0
 OBJECT_DETECTION_CANDIDATE_RADIUS_SEC = 2.0
+MULTI_CAMERA_IMPACT_TIME_TOLERANCE_SEC = 0.65
+SIDE_REPEATER_CAMERAS = {"left_repeater", "right_repeater"}
+REAR_CAMERAS = {"back", "rear"}
 
 _OBJECT_DETECTOR_AVAILABLE = False
 _OBJECT_DETECTOR_FAILURES = 0
@@ -421,122 +425,25 @@ def _impact_level_from_motion(motion: dict) -> str:
 
 
 def _motion_for_samples(samples: list[dict]) -> dict:
-    cv2 = _load_cv2()
-    if cv2 is None or len(samples) < 2:
-        return _empty_motion_metrics()
-
-    previous_gray = None
-    motion_scores: list[tuple[float, float, float, float]] = []
-    motion_samples: list[dict] = []
-    for sample in samples:
-        frame = sample.get("frame")
-        if frame is None:
-            continue
-        try:
-            resized = cv2.resize(frame, (240, 135))
-            gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-            gray = cv2.GaussianBlur(gray, (5, 5), 0)
-        except Exception:
-            continue
-        if previous_gray is not None:
-            diff = cv2.absdiff(previous_gray, gray)
-            global_score = min(float(diff.mean()) / 55.0, 1.0)
-            tile_scores = _diff_tile_scores(diff)
-            localized_score = max(tile_scores, default=global_score)
-            ego_zone, ego_zone_score, ego_zone_scores = _ego_vehicle_zone_motion(diff)
-            motion_regions = _motion_regions_from_diff(diff)
-            widespread_threshold = max(0.12, global_score * 0.7)
-            widespread_fraction = (
-                sum(1 for score in tile_scores if score >= widespread_threshold) / len(tile_scores)
-                if tile_scores
-                else 0.0
-            )
-            camera_shake_score = global_score * widespread_fraction
-            motion_scores.append(
-                (
-                    _safe_float(sample.get("time_sec")),
-                    round(global_score, 4),
-                    round(localized_score, 4),
-                    round(camera_shake_score, 4),
-                )
-            )
-            motion_sample = {
-                "camera": sample.get("camera", "unknown"),
-                "source_video": sample.get("source_video", ""),
-                "frame_index": int(_safe_float(sample.get("frame_index"))),
-                "fps": round(_safe_float(sample.get("fps")), 3),
-                "time_sec": round(_safe_float(sample.get("time_sec")), 3),
-                "duration_sec": round(_safe_float(sample.get("duration_sec")), 3),
-                "motion_score": round(global_score, 4),
-                "localized_motion_score": round(localized_score, 4),
-                "ego_vehicle_zone": ego_zone,
-                "ego_zone_motion_score": round(ego_zone_score, 4),
-                "ego_zone_scores": ego_zone_scores,
-                "visual_contact_score": round(max(ego_zone_score, localized_score) * 0.65 + global_score * 0.25 + camera_shake_score * 0.10, 4),
-                "motion_regions": motion_regions,
-                "camera_shake_score": round(camera_shake_score, 4),
-            }
-            motion_samples.append(motion_sample)
-            sample["motion_score"] = motion_sample["motion_score"]
-            sample["localized_motion_score"] = motion_sample["localized_motion_score"]
-            sample["ego_zone_motion_score"] = motion_sample["ego_zone_motion_score"]
-            sample["visual_contact_score"] = motion_sample["visual_contact_score"]
-            sample["camera_shake_score"] = motion_sample["camera_shake_score"]
-        previous_gray = gray
-
-    if not motion_scores:
-        return _empty_motion_metrics()
-
-    average = sum(score for _, score, _, _ in motion_scores) / len(motion_scores)
-    spike_time, max_score, localized_at_spike, _ = max(motion_scores, key=lambda item: item[1])
-    max_localized = max(score for _, _, score, _ in motion_scores)
-    max_ego_motion = max((_safe_float(sample.get("ego_zone_motion_score")) for sample in motion_samples), default=0.0)
-    max_camera_shake = max(score for _, _, _, score in motion_scores)
-    spike_ratio = _spike_ratio([score for _, score, _, _ in motion_scores], max_score)
-    duration_sec = max((_safe_float(sample.get("duration_sec")) for sample in motion_samples), default=0.0)
-    visual_contact = _first_visual_contact_sample(motion_samples, max_localized, duration_sec)
-    abrupt_scene_change = bool(
-        max_score >= MOTION_MEDIUM_THRESHOLD
-        and (max_camera_shake >= CAMERA_SHAKE_MEDIUM_THRESHOLD or spike_ratio >= MOTION_SPIKE_MEDIUM_RATIO)
+    return analyze_motion(
+        samples,
+        cv2=_load_cv2(),
+        empty_metrics=_empty_motion_metrics,
+        safe_float=_safe_float,
+        diff_tile_scores=_diff_tile_scores,
+        ego_vehicle_zone_motion=_ego_vehicle_zone_motion,
+        motion_regions_from_diff=_motion_regions_from_diff,
+        spike_ratio_for_scores=_spike_ratio,
+        first_visual_contact_sample=_first_visual_contact_sample,
+        thresholds={
+            "motion_low": MOTION_LOW_THRESHOLD,
+            "motion_medium": MOTION_MEDIUM_THRESHOLD,
+            "motion_spike_medium_ratio": MOTION_SPIKE_MEDIUM_RATIO,
+            "camera_shake_medium": CAMERA_SHAKE_MEDIUM_THRESHOLD,
+            "localized_contact": LOCALIZED_CONTACT_THRESHOLD,
+            "visual_contact_min_score": VISUAL_CONTACT_MIN_SCORE,
+        },
     )
-
-    reasons: list[str] = []
-    if spike_ratio >= MOTION_SPIKE_MEDIUM_RATIO and max_score >= MOTION_LOW_THRESHOLD:
-        reasons.append(f"motion_spike_ratio={spike_ratio:g}")
-    if max_camera_shake >= CAMERA_SHAKE_MEDIUM_THRESHOLD:
-        reasons.append(f"camera_shake_score={max_camera_shake:.4f}")
-    if abrupt_scene_change:
-        reasons.append("abrupt_scene_change")
-    if max_localized >= LOCALIZED_CONTACT_THRESHOLD:
-        reasons.append(f"localized_motion_score={max_localized:.4f}")
-    visual_reasons: list[str] = []
-    visual_contact_score = _safe_float(visual_contact.get("visual_contact_score")) if visual_contact else 0.0
-    visual_contact_candidate = bool(visual_contact) and visual_contact_score >= VISUAL_CONTACT_MIN_SCORE
-    if visual_contact_candidate:
-        visual_reasons.append("first strong localized/ego-zone motion")
-        if visual_contact.get("ego_vehicle_zone"):
-            visual_reasons.append(f"ego_vehicle_zone={visual_contact.get('ego_vehicle_zone')}")
-
-    return {
-        "motion_score": round(average, 4),
-        "max_motion_score": round(max_score, 4),
-        "localized_motion_score": round(max(max_localized, localized_at_spike), 4),
-        "ego_vehicle_zone": str(visual_contact.get("ego_vehicle_zone") or ""),
-        "ego_zone_motion_score": round(max_ego_motion, 4),
-        "visual_contact_time_sec": round(_safe_float(visual_contact.get("time_sec")), 3) if visual_contact else 0.0,
-        "visual_contact_score": round(visual_contact_score, 4),
-        "visual_contact_candidate": visual_contact_candidate,
-        "visual_contact_frame_index": int(_safe_float(visual_contact.get("frame_index"))) if visual_contact else 0,
-        "visual_contact_fps": round(_safe_float(visual_contact.get("fps")), 3) if visual_contact else 0.0,
-        "visual_contact_reasons": visual_reasons,
-        "motion_spike_time_sec": round(spike_time, 3),
-        "motion_spike_ratio": spike_ratio,
-        "camera_shake_score": round(max_camera_shake, 4),
-        "abrupt_scene_change": abrupt_scene_change,
-        "scene_change_score": round(max_score, 4),
-        "impact_evidence_reasons": reasons,
-        "motion_samples": motion_samples,
-    }
 
 
 def _detect_objects(samples: list[dict], object_detection_enabled: bool = True) -> tuple[list[dict], bool]:
@@ -884,6 +791,7 @@ def _impact_candidate_details(
     vehicle_detected: bool,
     possible_contact: bool,
     contact_level: str,
+    camera: str = "unknown",
 ) -> dict:
     max_motion = _safe_float(motion.get("max_motion_score"))
     localized_motion = _safe_float(motion.get("localized_motion_score"))
@@ -932,9 +840,183 @@ def _impact_candidate_details(
     return {
         "impact_candidate_score": round(min(score, 1.0), 3),
         "hard_contact_candidate": hard_contact_candidate,
-        "rear_impact_candidate": hard_contact_candidate and vehicle_detected,
+        "rear_impact_candidate": bool(
+            hard_contact_candidate
+            and vehicle_detected
+            and str(camera or "").lower() in REAR_CAMERAS
+        ),
         "impact_candidate_reasons": reasons,
     }
+
+
+def _nearest_motion_sample(evidence: dict, time_sec: float) -> dict:
+    samples = evidence.get("motion_samples") if isinstance(evidence.get("motion_samples"), list) else []
+    candidates = [sample for sample in samples if isinstance(sample, dict)]
+    if not candidates or time_sec <= 0:
+        return {}
+    nearest = min(candidates, key=lambda sample: abs(_safe_float(sample.get("time_sec")) - time_sec))
+    if abs(_safe_float(nearest.get("time_sec")) - time_sec) > MULTI_CAMERA_IMPACT_TIME_TOLERANCE_SEC:
+        return {}
+    return nearest
+
+
+def _sample_supports_impact(sample: dict) -> bool:
+    return bool(
+        _safe_float(sample.get("motion_score")) >= HARD_CLOSE_GLOBAL_MOTION_THRESHOLD
+        or _safe_float(sample.get("camera_shake_score")) >= IMPACT_CANDIDATE_SHAKE_THRESHOLD
+    )
+
+
+def _without_reasons(reasons: list[str], blocked: set[str]) -> list[str]:
+    return [
+        reason
+        for reason in reasons
+        if reason not in blocked and not any(reason.startswith(f"{value}=") for value in blocked)
+    ]
+
+
+def _apply_group_contact_context(camera_evidence: dict[str, dict]) -> None:
+    """Distinguish one-camera close-object motion from a corroborated impact."""
+
+    is_grouped = len(camera_evidence) > 1
+    for camera, evidence in camera_evidence.items():
+        evidence["multi_camera_impact_corroborated"] = False
+        evidence["multi_camera_impact_support_cameras"] = []
+        evidence["door_articulation_candidate"] = False
+        evidence["single_camera_close_activity"] = False
+        evidence["distributed_uncorroborated_activity"] = False
+        evidence["contact_semantics_reasons"] = []
+
+        candidate_time = 0.0
+        if evidence.get("object_contact_candidate"):
+            candidate_time = _safe_float(evidence.get("object_contact_time_sec"))
+        elif (
+            evidence.get("hard_contact_candidate")
+            or evidence.get("strong_impact_like_motion")
+            or str(evidence.get("impact_level") or "") == "HIGH"
+        ):
+            candidate_time = _safe_float(evidence.get("visual_contact_time_sec"))
+            if candidate_time <= 0:
+                candidate_time = _safe_float(evidence.get("motion_spike_time_sec"))
+
+        support_cameras: list[str] = []
+        if is_grouped and candidate_time > 0:
+            for other_camera, other_evidence in camera_evidence.items():
+                if other_camera == camera:
+                    continue
+                sample = _nearest_motion_sample(other_evidence, candidate_time)
+                if sample and _sample_supports_impact(sample):
+                    support_cameras.append(other_camera)
+
+        evidence["multi_camera_impact_support_cameras"] = sorted(support_cameras)
+        evidence["multi_camera_impact_corroborated"] = bool(support_cameras)
+
+        contact_classes = {
+            value.strip().lower()
+            for value in str(evidence.get("contact_object_class") or "").split("+")
+            if value.strip()
+        }
+        door_articulation_candidate = bool(
+            is_grouped
+            and str(camera or "").lower() in SIDE_REPEATER_CAMERAS
+            and evidence.get("object_contact_candidate")
+            and str(evidence.get("contact_object_type") or "") == "vehicle_door_or_body"
+            and {"person", "vehicle"}.issubset(contact_classes)
+            and not support_cameras
+        )
+        single_camera_close_activity = bool(
+            is_grouped
+            and evidence.get("object_contact_candidate")
+            and not support_cameras
+            and not evidence.get("crash_safety_triggered")
+            and not evidence.get("no_yolo_motion_impact_candidate")
+        )
+        if not single_camera_close_activity:
+            continue
+
+        base_impact_level = _impact_level_from_motion(evidence)
+        if base_impact_level == "HIGH":
+            evidence["contact_semantics_reasons"] = [
+                "close-object motion was observed, but independent hard motion evidence remains HIGH"
+            ]
+            continue
+
+        reason = (
+            "single side-camera door motion without synchronized impact evidence"
+            if door_articulation_candidate
+            else "single-camera close-object motion without synchronized impact evidence"
+        )
+        evidence["door_articulation_candidate"] = door_articulation_candidate
+        evidence["single_camera_close_activity"] = True
+        evidence["contact_semantics_reasons"] = [
+            reason,
+            "image-space overlap is not physical-contact proof",
+        ]
+        evidence["hard_contact_candidate"] = False
+        evidence["rear_impact_candidate"] = False
+        evidence["strong_impact_like_motion"] = False
+        evidence["impact_level"] = base_impact_level
+        evidence["possible_impact"] = base_impact_level in {"MEDIUM", "HIGH"}
+        evidence["contact_level"] = "MEDIUM"
+        evidence["possible_contact"] = True
+        evidence["object_contact_used_for_contact"] = False
+        evidence["object_touching_ego_vehicle"] = False
+        evidence["impact_evidence_reasons"] = _without_reasons(
+            list(evidence.get("impact_evidence_reasons") or []),
+            {"hard_close_vehicle_motion", "hard_contact_candidate", "rear_impact_candidate"},
+        )
+        evidence["impact_evidence_reasons"].append(reason)
+        evidence["contact_evidence_reasons"] = _without_reasons(
+            list(evidence.get("contact_evidence_reasons") or []),
+            {"hard_close_vehicle_motion", "hard_contact_candidate"},
+        )
+        evidence["contact_evidence_reasons"].extend(evidence["contact_semantics_reasons"])
+        evidence["impact_candidate_reasons"] = _without_reasons(
+            list(evidence.get("impact_candidate_reasons") or []),
+            {"hard_contact_candidate", "rear_impact_candidate"},
+        )
+        evidence["evidence_score"] = _camera_score(evidence)
+
+    single_camera_candidates = [
+        evidence
+        for evidence in camera_evidence.values()
+        if evidence.get("single_camera_close_activity")
+    ]
+    distributed_activity = bool(
+        len(camera_evidence) >= 3
+        and len(single_camera_candidates) >= 3
+        and not any(
+            evidence.get("multi_camera_impact_corroborated")
+            or evidence.get("crash_safety_triggered")
+            or evidence.get("no_yolo_motion_impact_candidate")
+            for evidence in camera_evidence.values()
+        )
+    )
+    if not distributed_activity:
+        return
+
+    distributed_reason = "asynchronous close-object motion across multiple cameras without impact corroboration"
+    for evidence in camera_evidence.values():
+        evidence["distributed_uncorroborated_activity"] = True
+        evidence["contact_semantics_reasons"] = list(evidence.get("contact_semantics_reasons") or [])
+        evidence["contact_semantics_reasons"].append(distributed_reason)
+        if not evidence.get("single_camera_close_activity"):
+            continue
+        evidence["impact_level"] = "NONE"
+        evidence["contact_level"] = "NONE"
+        evidence["possible_impact"] = False
+        evidence["possible_contact"] = False
+        evidence["strong_impact_like_motion"] = False
+        evidence["hard_contact_candidate"] = False
+        evidence["rear_impact_candidate"] = False
+        evidence["object_contact_used_for_contact"] = False
+        evidence["object_touching_ego_vehicle"] = False
+        evidence["normal_traffic_evidence"] = bool(
+            evidence.get("person_detected") or evidence.get("vehicle_detected")
+        )
+        evidence["impact_evidence_reasons"] = [distributed_reason]
+        evidence["contact_evidence_reasons"] = [distributed_reason]
+        evidence["evidence_score"] = _camera_score(evidence)
 
 
 def _no_yolo_motion_impact_details(motion: dict, object_detection_available: bool) -> dict:
@@ -1278,6 +1360,7 @@ def _build_key_moments(
     normal_traffic: bool,
     crash_safety_triggered: bool = False,
     no_yolo_motion_impact_candidate: bool = False,
+    single_camera_close_activity: bool = False,
 ) -> dict:
     duration_sec = _event_duration(event_group, sample_result)
     durations_by_camera = _clip_duration_by_camera(event_group, sample_result)
@@ -1340,6 +1423,10 @@ def _build_key_moments(
             if primary_reason_source == "ego_zone_motion"
             else "motion spike detected while object detection was unavailable"
         )
+    elif single_camera_close_activity:
+        primary_label = "Close activity"
+        primary_type = "vehicle_near"
+        primary_reason = "adjacent door/object moved close to the vehicle; no impact was corroborated"
     elif strong_impact_like_motion:
         primary_label = "Impact"
         primary_type = "impact_contact"
@@ -1546,6 +1633,12 @@ def fallback_evidence(event_group: dict, warning: str) -> dict:
         "contact_object_class": "",
         "contact_object_type": "",
         "object_contact_reasons": [],
+        "multi_camera_impact_corroborated": False,
+        "multi_camera_impact_support_cameras": [],
+        "door_articulation_candidate": False,
+        "single_camera_close_activity": False,
+        "distributed_uncorroborated_activity": False,
+        "contact_semantics_reasons": [],
         "strong_impact_like_motion": False,
         "possible_impact": False,
         "impact_level": "NONE",
@@ -1560,7 +1653,9 @@ def fallback_evidence(event_group: dict, warning: str) -> dict:
         "contact_score": 0.0,
         "contact_evidence_reasons": [],
         "person_detected": False,
+        "person_close_detected": False,
         "vehicle_detected": False,
+        "vehicle_close_detected": False,
         "person_near_only": False,
         "person_passby_detected": False,
         "person_passby": False,
@@ -1622,6 +1717,13 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         possible_impact = impact_level in {"MEDIUM", "HIGH"}
         strong_impact_like_motion = impact_level == "HIGH"
         close_evidence = _close_object_evidence(detections)
+        close_classes = {
+            str(value or "").lower()
+            for value in close_evidence.get("close_classes", [])
+            if value
+        }
+        person_close_detected = "person" in close_classes
+        vehicle_close_detected = "vehicle" in close_classes
         object_contact_details = _visual_object_contact_details(motion, detections)
         hard_close_contact = _hard_close_contact_like_motion(motion, close_evidence)
         if hard_close_contact:
@@ -1664,6 +1766,7 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
             vehicle_detected,
             possible_contact,
             contact_level,
+            camera,
         )
         if candidate_details.get("hard_contact_candidate"):
             contact_level = _max_level(contact_level, "HIGH")
@@ -1699,7 +1802,9 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
             "contact_level": contact_level,
             "contact_evidence_reasons": contact_reasons,
             "person_detected": person_detected,
+            "person_close_detected": person_close_detected,
             "vehicle_detected": vehicle_detected,
+            "vehicle_close_detected": vehicle_close_detected,
             "person_passby_detected": person_passby,
             "person_lingering_detected": person_lingering,
             "vehicle_passby_detected": vehicle_passby,
@@ -1709,6 +1814,8 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
             "object_detection_sampled_frames": len(detection_samples),
         }
         camera_evidence[camera]["evidence_score"] = _camera_score(camera_evidence[camera])
+
+    _apply_group_contact_context(camera_evidence)
 
     best_camera = ""
     if camera_evidence:
@@ -1733,6 +1840,34 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
     possible_contact = any(item.get("possible_contact") for item in camera_evidence.values())
     object_contact_candidate = any(item.get("object_contact_candidate") for item in camera_evidence.values())
     object_touching_ego_vehicle = any(item.get("object_touching_ego_vehicle") for item in camera_evidence.values())
+    multi_camera_impact_corroborated = any(
+        item.get("multi_camera_impact_corroborated") for item in camera_evidence.values()
+    )
+    multi_camera_impact_support_cameras = sorted(
+        {
+            camera
+            for item in camera_evidence.values()
+            for camera in item.get("multi_camera_impact_support_cameras", [])
+            if camera
+        }
+    )
+    door_articulation_candidate = any(
+        item.get("door_articulation_candidate") for item in camera_evidence.values()
+    )
+    single_camera_close_activity = any(
+        item.get("single_camera_close_activity") for item in camera_evidence.values()
+    )
+    distributed_uncorroborated_activity = any(
+        item.get("distributed_uncorroborated_activity") for item in camera_evidence.values()
+    )
+    contact_semantics_reasons = sorted(
+        {
+            reason
+            for item in camera_evidence.values()
+            for reason in item.get("contact_semantics_reasons", [])
+            if reason
+        }
+    )
     strong_impact_like_motion = any(item.get("strong_impact_like_motion") for item in camera_evidence.values()) or impact_level == "HIGH"
     impact_candidate_score = max((_safe_float(item.get("impact_candidate_score")) for item in camera_evidence.values()), default=0.0)
     hard_contact_candidate = any(item.get("hard_contact_candidate") for item in camera_evidence.values())
@@ -1794,11 +1929,21 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
     impact_evidence_reasons = sorted(dict.fromkeys(impact_evidence_reasons))
     contact_evidence_reasons = sorted(dict.fromkeys(contact_evidence_reasons))
     person_detected = any(item.get("person_detected") for item in camera_evidence.values())
+    person_close_detected = any(item.get("person_close_detected") for item in camera_evidence.values())
     vehicle_detected = any(item.get("vehicle_detected") for item in camera_evidence.values())
+    vehicle_close_detected = any(item.get("vehicle_close_detected") for item in camera_evidence.values())
     person_passby = any(item.get("person_passby_detected") for item in camera_evidence.values())
     person_lingering = any(item.get("person_lingering_detected") for item in camera_evidence.values())
     vehicle_passby = any(item.get("vehicle_passby_detected") for item in camera_evidence.values())
     vehicle_lingering = any(item.get("vehicle_lingering_detected") for item in camera_evidence.values())
+    close_person_lingering = any(
+        item.get("person_lingering_detected") and item.get("person_close_detected")
+        for item in camera_evidence.values()
+    )
+    close_vehicle_lingering = any(
+        item.get("vehicle_lingering_detected") and item.get("vehicle_close_detected")
+        for item in camera_evidence.values()
+    )
     normal_traffic = bool(
         (
             any(item.get("normal_traffic_evidence") for item in camera_evidence.values())
@@ -1808,8 +1953,10 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         )
         and not possible_impact
         and not possible_contact
-        and not person_lingering
-        and not vehicle_lingering
+        and (
+            distributed_uncorroborated_activity
+            or (not close_person_lingering and not close_vehicle_lingering)
+        )
     )
 
     key_moment_result = _build_key_moments(
@@ -1824,6 +1971,7 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         normal_traffic,
         crash_safety_triggered,
         no_yolo_motion_impact_candidate,
+        single_camera_close_activity and not distributed_uncorroborated_activity,
     )
     apparent_visual_contact = bool(
         object_contact_candidate
@@ -1832,6 +1980,7 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         and contact_level == "HIGH"
         and primary_camera_evidence.get("contact_object_type") in {"vehicle_door_or_body", "vehicle_body"}
         and object_contact_score >= OBJECT_CONTACT_HIGH_SCORE
+        and not single_camera_close_activity
     )
     contact_candidate = bool(
         possible_contact
@@ -1874,6 +2023,12 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         "contact_object_class": primary_camera_evidence.get("contact_object_class", ""),
         "contact_object_type": primary_camera_evidence.get("contact_object_type", ""),
         "object_contact_reasons": object_contact_reasons,
+        "multi_camera_impact_corroborated": multi_camera_impact_corroborated,
+        "multi_camera_impact_support_cameras": multi_camera_impact_support_cameras,
+        "door_articulation_candidate": door_articulation_candidate,
+        "single_camera_close_activity": single_camera_close_activity,
+        "distributed_uncorroborated_activity": distributed_uncorroborated_activity,
+        "contact_semantics_reasons": contact_semantics_reasons,
         "motion_spike_time_sec": next((item.get("motion_spike_time_sec", 0.0) for item in camera_evidence.values() if _safe_float(item.get("max_motion_score")) == max_motion_score), 0.0),
         "motion_spike_ratio": round(motion_spike_ratio, 3),
         "camera_shake_score": round(camera_shake_score, 4),
@@ -1904,7 +2059,9 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         "contact_score": round(localized_motion_score if possible_contact else 0.0, 4),
         "contact_evidence_reasons": contact_evidence_reasons,
         "person_detected": person_detected,
+        "person_close_detected": person_close_detected,
         "vehicle_detected": vehicle_detected,
+        "vehicle_close_detected": vehicle_close_detected,
         "person_passby_detected": person_passby,
         "person_passby": person_passby,
         "person_lingering_detected": person_lingering,
@@ -1912,7 +2069,7 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         "vehicle_lingering_detected": vehicle_lingering,
         "normal_traffic_evidence": normal_traffic,
         "normal_traffic": normal_traffic,
-        "person_near_only": bool(person_detected and not possible_contact and not possible_impact),
+        "person_near_only": bool(person_close_detected and not possible_contact and not possible_impact),
         "visible_contact": apparent_visual_contact,
         "visible_impact": False,
         "person_interaction_evidence": False,

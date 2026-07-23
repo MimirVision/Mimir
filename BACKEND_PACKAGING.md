@@ -16,21 +16,27 @@ Expected files:
 
 ```text
 C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe
+C:\Mimir_Backend\dist_backend\mimir-core-v2-ai-enrich.exe
 C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe
+C:\Mimir_Backend\dist_backend\mimir-core-v2-dataset.exe
 ```
 
-If `mimir_core_v2_release_check.py` exists, the script also builds:
+If `mimir_core_v2_release_check.py` exists, the script also builds this
+developer-only release tool in the backend distribution folder:
 
 ```text
 C:\Mimir_Backend\dist_backend\mimir-core-v2-release-check.exe
 ```
+
+The desktop installer does not bundle this executable. Release checks run in
+the controlled build workspace and are not part of the customer runtime.
 
 ## Build Command
 
 From `C:\Mimir_Backend`:
 
 ```powershell
-python build_backend_exe.py
+.venv-runtime\Scripts\python.exe build_backend_exe.py
 ```
 
 The script first runs compile checks, then runs PyInstaller.
@@ -38,13 +44,13 @@ The script first runs compile checks, then runs PyInstaller.
 If PyInstaller is missing, install it in the backend virtual environment:
 
 ```powershell
-python -m pip install pyinstaller
+.venv-runtime\Scripts\python.exe -m pip install -r requirements-build.txt
 ```
 
 Then run:
 
 ```powershell
-python build_backend_exe.py
+.venv-runtime\Scripts\python.exe build_backend_exe.py
 ```
 
 ## Test Commands
@@ -54,6 +60,10 @@ After building, test the scanner executable:
 ```powershell
 dist_backend\mimir-core-v2-scan.exe --input "D:\TeslaCam\SentryClips\2026-04-18_16-04-02" --mode balanced
 ```
+
+Run this from a directory outside `C:\Mimir_Backend` as a clean runtime smoke
+test. The executable contains the Core v2 modules, ONNX model, manifest, and
+model license; it does not import source files from the developer workspace.
 
 Then test the action executable:
 
@@ -67,24 +77,37 @@ Optional release-check executable:
 dist_backend\mimir-core-v2-release-check.exe --input "D:\TeslaCam\SentryClips\2026-04-18_16-04-02"
 ```
 
+Run the complete reliability gate against the packaged scanner after all
+required real-footage fixtures are available:
+
+```powershell
+.venv-runtime\Scripts\python.exe mimir_core_v2_reliability.py `
+  --scanner "dist_backend\mimir-core-v2-scan.exe" `
+  --iterations 500 `
+  --report "C:\Mimir\release_assets\reliability_report.json"
+```
+
+`--allow-missing-required` is for developer smoke runs only. Reports produced
+without every required fixture cannot pass the release gate.
+
 ## Output Folder
 
-For this beta packaging pass, backend output still goes to:
+The scanner always receives an explicit output directory from the desktop app.
+Release builds use the application data directory. Development builds may use:
 
 ```text
 C:\Mimir_Backend\MimirOutputV2\
 ```
 
-This keeps the packaged backend compatible with the current frontend while testing.
+Set `MIMIR_OUTPUT_DIR` to an absolute path for an explicit development override.
 
 ## Known Limitations
 
-- This is beta packaging, not the final installer architecture.
-- The actions and release-check executables use packaging wrappers that expect the backend folder to remain at `C:\Mimir_Backend`.
-- The final installer should eventually choose an app-owned data folder instead of writing directly to `C:\Mimir_Backend`.
+- This is beta packaging and the installer still requires signing and clean-VM evidence before external distribution.
+- Debug builds deliberately support sibling developer scripts and executables; release builds resolve bundled sidecars only.
 - Model files and detector dependencies may make executable size large.
 - Antivirus tools may flag new unsigned executables until the installer/signing flow is finalized.
-- If local AI runtime/model support is bundled later, the installer will need a separate readiness and repair flow.
+- Local AI remains an optional external Labs dependency and runs only after local results are ready.
 
 ## Safety Notes
 

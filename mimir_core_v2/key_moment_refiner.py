@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import statistics
 from pathlib import Path
 from typing import Any
 
 from .ego_vehicle import EGO_MASK_VERSION, load_calibration, mask_for_frame
+from .detector_cache import shared_cache
+from .video_decode import read_frames_at_indexes
 
 
 REFINEMENT_VERSION = "two_pass_contact_timing_v3"
@@ -15,6 +19,48 @@ REFINEMENT_SETTINGS = {
     "balanced": {"fps": 12.0, "window": 3.0, "max_frames": 42, "coarse_fps": 6.0, "coarse_window": 6.0, "coarse_max_frames": 42},
     "thorough": {"fps": 15.0, "window": 3.5, "max_frames": 60, "coarse_fps": 8.0, "coarse_window": 7.0, "coarse_max_frames": 64},
 }
+_ANALYSIS_CACHE = shared_cache()
+
+
+def _calibration_checksum(calibration_path: str | Path | None) -> str:
+    if not calibration_path:
+        return ""
+    path = Path(calibration_path)
+    if not path.is_file():
+        return "missing"
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return "unreadable"
+
+
+def _refinement_cache_key(
+    source_video: str,
+    camera: str,
+    coarse_time: float,
+    coarse_source: str,
+    mode: str,
+    contact_expected: bool,
+    articulated_contact_expected: bool,
+    calibration_path: str | Path | None,
+) -> str:
+    source_sha256 = _ANALYSIS_CACHE.source_sha256(source_video)
+    if not source_sha256:
+        return ""
+    payload = {
+        "kind": "key_moment_refinement",
+        "version": REFINEMENT_VERSION,
+        "ego_mask_version": EGO_MASK_VERSION,
+        "source_sha256": source_sha256,
+        "camera": camera,
+        "coarse_time_sec": round(coarse_time, 3),
+        "coarse_source": coarse_source,
+        "mode": mode,
+        "contact_expected": contact_expected,
+        "articulated_contact_expected": articulated_contact_expected,
+        "calibration_sha256": _calibration_checksum(calibration_path),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -101,11 +147,7 @@ def _read_frames(path: Path, center_sec: float, settings: dict, coarse_pass: boo
             indexes = [indexes[int(index * stride)] for index in range(max_frames)]
 
         frames: list[dict] = []
-        for frame_index in indexes:
-            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-            ok, frame = capture.read()
-            if not ok or frame is None:
-                continue
+        for frame_index, frame in read_frames_at_indexes(capture, indexes, cv2):
             height, width = frame.shape[:2]
             target_width = min(width, 480)
             target_height = max(1, int(height * target_width / max(width, 1)))
@@ -337,6 +379,28 @@ def refine_key_moment(
     articulated_contact_expected = str(
         primary.get("contact_object_type") or evidence.get("contact_object_type") or ""
     ) == "vehicle_door_or_body"
+    cache_key = _refinement_cache_key(
+        source_video,
+        camera,
+        coarse_time,
+        coarse_source,
+        mode,
+        contact_expected,
+        articulated_contact_expected,
+        calibration_path,
+    )
+    cached = _ANALYSIS_CACHE.get_metric(cache_key) if cache_key else None
+    if cached is not None:
+        cached["source_video"] = source_video
+        return cached
+
+    def finish(value: dict) -> dict:
+        if cache_key:
+            payload = dict(value)
+            payload.pop("source_video", None)
+            _ANALYSIS_CACHE.put_metric(cache_key, payload)
+        return value
+
     coarse_metadata: dict = {}
     coarse_selected: dict = {}
     if contact_expected:
@@ -355,7 +419,7 @@ def refine_key_moment(
                 result["candidate_interval_sample_fps"] = coarse_metadata.get("sample_fps", 0.0)
     frames, metadata = _read_frames(Path(source_video), coarse_time, settings)
     if len(frames) < 3:
-        return result
+        return finish(result)
     result["attempted"] = True
     signals, mask_source = _dense_signals(frames, camera, load_calibration(calibration_path))
     selected = _select_impulse(
@@ -364,7 +428,7 @@ def refine_key_moment(
         contact_expected=articulated_contact_expected,
     )
     if not selected:
-        return result
+        return finish(result)
     anchor_guard_applied = False
     if (
         articulated_contact_expected
@@ -410,7 +474,7 @@ def refine_key_moment(
             "reason": "Dense stabilized apparent-contact candidate." if contact_expected else "Dense stabilized ego-boundary motion impulse.",
         }
     )
-    return result
+    return finish(result)
 
 
 def apply_refined_key_moment(evidence: dict, refinement: dict) -> None:

@@ -23,7 +23,9 @@ REQUIRED_EVIDENCE_KEYS = [
     "possible_contact",
     "contact_level",
     "person_detected",
+    "person_close_detected",
     "vehicle_detected",
+    "vehicle_close_detected",
     "person_near_only",
     "person_passby_detected",
     "person_lingering_detected",
@@ -37,6 +39,10 @@ REQUIRED_EVIDENCE_KEYS = [
     "tampering_evidence",
     "door_handle_attempt",
     "crash_safety_triggered",
+    "multi_camera_impact_corroborated",
+    "door_articulation_candidate",
+    "single_camera_close_activity",
+    "distributed_uncorroborated_activity",
 ]
 
 HARD_EVIDENCE_FIELDS = [
@@ -175,4 +181,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
