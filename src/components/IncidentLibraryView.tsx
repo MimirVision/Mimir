@@ -5,6 +5,7 @@ import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
+import { formatDateTime, formatEventType, sourceEventReason, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import {
   incidentOverrideKey,
   normalizeSeverity,
@@ -40,8 +41,9 @@ const severityRank: Record<SeverityGroup, number> = {
   IGNORE: 2,
 }
 
-const defaultLibraryPath = '%USERPROFILE%\\Videos\\Mimir Library'
-const defaultTrashPath = '%USERPROFILE%\\Videos\\Mimir Library\\_Mimir Trash'
+// ============================================================================
+// Error/formatting helpers
+// ============================================================================
 
 function errorMessage(error: unknown) {
   if (
@@ -55,6 +57,10 @@ function errorMessage(error: unknown) {
 
   return error instanceof Error ? error.message : String(error)
 }
+
+// ============================================================================
+// Severity styling
+// ============================================================================
 
 function severityCopy(severity: string) {
   const normalized = normalizeSeverity(severity)
@@ -84,84 +90,29 @@ function severityClass(severity: string) {
   return 'border-[rgba(133,139,139,0.20)] bg-[rgba(133,139,139,0.085)] text-[var(--mimir-text-muted)]'
 }
 
-function formatEventType(value?: string) {
-  if (!value) {
-    return 'Unclassified moment'
+// A left-edge color stripe alongside the text badge above, so severity reads at a
+// glance across a shelf of cards instead of requiring each label to be read.
+function severityStripeClass(severity: string) {
+  const normalized = normalizeSeverity(severity)
+
+  if (normalized === 'IMPORTANT') {
+    return 'before:bg-[var(--mimir-status-red)]'
   }
 
-  return value
-    .split('_')
-    .filter(Boolean)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return ''
+  if (normalized === 'REVIEW') {
+    return 'before:bg-[var(--mimir-status-amber)]'
   }
 
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatDuration(incident: MimirIncident) {
-  if (typeof incident.duration === 'number') {
-    return `${incident.duration}s`
-  }
-
-  if (typeof incident.duration === 'string' && incident.duration.trim()) {
-    return incident.duration
-  }
-
-  return ''
-}
-
-function sourceFilename(value?: string) {
-  if (!value) {
-    return ''
-  }
-
-  const parts = value.split(/[\\/]/)
-  return parts[parts.length - 1] || value
-}
-
-function formatRuntime(value?: number) {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return ''
-  }
-
-  if (value < 60) {
-    return `${value.toFixed(value < 10 ? 1 : 0)} sec`
-  }
-
-  const minutes = Math.floor(value / 60)
-  const seconds = Math.round(value % 60)
-
-  return `${minutes}m ${seconds}s`
-}
-
-function formatScanMode(value?: string) {
-  if (!value) {
-    return ''
-  }
-
-  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`
+  return 'before:bg-[var(--mimir-status-slate)]'
 }
 
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return count === 1 ? singular : plural
 }
+
+// ============================================================================
+// Session-level summary copy
+// ============================================================================
 
 function scanResultCopy(session: MimirSession) {
   const incidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
@@ -179,22 +130,6 @@ function scanResultCopy(session: MimirSession) {
 
 function reviewModeCopy(session: MimirSession) {
   return session.ai_enabled ? 'Local review + AI second opinion' : 'Local review'
-}
-
-function scanAccountingCopy(session: MimirSession) {
-  const incidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
-  const ignoredCount = session.ignore ?? 0
-  const importantCount = session.important ?? 0
-  const reviewCount = session.review ?? 0
-
-  if (incidentCount === 0) {
-    return `${ignoredCount} ${pluralize(ignoredCount, 'clip')} were marked ignored by the scan summary.`
-  }
-
-  return `${importantCount} important, ${reviewCount} review, and ${ignoredCount} ignored ${pluralize(
-    ignoredCount,
-    'clip',
-  )} in this scan. Only Mimir-created incident cards are shown below.`
 }
 
 function sessionClipsScanned(session: MimirSession) {
@@ -235,13 +170,6 @@ function technicalJson(value: unknown) {
   }
 }
 
-function sourceEventReason(incident: MimirIncident) {
-  return incident.source_event_reason || incident.tesla_event_reason || ''
-}
-
-function sourceEventTimestamp(incident: MimirIncident) {
-  return incident.source_event_timestamp || incident.tesla_event_timestamp || incident.created_at
-}
 
 function searchText(incident: MimirIncident) {
   return [
@@ -262,97 +190,9 @@ function searchText(incident: MimirIncident) {
     .toLowerCase()
 }
 
-function sessionCounts(session: MimirSession) {
-  const runtime = formatRuntime(session.performance?.total_runtime_sec)
-  const scanMode = formatScanMode(session.scan_mode)
-  const activeIncidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
-  return [
-    { label: 'Clips scanned', value: session.scan_summary?.clips_scanned ?? session.clips_scanned ?? session.clips_processed },
-    { label: 'Incidents found', value: activeIncidentCount },
-    { label: 'Important', value: session.important },
-    { label: 'Review', value: session.review },
-    { label: 'Ignored', value: session.ignore },
-    ...(scanMode ? [{ label: 'Scan mode', value: scanMode }] : []),
-    ...(runtime ? [{ label: 'Runtime', value: runtime }] : []),
-  ]
-}
-
-function sourceActionCopy(value?: string) {
-  if (value === 'analyze_only') {
-    return 'Review only'
-  }
-
-  if (value === 'copy_all') {
-    return 'Copy clips to Mimir Library'
-  }
-
-  if (value === 'move_all') {
-    return 'Move clips to Mimir Library'
-  }
-
-  if (value === 'copy_review') {
-    return 'Copy Important/Review only'
-  }
-
-  if (value === 'move_review') {
-    return 'Move Important/Review only'
-  }
-
-  return value || 'Not reported'
-}
-
-function formatSourceType(value?: string) {
-  if (!value) {
-    return 'Not reported'
-  }
-
-  return value
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
-
-function listCopy(values?: string[]) {
-  if (!values || values.length === 0) {
-    return 'None reported'
-  }
-
-  return values.join(', ')
-}
-
-function sourceReportMetrics(session: MimirSession) {
-  const report = session.source_report
-
-  return [
-    {
-      label: 'Source type',
-      value: formatSourceType(report?.detected_source_type || session.detected_source_type || undefined),
-    },
-    {
-      label: 'Categories',
-      value: listCopy(report?.categories_found || session.source_categories_found),
-    },
-    {
-      label: 'MP4 files',
-      value: report?.mp4_files_found ?? session.clips_processed ?? 0,
-    },
-    {
-      label: 'Event groups',
-      value: report?.event_groups_found ?? session.event_groups_found ?? 0,
-    },
-  ]
-}
-
-function storageMetrics(session: MimirSession) {
-  return [
-    { label: 'Source action', value: sourceActionCopy(session.source_action) },
-    { label: 'Files copied', value: session.files_copied ?? 0 },
-    { label: 'Files moved', value: session.files_moved ?? 0 },
-    { label: 'Files failed', value: session.files_failed ?? 0 },
-    { label: 'Source files removed', value: session.source_files_removed ?? 0 },
-  ]
-}
+// ============================================================================
+// Session/incident data helpers
+// ============================================================================
 
 function sortIncidents(incidents: MimirIncident[], manualOverrides: ManualStatusOverrides, identity: string) {
   return [...incidents].sort((left, right) => {
@@ -376,6 +216,10 @@ function incidentCardImages(incident: MimirIncident) {
     incident.contact_sheet,
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
 }
+
+// ============================================================================
+// Small shared presentational components
+// ============================================================================
 
 function IncidentImage({ incident, large = false }: { incident: MimirIncident; large?: boolean }) {
   const images = incidentCardImages(incident)
@@ -402,40 +246,6 @@ function IncidentImage({ incident, large = false }: { incident: MimirIncident; l
       )}
     </div>
   )
-}
-
-function signalBadges(incident: MimirIncident) {
-  const badges: Array<{ label: string; className: string }> = []
-
-  if (incident.impact_level && incident.impact_level !== 'NONE') {
-    badges.push({
-      label: `Impact ${incident.impact_level}`,
-      className: 'border-[rgba(185,101,97,0.22)] bg-[rgba(185,101,97,0.11)] text-red-100/82',
-    })
-  }
-
-  if (incident.contact_level && incident.contact_level !== 'NONE') {
-    badges.push({
-      label: `Contact ${incident.contact_level}`,
-      className: 'border-[rgba(173,139,85,0.24)] bg-[rgba(173,139,85,0.11)] text-amber-100/82',
-    })
-  }
-
-  if (badges.length === 0 && incident.possible_impact) {
-    badges.push({
-      label: 'Possible impact',
-      className: 'border-[rgba(185,101,97,0.22)] bg-[rgba(185,101,97,0.11)] text-red-100/82',
-    })
-  }
-
-  if (badges.length === 0 && incident.possible_contact) {
-    badges.push({
-      label: 'Possible contact',
-      className: 'border-[rgba(173,139,85,0.24)] bg-[rgba(173,139,85,0.11)] text-amber-100/82',
-    })
-  }
-
-  return badges
 }
 
 function SummaryMetric({ label, value }: { label: string; value: number | string }) {
@@ -471,6 +281,10 @@ function FilterChip({
     </button>
   )
 }
+
+// ============================================================================
+// Camera/path/storage helpers for incident cards
+// ============================================================================
 
 function incidentActionId(incident: MimirIncident) {
   return incident.id || String(incident.event_id ?? '')
@@ -574,10 +388,6 @@ function cameraNameLabel(value?: string | null) {
     .join(' ')
 }
 
-function primaryCameraLabel(incident: MimirIncident) {
-  return cameraNameLabel(incident.primary_camera)
-}
-
 function eventLabel(incident: MimirIncident) {
   const summary = typeof incident.summary === 'string' ? incident.summary.trim() : ''
   if (summary) {
@@ -664,21 +474,6 @@ function incidentFolderPath(incident: MimirIncident) {
   return paths.find((value): value is string => typeof value === 'string' && value.trim().length > 0) || ''
 }
 
-function pathFolder(value?: string | null) {
-  if (!value) {
-    return ''
-  }
-
-  const normalized = value.replace(/[/\\]+$/, '')
-  const index = Math.max(normalized.lastIndexOf('\\'), normalized.lastIndexOf('/'))
-  return index > 0 ? normalized.slice(0, index) : ''
-}
-
-function sourceFolderLabel(incident: MimirIncident) {
-  const folder = incident.event_folder || pathFolder(incident.source_video || incident.original_source_video || '')
-  return folder || 'Not available'
-}
-
 function sourceClipsRemain(incidents: MimirIncident[]) {
   return incidents.some(incident => {
     if (incident.user_deleted || incident.moved_to_library || incident.storage_state === 'trash' || incident.storage_state === 'library') {
@@ -697,6 +492,11 @@ function incidentsForSeverity(
 ) {
   return incidents.filter(incident => resolveIncidentSeverity(incident, manualOverrides, identity).displaySeverity === severity)
 }
+
+// ============================================================================
+// Main components: cards, sections, drawers. IncidentLibraryView (below)
+// composes all of these into the review/library screen.
+// ============================================================================
 
 function IncidentCard({
   incident,
@@ -718,9 +518,9 @@ function IncidentCard({
 
   return (
     <article
-      className={`group min-w-0 overflow-hidden rounded-xl border bg-[linear-gradient(180deg,rgba(255,255,255,0.032),rgba(255,255,255,0.014))] shadow-[0_16px_42px_rgba(0,0,0,0.20)] transition hover:-translate-y-0.5 hover:border-white/[0.12] hover:bg-white/[0.038] ${
-        selected ? 'border-[rgba(157,183,170,0.42)] ring-1 ring-[rgba(157,183,170,0.22)]' : 'border-white/[0.05]'
-      }`}
+      className={`group relative min-w-0 overflow-hidden rounded-xl border bg-[linear-gradient(180deg,rgba(255,255,255,0.032),rgba(255,255,255,0.014))] shadow-[0_16px_42px_rgba(0,0,0,0.20)] transition before:absolute before:inset-y-0 before:left-0 before:z-10 before:w-[3px] before:content-[''] hover:-translate-y-0.5 hover:border-white/[0.12] hover:bg-white/[0.038] ${severityStripeClass(
+        severityResolution.displaySeverity,
+      )} ${selected ? 'border-[rgba(157,183,170,0.42)] ring-1 ring-[rgba(157,183,170,0.22)]' : 'border-white/[0.05]'}`}
     >
       <button
         type="button"
@@ -818,7 +618,11 @@ function LibraryItem({
   const timestamp = formatDateTime(sourceEventTimestamp(incident))
 
   return (
-    <article className="grid gap-3 rounded-lg border border-white/[0.055] bg-white/[0.018] p-2.5 transition hover:bg-white/[0.04] sm:grid-cols-[132px_minmax(0,1fr)_auto] sm:items-center">
+    <article
+      className={`relative grid gap-3 overflow-hidden rounded-lg border border-white/[0.055] bg-white/[0.018] p-2.5 pl-4 transition before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] hover:bg-white/[0.04] sm:grid-cols-[132px_minmax(0,1fr)_auto] sm:items-center ${severityStripeClass(
+        severityResolution.displaySeverity,
+      )}`}
+    >
       <button type="button" onClick={() => onOpen(incident)} className="block overflow-hidden rounded-md text-left">
         <IncidentImage incident={incident} />
       </button>

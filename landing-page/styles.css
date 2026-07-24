@@ -1,17 +1,21 @@
+/* Matches src/index.css exactly, rather than an approximation of it, so the
+   landing page and the app read as the same product. */
 :root {
   color-scheme: dark;
-  --bg: #050505;
-  --bg-depth: #090909;
-  --surface: #121214;
-  --surface-soft: #19191b;
-  --text: #f4f1ea;
-  --muted: #a29d94;
-  --subtle: #716d66;
-  --border: rgba(255, 255, 255, 0.085);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --red: #b96561;
-  --amber: #ad8b55;
-  --green: #78927a;
+  --bg: #050606;
+  --bg-depth: #0a0b0b;
+  --surface: #111313;
+  --surface-soft: #171919;
+  --text: #f4f1e9;
+  --muted: #a09c93;
+  --subtle: #858078;
+  --border: rgba(244, 241, 233, 0.075);
+  --border-strong: rgba(244, 241, 233, 0.14);
+  --accent: #9db7aa;
+  --red: #c47772;
+  --amber: #c3a062;
+  --green: #8faa9b;
+  --slate: #858b8b;
 }
 
 * {

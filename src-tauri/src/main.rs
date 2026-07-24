@@ -1,17 +1,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::Serialize;
+use base64::Engine;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    collections::HashSet,
     env, fs,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, Mutex},
     thread,
-    time::UNIX_EPOCH,
+    time::{Duration, UNIX_EPOCH},
 };
+use std::os::windows::process::CommandExt;
 use tauri::{Emitter, Manager};
+
+// Prevents Windows from popping a visible console window for every console-subsystem
+// child process this app spawns (the packaged scanner exe, ollama, taskkill). Without
+// this, each scan/AI-check/cancel flashes a terminal window because the child is a
+// console app and this GUI app has no console of its own to inherit.
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[allow(dead_code)]
 const DEV_BACKEND_ROOT: &str = r"C:\Mimir_Backend";
@@ -160,6 +169,12 @@ struct ScanProgressLine {
     line: String,
 }
 
+#[derive(Clone, Serialize)]
+struct TeslaCamDriveEvent {
+    drive: String,
+    teslacam_path: String,
+}
+
 #[derive(Serialize)]
 struct LocalAiStatus {
     ok: bool,
@@ -276,11 +291,21 @@ fn backend_missing_failure(kind: &str, candidates: &[&str]) -> ScanFailure {
     )
 }
 
+// On Windows, `resource_dir()` resolves to the directory containing the main
+// executable, NOT the `resources/` folder inside it -- Tauri's bundler places
+// bundled resources under `<exe_dir>/resources/<path-as-declared-in-tauri.conf.json>`,
+// so the "resources" segment has to be added back here. Without it, this always
+// returns a nonexistent path in a packaged build (dev builds never hit this path,
+// since resolve_core_v2_*_runtime short-circuits to C:\Mimir_Backend first).
+fn backend_resource_path(resource_dir: &Path, exe_name: &str) -> PathBuf {
+    resource_dir.join("resources").join(BACKEND_RESOURCE_FOLDER).join(exe_name)
+}
+
 fn resource_core_v2_exe(app: &tauri::AppHandle, exe_name: &str) -> Option<PathBuf> {
     app.path()
         .resource_dir()
         .ok()
-        .map(|resource_dir| resource_dir.join(BACKEND_RESOURCE_FOLDER).join(exe_name))
+        .map(|resource_dir| backend_resource_path(&resource_dir, exe_name))
         .filter(|path| path.exists())
 }
 
@@ -462,7 +487,7 @@ fn age_executable_for_runtime(app: &tauri::AppHandle, runtime: &BackendRuntime) 
     app.path()
         .resource_dir()
         .ok()
-        .map(|root| root.join(BACKEND_RESOURCE_FOLDER).join(AGE_EXE_NAME))
+        .map(|root| backend_resource_path(&root, AGE_EXE_NAME))
         .filter(|path| path.exists())
 }
 
@@ -473,6 +498,7 @@ fn resolve_backend_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, Sca
 fn backend_command(runtime: &BackendRuntime) -> Command {
     let mut command = Command::new(&runtime.executable);
     command.current_dir(&runtime.current_dir);
+    command.creation_flags(CREATE_NO_WINDOW);
     command
 }
 
@@ -736,7 +762,10 @@ fn open_folder_with_explorer(path: &Path) -> Result<(), ScanFailure> {
 }
 
 fn run_ollama_list() -> Result<std::process::Output, std::io::Error> {
-    Command::new("ollama").arg("list").output()
+    Command::new("ollama")
+        .arg("list")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
 }
 
 fn local_ai_status_sync(selected_model: Option<String>) -> LocalAiStatus {
@@ -857,6 +886,7 @@ fn pull_local_ai_model_sync(
         .arg(&selected_model)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|error| {
             ScanFailure::new(format!(
@@ -1431,6 +1461,54 @@ fn emit_ai_enrichment_failure(window: &tauri::WebviewWindow, message: &str) {
     );
 }
 
+// Polls fixed drive letters D:-Z: for a `TeslaCam` folder at the root, matching the
+// layout `discover_footage_source.py`/`source_discovery.py` already treat as a
+// supported USB source. Kept as a plain existence check rather than a full backend
+// scan so polling stays cheap; it only tells the user a drive appeared, it never
+// starts a scan on its own.
+fn scan_for_teslacam_drives() -> HashSet<String> {
+    let mut found = HashSet::new();
+    for letter in b'D'..=b'Z' {
+        let drive = format!("{}:", letter as char);
+        if Path::new(&format!("{}\\TeslaCam", drive)).is_dir() {
+            found.insert(drive);
+        }
+    }
+    found
+}
+
+fn spawn_teslacam_drive_watcher(window: tauri::WebviewWindow) {
+    thread::spawn(move || {
+        let mut known_drives: HashSet<String> = HashSet::new();
+        loop {
+            let current_drives = scan_for_teslacam_drives();
+
+            for drive in current_drives.difference(&known_drives) {
+                let _ = window.emit(
+                    "mimir-teslacam-drive-detected",
+                    TeslaCamDriveEvent {
+                        drive: drive.clone(),
+                        teslacam_path: format!("{}\\TeslaCam", drive),
+                    },
+                );
+            }
+
+            for drive in known_drives.difference(&current_drives) {
+                let _ = window.emit(
+                    "mimir-teslacam-drive-removed",
+                    TeslaCamDriveEvent {
+                        drive: drive.clone(),
+                        teslacam_path: format!("{}\\TeslaCam", drive),
+                    },
+                );
+            }
+
+            known_drives = current_drives;
+            thread::sleep(Duration::from_secs(3));
+        }
+    });
+}
+
 fn spawn_ai_enrichment(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
@@ -1751,6 +1829,7 @@ async fn cancel_local_scan(
     };
     let status = Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
         .status()
         .map_err(|error| ScanFailure::new(format!("Could not stop the scan: {}", error)))?;
     Ok(status.success())
@@ -2338,6 +2417,217 @@ async fn export_training_contribution(
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+#[derive(Deserialize)]
+struct ReportImage {
+    label: String,
+    path: String,
+}
+
+#[derive(Deserialize)]
+struct ReportSection {
+    heading: String,
+    lines: Vec<String>,
+}
+
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+fn mime_type_for_extension(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        _ => "image/jpeg",
+    }
+}
+
+// Builds a self-contained (no external requests, images embedded as data URIs) HTML
+// report meant to be shared outside Mimir -- attached to an insurance claim, sent to
+// another driver, printed. A light, document-style layout on purpose: the app's own
+// dark theme is right for extended screen review, but reads as unprofessional and
+// wastes ink/toner in a printed or emailed report.
+fn build_incident_report_html(
+    title: &str,
+    severity_label: &str,
+    subtitle: &str,
+    generated_at: &str,
+    sections: &[ReportSection],
+    embedded_images: &[(String, String, String)],
+) -> String {
+    let severity_class = match severity_label {
+        "Important" => "sev-important",
+        "Review" => "sev-review",
+        _ => "sev-ignored",
+    };
+
+    let mut images_html = String::new();
+    for (label, mime, data) in embedded_images {
+        images_html.push_str(&format!(
+            "<figure><img src=\"data:{mime};base64,{data}\" alt=\"{label}\" /><figcaption>{label}</figcaption></figure>\n",
+            mime = mime,
+            data = data,
+            label = escape_html(label),
+        ));
+    }
+
+    let mut sections_html = String::new();
+    for section in sections {
+        if section.lines.is_empty() {
+            continue;
+        }
+        let items: String = section
+            .lines
+            .iter()
+            .map(|line| format!("<li>{}</li>", escape_html(line)))
+            .collect();
+        sections_html.push_str(&format!(
+            "<section><h2>{heading}</h2><ul>{items}</ul></section>\n",
+            heading = escape_html(&section.heading),
+            items = items,
+        ));
+    }
+
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>{title} - Mimir incident report</title>
+<style>
+  :root {{ color-scheme: light; }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    margin: 0;
+    padding: 40px;
+    background: #ffffff;
+    color: #1a1c1b;
+    font-family: -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.5;
+  }}
+  .wrap {{ max-width: 760px; margin: 0 auto; }}
+  .masthead {{
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 24px;
+  }}
+  .brand {{ font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #4b5f56; }}
+  .generated {{ font-size: 12px; color: #6b6b6b; }}
+  h1 {{ font-size: 26px; margin: 0 0 6px; }}
+  .subtitle {{ color: #4a4a4a; font-size: 14px; margin: 0 0 18px; }}
+  .badge {{
+    display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+    padding: 4px 12px; border-radius: 999px; margin-bottom: 22px;
+  }}
+  .sev-important {{ background: #f6dedc; color: #8a2f27; }}
+  .sev-review {{ background: #f5ecd8; color: #7a5a17; }}
+  .sev-ignored {{ background: #e7e9e8; color: #4a4f4d; }}
+  figure {{
+    display: inline-block; width: 47%; margin: 0 1.5% 18px 0; vertical-align: top;
+  }}
+  figure img {{ width: 100%; border-radius: 6px; border: 1px solid #ddd; display: block; }}
+  figcaption {{ font-size: 11px; color: #666; margin-top: 4px; }}
+  section {{ margin: 22px 0; }}
+  section h2 {{ font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: #4b5f56; margin: 0 0 8px; }}
+  section ul {{ margin: 0; padding-left: 20px; font-size: 14px; }}
+  section li {{ margin-bottom: 4px; }}
+  footer {{ margin-top: 36px; padding-top: 14px; border-top: 1px solid #ddd; font-size: 11px; color: #888; }}
+  @media print {{
+    body {{ padding: 0; }}
+    figure {{ break-inside: avoid; }}
+  }}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="masthead">
+      <div class="brand">Mimir incident report</div>
+      <div class="generated">Generated {generated_at}</div>
+    </div>
+    <h1>{title}</h1>
+    <p class="subtitle">{subtitle}</p>
+    <div class="badge {severity_class}">{severity_label}</div>
+    <div>{images_html}</div>
+    {sections_html}
+    <footer>
+      Produced locally by Mimir from local evidence only. This report documents Mimir's
+      local analysis of the selected clip; it does not prove fault, identify people, or
+      constitute a legal or insurance determination. Video-space overlap or proximity
+      shows apparent visual contact, not confirmed physical contact.
+    </footer>
+  </div>
+</body>
+</html>
+"#,
+        title = escape_html(title),
+        generated_at = escape_html(generated_at),
+        subtitle = escape_html(subtitle),
+        severity_class = severity_class,
+        severity_label = escape_html(severity_label),
+        images_html = images_html,
+        sections_html = sections_html,
+    )
+}
+
+#[tauri::command]
+async fn export_incident_report(
+    incident_id: String,
+    title: String,
+    severity_label: String,
+    subtitle: String,
+    generated_at: String,
+    sections: Vec<ReportSection>,
+    images: Vec<ReportImage>,
+) -> Result<String, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let documents_root = default_documents_root()?;
+        let reports_dir = documents_root.join("Mimir Reports");
+        fs::create_dir_all(&reports_dir)
+            .map_err(|error| ScanFailure::new(format!("Could not create the reports folder: {error}")))?;
+
+        let mut embedded_images = Vec::new();
+        for image in &images {
+            let path = PathBuf::from(&image.path);
+            if !path.is_file() {
+                continue;
+            }
+            let bytes = match fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(_) => continue,
+            };
+            let mime = mime_type_for_extension(&path);
+            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+            embedded_images.push((image.label.clone(), mime.to_string(), data));
+        }
+
+        let html = build_incident_report_html(&title, &severity_label, &subtitle, &generated_at, &sections, &embedded_images);
+
+        let filename = format!(
+            "{}_{}.html",
+            safe_filename(&incident_id),
+            safe_filename(&chrono_like_now()),
+        );
+        let report_path = reports_dir.join(filename);
+        fs::write(&report_path, html)
+            .map_err(|error| ScanFailure::new(format!("Could not write the report file: {error}")))?;
+
+        open_folder_with_explorer(&report_path)?;
+
+        Ok(report_path.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|error| ScanFailure::new(format!("Report export task failed: {error}")))?
+}
+
 #[tauri::command]
 async fn open_containing_folder(path: String) -> Result<(), ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -2442,6 +2732,59 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn backend_resource_path_matches_where_the_bundler_actually_places_files() {
+        // Regression test for a bug where a packaged (release) build could never find
+        // its bundled scanner: resource_dir() on Windows is the exe's own directory,
+        // not a "resources" subfolder inside it, so that segment must be added back.
+        let resolved = backend_resource_path(Path::new(r"C:\Program Files\Mimir"), "mimir-core-v2-scan.exe");
+        assert_eq!(
+            resolved,
+            Path::new(r"C:\Program Files\Mimir\resources\mimir-backend\mimir-core-v2-scan.exe")
+        );
+    }
+
+    #[test]
+    fn report_html_escaping_neutralizes_markup() {
+        let escaped = escape_html("<script>alert(\"hi\")</script> & more");
+        assert!(!escaped.contains('<'));
+        assert!(!escaped.contains('>'));
+        assert!(escaped.contains("&lt;script&gt;"));
+        assert!(escaped.contains("&amp;"));
+        assert!(escaped.contains("&quot;"));
+    }
+
+    #[test]
+    fn report_image_mime_type_matches_extension() {
+        assert_eq!(mime_type_for_extension(Path::new("frame.png")), "image/png");
+        assert_eq!(mime_type_for_extension(Path::new("frame.WEBP")), "image/webp");
+        assert_eq!(mime_type_for_extension(Path::new("frame.jpg")), "image/jpeg");
+        assert_eq!(mime_type_for_extension(Path::new("frame")), "image/jpeg");
+    }
+
+    #[test]
+    fn report_html_embeds_content_and_escapes_untrusted_fields() {
+        let sections = vec![ReportSection {
+            heading: "Local evidence".to_string(),
+            lines: vec!["<b>not bold</b>".to_string()],
+        }];
+        let images = vec![("Key frame".to_string(), "image/jpeg".to_string(), "AAAA".to_string())];
+        let html = build_incident_report_html(
+            "Parked <incident>",
+            "Important",
+            "12:00 - front.mp4",
+            "2026-07-23 12:00",
+            &sections,
+            &images,
+        );
+
+        assert!(html.contains("Parked &lt;incident&gt;"));
+        assert!(html.contains("sev-important"));
+        assert!(html.contains("data:image/jpeg;base64,AAAA"));
+        assert!(html.contains("&lt;b&gt;not bold&lt;/b&gt;"));
+        assert!(!html.contains("<incident>"));
+    }
 }
 
 fn main() {
@@ -2449,6 +2792,12 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ActiveScanProcess::default())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                spawn_teslacam_drive_watcher(window);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             check_system_requirements,
             count_teslacam_clips,
@@ -2465,6 +2814,7 @@ fn main() {
             load_latest_session_json,
             list_session_history,
             export_training_contribution,
+            export_incident_report,
             open_containing_folder,
             open_mimir_storage_folder,
             log_incident_diagnostic

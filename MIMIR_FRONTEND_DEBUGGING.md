@@ -124,25 +124,25 @@ Check:
 Useful files:
 
 - `src\App.tsx`
-- `src\components\ScanProgress.tsx`
+- `src\components\ActiveScanStatus.tsx`
 - `src-tauri\src\main.rs`
 
-Backend performance reports:
+Backend performance data is in the session's `performance` block:
 
 ```text
-C:\Mimir_Backend\MimirOutput\performance_report.json
-C:\Mimir_Backend\MimirOutput\large_scan_benchmark.json
+C:\Mimir_Backend\MimirOutputV2\latest_session.json
 ```
 
 ## If Review Actions Fail
 
-Review actions call:
+Review actions call one of:
 
 ```ts
-invoke('run_incident_action', ...)
+invoke('run_core_v2_storage_action', ...)
+invoke('save_manual_status', ...)
 ```
 
-These actions are handled by Tauri and the backend clip action script.
+These are handled by Tauri and the backend clip action script.
 
 Check:
 
@@ -192,9 +192,8 @@ Feedback packages:
 Backend scan outputs:
 
 ```text
-C:\Mimir_Backend\MimirOutput\latest_session.json
-C:\Mimir_Backend\MimirOutput\performance_report.json
-C:\Mimir_Backend\MimirOutput\AIAudit\
+C:\Mimir_Backend\MimirOutputV2\latest_session.json
+C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\session.json
 ```
 
 Development terminal logs may also exist in the repo, such as:

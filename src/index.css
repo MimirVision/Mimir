@@ -40,6 +40,16 @@
     color: var(--mimir-text);
     @apply antialiased;
     font-feature-settings: 'cv11' 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Shared page-level glow behind the floating "instrument panel" screens (import,
+     library, viewer) so it only needs to be defined once instead of duplicated per
+     screen wrapper in App.tsx. */
+  .mimir-page-glow {
+    background:
+      radial-gradient(circle at 50% -18%, rgba(157, 183, 170, 0.1), transparent 34%),
+      radial-gradient(circle at 6% 8%, rgba(196, 119, 114, 0.045), transparent 26%);
   }
 
   ::selection {
