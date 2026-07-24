@@ -68,7 +68,7 @@ try {
   npm run sidecar:build
   if ($LASTEXITCODE -ne 0) { throw "Sidecar build failed." }
 
-  foreach ($Name in @("mimir-core-v2-scan.exe", "mimir-core-v2-ai-enrich.exe", "mimir-core-v2-actions.exe", "mimir-core-v2-dataset.exe", "age.exe")) {
+  foreach ($Name in @("mimir-core-v2-scan.exe", "mimir-core-v2-ai-enrich.exe", "mimir-core-v2-actions.exe", "mimir-core-v2-dataset.exe", "mimir-core-v2-model-update.exe", "age.exe")) {
     Sign-And-Verify (Join-Path $BackendResources $Name) $SignTool
   }
 

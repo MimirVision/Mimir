@@ -5,7 +5,7 @@ and diagnostics remain on the user's Windows computer unless the user explicitly
 exports or uploads them.
 
 No account, telemetry service, payment service, or activation service is required
-for the free private beta. Experimental AI uses a locally configured model and is
+for the free beta. Experimental AI uses a locally configured model and is
 off by default.
 
 Mimir keeps session history in its per-user application data directory so a prior

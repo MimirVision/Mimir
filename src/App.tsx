@@ -629,8 +629,11 @@ export default function App() {
           stderr: error.stderr ?? '',
         })
       } else {
-        setScanError(error instanceof Error ? error.message : String(error))
-        setScanOutput(null)
+        setScanError('Something unexpected happened while scanning. See technical details below, or try again.')
+        setScanOutput({
+          stdout: '',
+          stderr: error instanceof Error ? error.message : String(error),
+        })
       }
     }
   }

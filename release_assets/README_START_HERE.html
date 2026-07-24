@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mimir Private Beta</title>
+    <title>Mimir Beta</title>
     <style>
       :root {
         color-scheme: dark;
@@ -169,6 +169,10 @@
         line-height: 1.7;
       }
 
+      .note a {
+        color: var(--muted);
+      }
+
       .badge-row {
         display: flex;
         flex-wrap: wrap;
@@ -207,10 +211,11 @@
       <div class="shell">
         <div class="hero">
           <div class="brand">Mimir</div>
-          <h1>Mimir Private Beta</h1>
+          <h1>Mimir Free Beta</h1>
           <p class="subtitle">AI incident review for vehicle footage. Import a folder, scan locally, and review only the moments worth watching.</p>
           <a class="installer" href="MimirSetup.exe">Run MimirSetup.exe</a>
-          <p class="note">If Windows warns that the app is unsigned, choose the advanced option to continue. Code signing is planned after the private beta.</p>
+          <p class="note">If Windows warns that the app is unsigned, choose the advanced option to continue. Code signing is planned for a future release.</p>
+          <p class="note">Found a bug or a missed/false incident? Email <a href="mailto:feedback.mimir@gmail.com">feedback.mimir@gmail.com</a>.</p>
           <div class="badge-row">
             <span class="badge">Local processing</span>
             <span class="badge">Review-only scan</span>
@@ -222,7 +227,7 @@
           <section>
             <h2>Install and Scan</h2>
             <ol>
-              <li><span class="num">1</span><span><strong>Run MimirSetup.exe.</strong> Install the private beta on your Windows PC.</span></li>
+              <li><span class="num">1</span><span><strong>Run MimirSetup.exe.</strong> Install the free beta on your Windows PC.</span></li>
               <li><span class="num">2</span><span><strong>Open Mimir.</strong> The app opens to the footage import screen.</span></li>
               <li><span class="num">3</span><span><strong>Choose a footage folder.</strong> Select a USB folder or a local folder containing vehicle footage.</span></li>
               <li><span class="num">4</span><span><strong>Scan locally.</strong> Pick Fast, Balanced, or Quality and let Mimir analyze on this device.</span></li>

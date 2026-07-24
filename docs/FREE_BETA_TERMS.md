@@ -1,10 +1,10 @@
-# Mimir Free Private Beta Terms
+# Mimir Free Beta Terms
 
-Last updated: 2026-07-22
+Last updated: 2026-07-24
 
-Mimir is currently a free, invite-only Windows beta. There are no subscriptions,
-payments, activation servers, or automatic charges. Access is controlled only by
-who receives the installer.
+Mimir is currently a free, publicly downloadable Windows beta. There are no
+subscriptions, payments, activation servers, accounts, or automatic charges.
+Anyone can download and run it.
 
 Mimir is a review assistant, not a definitive accident, crime, insurance, or legal
 decision system. It can miss important footage and can flag ordinary activity.

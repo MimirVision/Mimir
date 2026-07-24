@@ -62,6 +62,7 @@
       "resources/mimir-backend/mimir-core-v2-ai-enrich.exe",
       "resources/mimir-backend/mimir-core-v2-actions.exe",
       "resources/mimir-backend/mimir-core-v2-dataset.exe",
+      "resources/mimir-backend/mimir-core-v2-model-update.exe",
       "resources/mimir-backend/age.exe",
       "resources/mimir-backend/AGE-LICENSE.txt"
     ],

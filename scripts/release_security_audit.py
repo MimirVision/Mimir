@@ -86,6 +86,7 @@ def scan_packaged_runtimes(frontend: Path) -> list[dict[str, str]]:
         "mimir-core-v2-ai-enrich.exe",
         "mimir-core-v2-actions.exe",
         "mimir-core-v2-dataset.exe",
+        "mimir-core-v2-model-update.exe",
     )
     allowed_names = {*packaged_names, "age.exe", "AGE-LICENSE.txt"}
     if runtime_dir.exists():

@@ -3,6 +3,7 @@ import mimirLockup from '../assets/mimir-lockup.png'
 import { FULL_AI_BETA, MIMIR_VERSION, USE_MIMIR_CORE_V2 } from '../config'
 import { ActiveScanStatus } from './ActiveScanStatus'
 import type { ScanOutput } from './ActiveScanStatus'
+import { ModelUpdatePanel } from './ModelUpdatePanel'
 import type {
   AiTimeoutSec,
   BackendProgress,
@@ -736,18 +737,18 @@ export function ImportPanel({
           <div className="mb-5 inline-flex rounded-full border border-[rgba(157,183,170,0.15)] bg-[var(--mimir-accent-soft)] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
             Local incident review
           </div>
-          <h1 className="max-w-[680px] text-[44px] font-semibold leading-[1.02] text-[var(--mimir-text)] sm:text-[58px] xl:text-[68px]">
+          <h1 className="max-w-[680px] text-[44px] font-semibold leading-[1.02] text-[var(--mimir-text)] sm:text-[58px] lg:text-[46px] xl:text-[54px]">
             Find the moments worth watching.
           </h1>
           <p className="mt-5 max-w-[520px] text-[17px] leading-8 text-[var(--mimir-text-muted)]">
             Drop in a TeslaCam folder or footage folder. Mimir scans locally and helps you review suspicious moments.
           </p>
           <div className="mt-8 text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--mimir-text-subtle)]">
-            Private Beta - {MIMIR_VERSION}
+            Free Beta - {MIMIR_VERSION}
           </div>
         </div>
 
-        <div className="flex min-h-[540px] flex-col rounded-2xl border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.042),rgba(255,255,255,0.016))] p-4 shadow-[0_28px_86px_rgba(0,0,0,0.36)] sm:p-5">
+        <div className="flex min-h-[540px] flex-col rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.042),rgba(255,255,255,0.016))] p-4 shadow-[0_28px_86px_rgba(0,0,0,0.36)] sm:p-5">
           {!showScanStatus && (
             <>
               {detectedDrive && (
@@ -990,6 +991,7 @@ export function ImportPanel({
                   onModelChange={onExperimentalAiModelChange}
                   onTimeoutSecChange={onExperimentalAiTimeoutSecChange}
                 />
+                <ModelUpdatePanel />
               </details>
             </>
           )}
