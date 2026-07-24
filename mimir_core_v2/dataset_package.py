@@ -18,6 +18,12 @@ from .cvat_client import CvatClient, CvatError, configured_token
 
 
 PACKAGE_SCHEMA = "mimir_contribution_package_v1"
+
+# Windows allocates a visible console window for a console-subsystem child process
+# (age.exe) unless the parent explicitly suppresses it, even when the parent itself
+# (the PyInstaller-built dataset exe) was launched hidden. subprocess.CREATE_NO_WINDOW
+# only exists on Windows, hence the getattr guard.
+_SUBPROCESS_NO_WINDOW_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 EXCLUSIONS_PATH = Path(__file__).with_name("training_exclusions.json")
 MAX_PACKAGE_UNCOMPRESSED_BYTES = 500 * 1024 * 1024 * 1024
 MAX_PACKAGE_FILES = 10000
@@ -144,6 +150,7 @@ def encrypt_collection(collection: Path, output: Path, recipient: str, source_se
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            **_SUBPROCESS_NO_WINDOW_FLAGS,
         )
         if result.returncode != 0:
             partial.unlink(missing_ok=True)
@@ -187,6 +194,7 @@ def decrypt_package(package: Path, identity: Path, destination: Path) -> None:
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            **_SUBPROCESS_NO_WINDOW_FLAGS,
         )
         if result.returncode != 0:
             raise DatasetPackageError(f"age decryption failed: {result.stderr.strip()}")

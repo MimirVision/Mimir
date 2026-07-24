@@ -15,7 +15,7 @@ import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 SCHEMA_VERSION = "mimir_otw_auxiliary_manifest_v1"

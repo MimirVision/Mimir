@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -502,6 +503,104 @@ def record_blind_relabel(args: argparse.Namespace) -> int:
     return 0
 
 
+def default_feedback_folder() -> Path | None:
+    home = os.environ.get("USERPROFILE") or os.environ.get("HOME")
+    if not home:
+        return None
+    return Path(home) / "Documents" / "Mimir Feedback"
+
+
+def feedback_incident_ids(feedback_folder: Path | None) -> set[str]:
+    if feedback_folder is None or not feedback_folder.is_dir():
+        return set()
+    ids: set[str] = set()
+    for entry in feedback_folder.iterdir():
+        feedback_path = entry / "feedback.json"
+        if not feedback_path.is_file():
+            continue
+        try:
+            record = read_json(feedback_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        incident_id = str(record.get("incident_id") or "").strip()
+        if incident_id:
+            ids.add(incident_id)
+    return ids
+
+
+def incident_matches_filter(incident: dict[str, Any], filter_name: str, feedback_ids: set[str]) -> bool:
+    incident_id = str(incident.get("id") or incident.get("event_group_id") or "")
+    severity = str(incident.get("final_severity") or incident.get("severity") or "").upper()
+    if filter_name == "all":
+        return True
+    if filter_name == "reviewed":
+        return bool(incident.get("manual_status_override")) or incident_id in feedback_ids
+    if filter_name == "feedback":
+        return incident_id in feedback_ids
+    if filter_name == "important":
+        return severity == "IMPORTANT"
+    if filter_name == "review":
+        return severity == "REVIEW"
+    if filter_name == "important_or_review":
+        return severity in {"IMPORTANT", "REVIEW"}
+    return False
+
+
+def select_incidents(args: argparse.Namespace) -> int:
+    """Lists incidents matching a review filter, then prints a ready-to-run
+    export-encrypted command covering all of them -- so reviewing hundreds of
+    incidents doesn't mean typing hundreds of --consent-incident flags by hand.
+    Consent is still never inferred: this only prints the command, it never
+    runs it, and the rights/consent flags still have to be supplied explicitly.
+    """
+    session_path = Path(args.session)
+    session = read_json(session_path)
+    incidents = session.get("incidents") if isinstance(session.get("incidents"), list) else []
+    feedback_ids = feedback_incident_ids(Path(args.feedback) if args.feedback else default_feedback_folder())
+
+    matched = [
+        incident
+        for incident in incidents
+        if isinstance(incident, dict) and incident_matches_filter(incident, args.filter, feedback_ids)
+    ]
+    matched_ids = sorted(str(item.get("id") or item.get("event_group_id") or "") for item in matched)
+
+    print(f"Filter: {args.filter}")
+    print(f"Matched {len(matched_ids)} of {len(incidents)} incidents in this session.")
+    for incident_id in matched_ids:
+        print(f"  {incident_id}")
+
+    if not matched_ids:
+        return 0
+
+    if not (args.recorded_by and args.rights_basis and args.permission_reference and args.output):
+        print(
+            "\nTo get a ready-to-run export command, also pass --recorded-by, "
+            "--rights-basis, --permission-reference, and --output."
+        )
+        return 0
+
+    command_parts = [
+        "python", "mimir_core_v2_dataset.py", "export-encrypted",
+        "--session", str(session_path),
+        "--output", args.output,
+        "--recorded-by", args.recorded_by,
+        "--rights-confirmed",
+        "--rights-basis", args.rights_basis,
+        "--permission-reference", args.permission_reference,
+    ]
+    for incident_id in matched_ids:
+        command_parts += ["--consent-incident", incident_id]
+    if args.recipient_file:
+        command_parts += ["--recipient-file", args.recipient_file]
+    elif args.recipient:
+        command_parts += ["--recipient", args.recipient]
+
+    print("\nReview the list above, then run this to export all of them as one consented package:\n")
+    print(" ".join(f'"{part}"' if " " in part else part for part in command_parts))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Consent-first Mimir dataset tooling.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -575,6 +674,24 @@ def build_parser() -> argparse.ArgumentParser:
     relabel.add_argument("--door-state", choices=("closed", "opening", "open", "closing", "not_visible", "not_applicable"))
     relabel.add_argument("--notes")
     relabel.add_argument("--minimum-delay-hours", type=float, default=24.0)
+    select = subparsers.add_parser(
+        "select",
+        help="List incidents matching a review filter and print a ready-to-run export-encrypted command.",
+    )
+    select.add_argument("--session", required=True)
+    select.add_argument(
+        "--filter",
+        choices=("reviewed", "feedback", "important", "review", "important_or_review", "all"),
+        default="reviewed",
+        help="reviewed = manually confirmed status or has feedback (default); feedback = has feedback only.",
+    )
+    select.add_argument("--feedback", default="", help="Override the default Documents\\Mimir Feedback folder.")
+    select.add_argument("--recorded-by", default="")
+    select.add_argument("--rights-basis", choices=("owned", "explicit_permission", "public_license"), default="")
+    select.add_argument("--permission-reference", default="")
+    select.add_argument("--output", default="", help="Destination ending in .mimir-dataset.age for the printed command.")
+    select.add_argument("--recipient", default="")
+    select.add_argument("--recipient-file", default="")
     return parser
 
 
@@ -593,6 +710,8 @@ def main(argv: list[str] | None = None) -> int:
             return validate_dataset(args)
         if args.command == "list":
             return list_annotations(args)
+        if args.command == "select":
+            return select_incidents(args)
         return annotate_incident(args)
     except (OSError, ValueError, json.JSONDecodeError, DatasetPackageError) as exc:
         print(f"Dataset error: {exc}", file=sys.stderr)

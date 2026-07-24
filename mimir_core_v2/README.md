@@ -1,7 +1,7 @@
 # Mimir Core v2
 
-Mimir Core v2 is a clean, event-based backend prototype that lives beside the existing scanner.
-It does not replace or modify `tesla_ai_sorter.py`.
+Mimir Core v2 is the shipped, event-based backend. The earlier `tesla_ai_sorter.py` scanner has
+been removed — Core v2 is not a prototype living beside it anymore.
 
 ## Core Rule
 
@@ -23,12 +23,19 @@ Core v2 creates one event group and one incident with four camera clips attached
 
 1. `source_discovery.py` finds MP4 files without moving or modifying them.
 2. `event_grouping.py` groups Tesla camera angles by event folder and timestamp.
-3. `frame_sampler.py` samples a few frames if OpenCV is available.
-4. `evidence_extractor.py` creates a simple local evidence summary.
-5. `ai_reviewer.py` provides a safe optional AI-review hook. In v2.0.1 it is stubbed.
-6. `severity_resolver.py` chooses a simple initial severity and primary camera.
-7. `output_writer.py` writes `MimirOutputV2/latest_session.json`.
-8. `cli.py` ties the pieces together.
+3. `frame_sampler.py` samples frames per event group according to scan mode.
+4. `evidence_extractor.py` extracts local evidence: motion (`motion_analysis.py`), object
+   detection (`onnx_object_detector.py`, RF-DETR Nano via ONNX Runtime), and contact/impact
+   heuristics with multi-camera corroboration.
+5. `key_moment_refiner.py` runs a dense second pass to pinpoint contact timing.
+6. `severity_resolver.py` resolves final severity with hard floors/caps that AI cannot override.
+7. `ai_reviewer.py` / `ai_enrichment.py` optionally add a local Ollama VLM second opinion — this
+   can only escalate a REVIEW case, never downgrade protected evidence.
+8. `thumbnailer.py` generates thumbnails/contact sheets.
+9. `output_writer.py` writes `MimirOutputV2/latest_session.json` and the per-session archive.
+10. `cli.py` ties the pieces together and reports progress via `progress.py`.
+
+See `MIMIR_BACKEND_GUIDE.md` (one directory up) for the full architecture writeup.
 
 ## Run
 
@@ -42,8 +49,6 @@ Optional model argument:
 python mimir_core_v2_scan.py --input "C:\mimir\test" --mode balanced --vlm qwen2.5vl:7b
 ```
 
-The first implementation focuses on clean structure and correct grouping, not perfect detection.
-
 ## Output
 
 Output is written to:
@@ -52,22 +57,9 @@ Output is written to:
 C:\Mimir_Backend\MimirOutputV2\latest_session.json
 ```
 
-The session includes:
+The session includes `schema_version`, `scanner_version`, `selected_input`, `event_groups_found`,
+`incidents`, `warnings`, and a `performance` block.
 
-- `schema_version: "mimir_v2"`
-- `scanner_version: "mimir_core_v2_0_1"`
-- `selected_input`
-- `event_groups_found`
-- `incidents`
-- `warnings`
-
-Each incident includes the grouped camera fields expected by the frontend:
-
-- `event_group_id`
-- `event_timestamp`
-- `camera_count`
-- `available_cameras`
-- `primary_camera`
-- `camera_clips`
-- `video_path`
-
+Each incident includes the grouped camera fields expected by the frontend: `event_group_id`,
+`event_timestamp`, `camera_count`, `available_cameras`, `primary_camera`, `camera_clips`,
+`video_path`.

@@ -90,6 +90,26 @@ python mimir_core_v2_dataset.py export-encrypted `
   --recipient-file C:\Mimir_Data\keys\mimir-training-recipient.txt
 ```
 
+For a large scan (hundreds of incidents), typing one `--consent-incident` per clip
+is impractical. `select` lists incidents matching a review filter and prints the
+full `export-encrypted` command covering all of them -- it never exports anything
+itself, so consent is still explicit, not inferred:
+
+```powershell
+python mimir_core_v2_dataset.py select `
+  --session MimirOutputV2\latest_session.json `
+  --filter reviewed `
+  --recorded-by "operator name" `
+  --rights-basis owned `
+  --permission-reference "Recorded by me on my vehicle" `
+  --output C:\Exports\batch.mimir-dataset.age `
+  --recipient-file C:\Mimir_Data\keys\mimir-training-recipient.txt
+```
+
+`--filter reviewed` (default) matches incidents with a manual status change or a
+saved feedback entry -- i.e. things a human actually looked at. Other filters:
+`feedback`, `important`, `review`, `important_or_review`, `all`.
+
 Only selected incident media is copied into a temporary collection. The command
 records clip-by-clip consent, hashes, provenance, and a complete inventory, encrypts
 the package with `age`, then removes the temporary plaintext package. Nothing is

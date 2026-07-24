@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = BASE_DIR / "MimirOutput"
+OUTPUT_DIR = BASE_DIR / "MimirOutputV2"
 SESSION_PATH = OUTPUT_DIR / "latest_session.json"
 REPORT_PATH = OUTPUT_DIR / "grouping_report.json"
 
@@ -357,11 +357,6 @@ def main():
         item["id"]
         for item in incidents
         if item["has_event_group_id"] and item["has_camera_clips"]
-    }
-    duplicate_incident_ids = {
-        incident_id
-        for group in duplicate_groups
-        for incident_id in group["incident_ids"]
     }
 
     split_camera_duplicate_ids = {

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from .otw_auxiliary import (
     CLASS_NAMES,
     FRAME_SAMPLES,
     INPUT_CHANNELS,
+    OtwTrainingError,
+    build_cache,
     interpolate_box,
     sample_frame_indices,
 )
@@ -43,6 +48,27 @@ class OtwAuxiliaryTests(unittest.TestCase):
             ("side_door_activity", "other_vehicle_access", "other_activity"),
         )
         self.assertEqual(INPUT_CHANNELS, 15)
+
+    def test_cache_build_refuses_a_manifest_that_claims_promotion_eligibility(self) -> None:
+        # Mirrors the MEVA/CARLA promotion guards: build_cache is the mandatory first
+        # stage of OTW auxiliary training, so this is where a tampered or regressed
+        # manifest must be rejected before any training work happens.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "mimir_otw_auxiliary_manifest_v1",
+                        "promotion_eligible": True,
+                        "videos": [],
+                        "activities": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(OtwTrainingError):
+                build_cache(manifest_path, root / "cache.npz")
 
 
 if __name__ == "__main__":

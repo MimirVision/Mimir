@@ -59,8 +59,14 @@ def _load_session(model_path: Path) -> Any:
         import onnxruntime as ort  # type: ignore
 
         available = ort.get_available_providers()
-        requested = os.environ.get("MIMIR_ONNX_PROVIDER", "CPUExecutionProvider").strip()
-        provider = requested if requested in available else "CPUExecutionProvider"
+        requested = os.environ.get("MIMIR_ONNX_PROVIDER", "DmlExecutionProvider").strip()
+        # Prefer the requested (GPU) provider when it's actually installed, but always
+        # keep CPUExecutionProvider as a second entry so ONNX Runtime falls back to it
+        # automatically if the GPU provider is present but fails to initialize on this
+        # specific machine (missing/older driver, no compatible device), rather than
+        # detection silently going dark.
+        providers = [requested] if requested in available and requested != "CPUExecutionProvider" else []
+        providers.append("CPUExecutionProvider")
         options = ort.SessionOptions()
         configured_threads = os.environ.get("MIMIR_ONNX_INTRA_OP_THREADS", "").strip()
         logical_cpus = max(1, os.cpu_count() or 1)
@@ -69,7 +75,7 @@ def _load_session(model_path: Path) -> Any:
         options.inter_op_num_threads = 1
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        _SESSION = ort.InferenceSession(str(model_path), sess_options=options, providers=[provider])
+        _SESSION = ort.InferenceSession(str(model_path), sess_options=options, providers=providers)
         _LAST_ERROR = ""
     except Exception as exc:
         _SESSION = None

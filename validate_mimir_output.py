@@ -3,7 +3,7 @@ import os
 import sys
 
 
-SESSION_PATH = r"C:\Mimir_Backend\MimirOutput\latest_session.json"
+SESSION_PATH = r"C:\Mimir_Backend\MimirOutputV2\latest_session.json"
 
 VALID_DECISIONS = {"IMPORTANT", "REVIEW", "IGNORE"}
 VALID_IMPACT_LEVELS = {"NONE", "LOW", "MEDIUM", "HIGH"}

@@ -56,5 +56,61 @@ class VideoDecodeTests(unittest.TestCase):
                 self.assertTrue(np.array_equal(actual[index], expected[index]), index)
 
 
+class _FakeCapture:
+    """Minimal capture double: frame N is the integer N, grab/read never fail unless told to."""
+
+    def __init__(self, fail_grab_at: set[int] | None = None, fail_read_at: set[int] | None = None) -> None:
+        self.position = 0
+        self._fail_grab_at = fail_grab_at or set()
+        self._fail_read_at = fail_read_at or set()
+
+    def set(self, _prop: object, value: int) -> None:
+        self.position = int(value)
+
+    def grab(self) -> bool:
+        if self.position in self._fail_grab_at:
+            return False
+        self.position += 1
+        return True
+
+    def read(self) -> tuple[bool, object]:
+        if self.position in self._fail_read_at:
+            self._fail_read_at.discard(self.position)  # fail only the first read at this position
+            return False, None
+        return True, self.position
+
+
+class _FakeCv2:
+    CAP_PROP_POS_FRAMES = 1
+
+
+class VideoDecodeFakeCaptureTests(unittest.TestCase):
+    def test_empty_indexes_returns_empty_list(self) -> None:
+        self.assertEqual(read_frames_at_indexes(_FakeCapture(), [], _FakeCv2()), [])
+
+    def test_negative_indexes_clamp_to_zero(self) -> None:
+        frames = read_frames_at_indexes(_FakeCapture(), [-5], _FakeCv2())
+        self.assertEqual(frames, [(0, 0)])
+
+    def test_duplicate_and_unsorted_indexes_are_deduplicated_and_ordered(self) -> None:
+        frames = read_frames_at_indexes(_FakeCapture(), [5, 1, 5, 3, 1], _FakeCv2())
+        self.assertEqual([index for index, _ in frames], [1, 3, 5])
+
+    def test_grab_failure_recovers_via_direct_seek(self) -> None:
+        # Reading frame 0 then sequentially grabbing towards frame 3 hits a grab
+        # failure at frame 1; the function must fall back to a direct seek instead
+        # of silently losing the requested frame.
+        capture = _FakeCapture(fail_grab_at={1})
+        frames = read_frames_at_indexes(capture, [0, 3], _FakeCv2())
+        self.assertEqual(frames, [(0, 0), (3, 3)])
+
+    def test_read_failure_retries_with_a_direct_seek(self) -> None:
+        capture = _FakeCapture(fail_read_at={2})
+        frames = read_frames_at_indexes(capture, [2], _FakeCv2())
+        # After the first read fails, the function re-seeks and reads again; the fake
+        # capture only fails the read once per position so the retry succeeds.
+        self.assertEqual(frames, [(2, 2)])
+
+
 if __name__ == "__main__":
     unittest.main()
