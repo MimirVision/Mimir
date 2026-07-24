@@ -17,7 +17,7 @@ python discover_footage_source.py --input "<path>"
 Run a full scan:
 
 ```powershell
-python tesla_ai_sorter.py --input "<path>" --mode balanced --vlm qwen2.5vl:7b
+python mimir_core_v2_scan.py --input "<path>" --mode balanced --vlm qwen2.5vl:7b
 ```
 
 ## Test Cases
@@ -173,7 +173,7 @@ Expected:
 ## Pass Criteria
 
 - `discover_footage_source.py` prints a readable summary for each source shape.
-- `tesla_ai_sorter.py` writes `latest_session.json` for supported source shapes.
+- `mimir_core_v2_scan.py` writes `latest_session.json` for supported source shapes.
 - `latest_session.json` includes a useful `source_report`.
 - Selecting a USB drive root works for a non-technical user.
 - Empty or unsupported folders produce a clear no-footage message, not a traceback.

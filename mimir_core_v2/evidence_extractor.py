@@ -10,15 +10,25 @@ from .onnx_object_detector import reset_runtime as reset_object_detector_runtime
 from .onnx_object_detector import runtime_diagnostics as object_detector_runtime_diagnostics
 
 
+# NOTE: this file is the safety-critical decision surface described in
+# MIMIR_TUNING_GUIDE.md. Thresholds are grouped by concern below purely for
+# navigation -- values, names, and order are unchanged, so this is a
+# documentation-only edit. See MIMIR_TUNING_GUIDE.md for what to touch when
+# tuning false-Important/false-Ignore behavior, and never remove the hard
+# floors enforced downstream in severity_resolver.py.
+
+# -- Person/vehicle dwell time, used to distinguish a pass-by from lingering --
 PERSON_PASSBY_MAX_SEC = 2.0
 PERSON_LINGER_MIN_SEC = 4.0
 VEHICLE_PASSBY_MAX_SEC = 2.0
 VEHICLE_LINGER_MIN_SEC = 4.0
 
+# -- Schema/algorithm version stamps recorded on every incident --
 EVIDENCE_VERSION = "local_evidence_v2_0_3"
 IMPACT_DETECTION_VERSION = "impact_motion_v2_0_4_group_corroboration"
 KEY_MOMENT_VERSION = "key_moments_v4_contact_semantics"
 
+# -- Global/localized motion level and spike-ratio thresholds --
 MOTION_LOW_THRESHOLD = 0.28
 MOTION_MEDIUM_THRESHOLD = 0.55
 MOTION_HIGH_THRESHOLD = 0.82
@@ -26,22 +36,36 @@ MOTION_SPIKE_MEDIUM_RATIO = 2.2
 MOTION_SPIKE_HIGH_RATIO = 3.0
 LOCALIZED_CONTACT_THRESHOLD = 0.35
 LOCALIZED_CONTACT_HIGH_THRESHOLD = 0.75
+
+# -- Camera-shake level thresholds (used to discount shake-only motion) --
 CAMERA_SHAKE_MEDIUM_THRESHOLD = 0.38
 CAMERA_SHAKE_HIGH_THRESHOLD = 0.55
+
+# -- "Hard close" object-proximity heuristic (object fills a large, low share
+# of frame plus corroborating motion) --
 HARD_CLOSE_OBJECT_AREA_THRESHOLD = 0.70
 HARD_CLOSE_OBJECT_BOTTOM_THRESHOLD = 0.95
 HARD_CLOSE_LOCALIZED_MOTION_THRESHOLD = 0.50
 HARD_CLOSE_GLOBAL_MOTION_THRESHOLD = 0.18
 HARD_CLOSE_SPIKE_RATIO_THRESHOLD = 3.0
+
+# -- Impact-candidate heuristic (motion-only, independent of hard-close) --
 IMPACT_CANDIDATE_SPIKE_RATIO_THRESHOLD = 3.5
 IMPACT_CANDIDATE_SHAKE_THRESHOLD = 0.12
 IMPACT_CANDIDATE_MAX_MOTION_THRESHOLD = 0.22
+
+# -- No-object-detector fallback thresholds (used when the ONNX detector is
+# disabled/unavailable; intentionally stricter -- see docs/LIMITATIONS.md) --
 NO_YOLO_LOCALIZED_MOTION_THRESHOLD = 0.50
 NO_YOLO_SPIKE_RATIO_THRESHOLD = 4.0
 NO_YOLO_CAMERA_SHAKE_THRESHOLD = 0.10
 NO_YOLO_MAX_MOTION_THRESHOLD = 0.18
+
+# -- Key-moment selection --
 KEY_MOMENT_MAX_COUNT = 5
 KEY_MOMENT_DEDUP_SEC = 1.0
+
+# -- "Apparent visual contact" candidate scoring --
 VISUAL_CONTACT_IGNORE_START_SEC = 2.0
 VISUAL_CONTACT_MIN_LOCALIZED = 0.48
 VISUAL_CONTACT_MIN_GLOBAL = 0.10
@@ -50,23 +74,35 @@ VISUAL_CONTACT_MIN_CLUSTER_SEC = 1.25
 VISUAL_CONTACT_MIN_CLUSTER_SAMPLES = 3
 VISUAL_CONTACT_BODY_ZONE_BONUS = 0.08
 VISUAL_CONTACT_MIN_SCORE = 0.32
+
+# -- Contact-track window around a candidate contact moment --
 CONTACT_TRACK_WINDOW_BEFORE_SEC = 0.25
 CONTACT_TRACK_WINDOW_AFTER_SEC = 1.5
 CONTACT_TRACK_MIN_VISUAL_SCORE = 0.22
 CONTACT_TRACK_MIN_LOCALIZED_SCORE = 0.30
 CONTACT_TRACK_MIN_EGO_ZONE_SCORE = 0.22
+
+# -- Motion-region geometry (pixel-area/touch-margin ratios) --
 MOTION_REGION_MIN_AREA_RATIO = 0.0012
 MOTION_REGION_TOUCH_MARGIN_RATIO = 0.035
+
+# -- Object-detection-corroborated contact scoring --
 OBJECT_CONTACT_TIME_TOLERANCE_SEC = 0.35
 OBJECT_CONTACT_MIN_SCORE = 0.30
 OBJECT_CONTACT_HIGH_SCORE = 0.48
 OBJECT_CONTACT_VEHICLE_ONLY_MIN_SCORE = 0.60
 OBJECT_CONTACT_PERSON_ONLY_MIN_SCORE = 0.62
 OBJECT_CONTACT_VEHICLE_ONLY_IGNORE_START_SEC = 4.0
+
+# -- Ego-vehicle-zone motion (per-camera masked region from ego_vehicle.py) --
 EGO_ZONE_MIN_MOTION = 0.16
 EGO_ZONE_MOTION_RATIO = 0.50
+
+# -- Object-detection sampling cadence --
 OBJECT_DETECTION_UNIFORM_INTERVAL_SEC = 1.0
 OBJECT_DETECTION_CANDIDATE_RADIUS_SEC = 2.0
+
+# -- Multi-camera corroboration and camera-group membership --
 MULTI_CAMERA_IMPACT_TIME_TOLERANCE_SEC = 0.65
 SIDE_REPEATER_CAMERAS = {"left_repeater", "right_repeater"}
 REAR_CAMERAS = {"back", "rear"}

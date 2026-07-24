@@ -1,6 +1,7 @@
 # Mimir Debugging Guide
 
-This guide gives practical first steps when something looks wrong.
+This guide gives practical first steps when something looks wrong. It targets the shipped
+`mimir_core_v2` scanner — the earlier `tesla_ai_sorter.py` scanner has been removed.
 
 ## First Commands To Run
 
@@ -8,139 +9,95 @@ From the backend folder:
 
 ```powershell
 cd C:\Mimir_Backend
-python -m py_compile tesla_ai_sorter.py
-python validate_mimir_output.py
-python inspect_latest_session.py
+.venv\Scripts\python.exe -m py_compile mimir_core_v2_scan.py
+.venv\Scripts\python.exe -m unittest discover -s mimir_core_v2 -t . -p "test_*.py"
+.venv\Scripts\python.exe inspect_latest_session.py
 ```
 
 For a fresh scan:
 
 ```powershell
-python tesla_ai_sorter.py --input "C:\mimir\test" --mode balanced
-python validate_mimir_output.py
+.venv\Scripts\python.exe mimir_core_v2_scan.py --input "C:\mimir\test" --mode balanced
 ```
 
-For performance:
+For a quick pipeline verification (also what CI runs):
 
 ```powershell
-python benchmark_large_scan.py --input "C:\mimir\test" --mode balanced --max-runtime-min 60
+.venv\Scripts\python.exe mimir_core_v2_verify.py --level quick
 ```
 
 ## If A Scan Is Slow
 
-Check:
+Check the session's `performance` block in `latest_session.json`, and the fields:
 
-```text
-C:\Mimir_Backend\MimirOutput\performance_report.json
-C:\Mimir_Backend\MimirOutput\performance_report.csv
-C:\Mimir_Backend\MimirOutput\large_scan_benchmark.json
-```
-
-Look for:
-
-- `total_runtime_sec`
-- `stage_timings`
-- `slowest_groups`
-- `prepass_groups_processed`
-- `deep_analysis_groups`
-- `skipped_low_interest_groups`
-- `ai_calls`
-- `ai_review_runtime_sec`
+- `performance.total_runtime_sec`
+- `performance.parts_sec` / `performance.stage_runtime_sec`
+- `performance.object_detector_runtime_sec`, `object_detector_inference_count`
+- `performance.detector_cache_hits` / `detector_cache_misses`
+- `performance.ai_calls`, `ai_runtime_sec`
 
 Common causes:
 
-- AI model is running on too many groups.
-- YOLO is scanning too many frames.
-- Prepass thresholds are too low.
+- AI model is running on too many groups — lower `--ai-review-budget`.
+- Object detection is scanning too many frames — check `frame_sampler.py` sampling rate for the
+  chosen `--mode`.
 - Large clips are not being skipped as low-interest.
 
 Try:
 
 ```powershell
-python tesla_ai_sorter.py --input "C:\mimir\test" --mode fast
-python tesla_ai_sorter.py --input "C:\mimir\test" --mode balanced --ai-review-budget 10
+.venv\Scripts\python.exe mimir_core_v2_scan.py --input "C:\mimir\test" --mode fast
+.venv\Scripts\python.exe mimir_core_v2_scan.py --input "C:\mimir\test" --mode balanced --ai-review-budget 10
 ```
 
 ## If A Crash Is Ignored
 
-Open `latest_session.json` and search for the clip filename.
+Open `latest_session.json` and search for the clip filename or `incident_id`.
 
 Check:
 
-- Was an incident created?
+- Was an incident created at all?
 - `final_severity`
-- `impact_level`
-- `impact_score`
-- `possible_impact`
-- `crash_safety_triggered`
-- `severity_reasons`
+- `impact_level`, `impact_score`, `possible_impact`
+- `contact_level`, `contact_score`, `possible_contact`
+- `severity_reasons`, `severity_floor_applied`, `severity_floor_reason`
 - `classification_debug`
 - `timeline_markers`
 
-If the group was skipped, check:
-
-- `prepass_motion_score`
-- `prepass_candidate_reason`
-- `deep_analysis_performed`
-- `skipped_reason`
-
 Possible next steps:
 
-- Lower `prepass_deep_threshold`.
-- Lower crash/motion thresholds slightly.
-- Increase sample rate by using `quality` mode.
-- Confirm the relevant camera angle is in `camera_clips`.
+- Check `mimir_core_v2/evidence_extractor.py` thresholds such as `HARD_CLOSE_OBJECT_AREA_THRESHOLD`,
+  `VISUAL_CONTACT_MIN_SCORE`, `OBJECT_CONTACT_HIGH_SCORE` — lower slightly if evidence is clearly
+  present but under threshold.
+- Increase sample rate by using `thorough` mode.
+- Confirm the relevant camera angle is present in `camera_clips`.
 
-Do not remove crash safety floors. Real impacts should not be downgraded to Ignore.
+Do not remove the severity resolver's hard floors (`mimir_core_v2/severity_resolver.py`). Real
+impacts should not be downgradable to Ignore, by local rules or by AI.
 
 ## If Normal Traffic Is Flagged
 
 Check:
 
-- `normal_passing_traffic_evidence`
-- `brief_vehicle_only`
-- `object_persistence_summary`
-- `impact_level`
-- `contact_level`
-- `possible_contact`
-- `possible_impact`
+- `impact_level`, `contact_level`, `possible_impact`, `possible_contact`
+- `person_near_only`, `person_passby_evidence` vs. `person_interaction_evidence`
 - `ai_evidence_review`
-- `classification_debug.ai_blocked_reason`
+- `classification_debug`
 
-If AI caused the flag, inspect:
-
-```text
-C:\Mimir_Backend\MimirOutput\AIAudit\<incident_id>\
-```
-
-Open:
-
-- `ai_prompt.txt`
-- `ai_raw_response.txt`
-- `ai_parsed_response.json`
-- `local_evidence.json`
-- `final_decision.json`
-- `ai_review_image.jpg`
+If AI contributed to the flag, inspect the incident's own `ai_raw_response`, `ai_evidence`,
+`ai_evidence_review`, and `ai_model` fields directly in `latest_session.json` — Core v2 stores AI
+output on the incident itself rather than in a separate per-incident audit folder.
 
 Possible next steps:
 
-- Raise contact/impact thresholds slightly.
-- Make prepass less eager.
+- Raise the relevant contact/impact thresholds in `evidence_extractor.py` slightly.
 - Reduce AI budget during speed tests.
-- Add feedback from the frontend so future training can learn from it.
+- Add feedback from the frontend so future training can learn from it (see `TRAINING_DATA_GUIDE.md`).
 
 ## If Video Paths Break
 
-Check these incident fields:
-
-- `video_path`
-- `library_video_path`
-- `source_video`
-- `original_source_video`
-- `camera_clips`
-- `video_exists`
-- `storage_state`
-- `trash_video_path`
+Check these incident fields: `video_path`, `library_video_path`, `source_video`,
+`original_source_video`, `camera_clips`, `video_exists`, `storage_state`, `trash_video_path`.
 
 The frontend tries safe video paths in this general order:
 
@@ -150,15 +107,9 @@ The frontend tries safe video paths in this general order:
 4. `original_source_video`
 5. first camera clip path
 
-If a file moved after review, make sure storage actions updated:
-
-- `library_video_path`
-- `trash_video_path`
-- `camera_clips[].library_path`
-- `camera_clips[].trash_path`
-- `storage_state`
-
-Use the Files drawer in the desktop app to inspect current location.
+If a file moved after review, make sure storage actions updated `library_video_path`,
+`trash_video_path`, `camera_clips[].library_path`, `camera_clips[].trash_path`, `storage_state`.
+Use the Files drawer in the desktop app to inspect the current location.
 
 ## If The App Crashes When Opening An Incident
 
@@ -177,34 +128,24 @@ Frontend crash logs are saved to:
 
 ## If AI Looks Wrong
 
-Look at AI audit files:
+Inspect the incident's own AI fields in `latest_session.json`:
 
-```text
-C:\Mimir_Backend\MimirOutput\AIAudit\<incident_id>\
-```
+- `ai_raw_response` — the model's raw text response.
+- `ai_evidence` / `ai_evidence_review` — parsed structured evidence.
+- `ai_model` — which local model produced it.
+- `ai_reviewed`, `ai_review_skipped_reason`, `ai_parse_error` — whether/why review ran.
 
-Useful files:
-
-- `ai_prompt.txt`: what Mimir asked the model.
-- `ai_raw_response.txt`: exact model response.
-- `ai_parsed_response.json`: parsed structured response.
-- `local_evidence.json`: local signals Mimir computed.
-- `final_decision.json`: why final severity was chosen.
-- `ai_review_image.jpg`: image/contact sheet sent to AI.
-
-Remember: AI is supporting evidence. Local rules are the safety floor.
+Remember: AI is supporting evidence only. `mimir_core_v2/ai_enrichment.py` hard-codes
+`can_change_final_severity: False` — local severity-resolver rules are the safety floor.
 
 ## Where Reports And Logs Are Saved
 
 Backend:
 
 ```text
-C:\Mimir_Backend\MimirOutput\latest_session.json
-C:\Mimir_Backend\MimirOutput\performance_report.json
-C:\Mimir_Backend\MimirOutput\performance_report.csv
-C:\Mimir_Backend\MimirOutput\large_scan_benchmark.json
-C:\Mimir_Backend\MimirOutput\AIAudit\<incident_id>\
-C:\Mimir_Backend\MimirOutput\incidents\<incident_id>\
+C:\Mimir_Backend\MimirOutputV2\latest_session.json
+C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\session.json
+C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\thumbnails\
 ```
 
 Frontend/user logs:
@@ -214,7 +155,7 @@ Frontend/user logs:
 %USERPROFILE%\Documents\Mimir Feedback\
 ```
 
-Training export:
+Training export (consented data only):
 
 ```text
 C:\MimirTrainingDataset\
@@ -225,12 +166,10 @@ C:\MimirTrainingDataset\
 When tuning, use this loop:
 
 ```powershell
-python -m py_compile tesla_ai_sorter.py
-python tesla_ai_sorter.py --input "C:\mimir\test" --mode balanced
-python validate_mimir_output.py
-python inspect_latest_session.py
-python benchmark_large_scan.py --input "C:\mimir\test" --mode balanced
+.venv\Scripts\python.exe -m py_compile mimir_core_v2_scan.py
+.venv\Scripts\python.exe mimir_core_v2_scan.py --input "C:\mimir\test" --mode balanced
+.venv\Scripts\python.exe inspect_latest_session.py
+.venv\Scripts\python.exe -m unittest discover -s mimir_core_v2 -t . -p "test_*.py"
 ```
 
 Make one small change at a time, then compare outputs.
-

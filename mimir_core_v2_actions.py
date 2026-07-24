@@ -564,7 +564,6 @@ def perform_action(
         write_json(journal_path, report)
 
     for incident_key, incident in selected_keys.items():
-        destination_folder = destination_folder_for_incident(incident, action)
         file_records = collect_incident_files(incident)
         incident_results[incident_key] = []
 

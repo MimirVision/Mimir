@@ -3,7 +3,7 @@ import os
 
 
 BASE = r"C:\Mimir_Backend"
-LATEST_SESSION_JSON = os.path.join(BASE, "MimirOutput", "latest_session.json")
+LATEST_SESSION_JSON = os.path.join(BASE, "MimirOutputV2", "latest_session.json")
 PATH_FIELDS = [
     "source_video",
     "source_clip",

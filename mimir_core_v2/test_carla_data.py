@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import mimir_carla_data
 import mimir_carla_generate
-from mimir_core_v2.carla_auxiliary import _choose_threshold, _classification_metrics
+from mimir_core_v2.carla_auxiliary import CarlaAuxiliaryError, _choose_threshold, _classification_metrics, train_carla_auxiliary
 from mimir_core_v2.temporal_training import _annotation_geometry
 
 
@@ -142,6 +144,30 @@ class CarlaDataTests(unittest.TestCase):
         self.assertEqual(geometry[0], 1.0)
         self.assertEqual(geometry[1], 0.0)
         self.assertEqual(distance, 0.0)
+
+    def test_shadow_training_refuses_a_manifest_that_claims_promotion_eligibility(self) -> None:
+        # Same safety net as the OTW/MEVA auxiliary guards: a tampered or regressed
+        # training manifest must be rejected before any shadow-model training happens.
+        # torch/numpy are stubbed so this test doesn't need the real GPU training
+        # environment (requirements-training.txt) -- the guard fires before either
+        # library's real functionality would ever be used.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepared = root / "prepared"
+            prepared.mkdir()
+            (prepared / "training_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "training_purpose": "synthetic_stationary_collision_timing_pretraining_only",
+                        "promotion_eligible": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fake_modules = {"torch": MagicMock(), "numpy": MagicMock()}
+            with patch.dict(sys.modules, fake_modules):
+                with self.assertRaises(CarlaAuxiliaryError):
+                    train_carla_auxiliary(root / "features", prepared, root / "output")
 
 
 if __name__ == "__main__":

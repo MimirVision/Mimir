@@ -1,5 +1,10 @@
 # Core v2 packaged runtime. Training dependencies live in requirements-training.txt.
+# onnxruntime-directml (not the plain CPU-only onnxruntime package) so object
+# detection can run on GPU via DirectX 12 -- works across NVIDIA/AMD/Intel, not just
+# NVIDIA/CUDA, which matters for a consumer Windows app. Same model, same weights,
+# same outputs; onnx_object_detector.py falls back to CPUExecutionProvider
+# automatically wherever DirectML isn't usable.
 numpy==2.5.0
 opencv-python==4.13.0.92
-onnxruntime==1.23.2
+onnxruntime-directml==1.23.0
 pillow==12.3.0
