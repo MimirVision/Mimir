@@ -23,7 +23,7 @@ Important files:
 - `src\types.ts`: TypeScript shapes for sessions, incidents, progress, and system checks.
 - `src\index.css`: global colors, base styling, scrollbar, and Tailwind setup.
 - `src\components\ImportPanel.tsx`: import/start scan screen.
-- `src\components\ScanProgress.tsx`: scan progress UI.
+- `src\components\ActiveScanStatus.tsx`: scan progress UI (stage checklist, elapsed/ETA, cancel).
 - `src\components\IncidentLibraryView.tsx`: review grid and in-app library.
 - `src\components\IncidentViewerScreen.tsx`: incident viewer, video player, timeline, actions, and AI feedback.
 - `src\components\CrashSafeBoundary.tsx`: React error boundary and diagnostics UI.
@@ -73,7 +73,7 @@ The Rust side then runs the Python scanner.
 File:
 
 ```text
-src\components\ScanProgress.tsx
+src\components\ActiveScanStatus.tsx
 ```
 
 The backend prints progress lines beginning with `MIMIR_PROGRESS`. Tauri reads those lines and emits them to the frontend. `App.tsx` listens for progress events and updates:
@@ -252,24 +252,32 @@ src-tauri\src\main.rs
 The backend source of truth is usually:
 
 ```text
-C:\Mimir_Backend\MimirOutput\latest_session.json
+C:\Mimir_Backend\MimirOutputV2\latest_session.json
 ```
 
 ## Backend Commands
 
-Frontend calls Tauri commands with `invoke`.
-
-Common commands:
+Frontend calls Tauri commands with `invoke`. Current commands (`src-tauri\src\main.rs`,
+search for `#[tauri::command]`):
 
 - `count_teslacam_clips`: count clips before scanning.
-- `run_local_scan`: run the Python scanner.
+- `run_local_scan` / `cancel_local_scan`: run or cancel the Core v2 scanner.
 - `load_latest_session_json`: load scan results.
-- `run_incident_action`: set status or move clips after review.
+- `list_session_history`: list past sessions.
+- `run_core_v2_storage_action`: move/copy clips to Mimir Library or Trash after review.
+- `save_manual_status`: set an incident's reviewed status (Important/Review/Ignore).
+- `save_key_moment_correction`: save a user-corrected key moment timestamp.
 - `save_incident_note`: save a user note.
 - `save_incident_feedback`: save local beta feedback.
+- `check_system_requirements`: run the pre-scan environment check.
+- `check_local_ai` / `pull_local_ai_model` / `open_local_ai_download_page`: local Ollama AI setup.
+- `export_training_contribution`: age-encrypt and export a consented training contribution.
 - `open_containing_folder`: open Explorer for a file/folder.
 - `open_mimir_storage_folder`: open Mimir Library or Trash.
 - `log_incident_diagnostic`: write crash diagnostics.
+
+There is no `run_incident_action` command — storage moves and status changes are separate
+commands (`run_core_v2_storage_action` and `save_manual_status`).
 
 ## Error Handling
 

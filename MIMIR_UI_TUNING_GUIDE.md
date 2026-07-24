@@ -72,7 +72,7 @@ src\components\IncidentLibraryView.tsx
 Look for the grid:
 
 ```tsx
-grid-cols-[repeat(auto-fill,minmax(210px,1fr))]
+grid-cols-[repeat(auto-fill,minmax(238px,1fr))]
 ```
 
 To make cards wider:
@@ -207,7 +207,7 @@ Backend:
 
 ```powershell
 cd C:\Mimir_Backend
-python tesla_ai_sorter.py --input "D:\TeslaCam" --mode balanced
+.venv\Scripts\python.exe mimir_core_v2_scan.py --input "D:\TeslaCam" --mode balanced
 ```
 
 Frontend:

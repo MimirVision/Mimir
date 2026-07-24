@@ -16,10 +16,18 @@ import type {
   SessionHistoryEntry,
 } from '../types'
 
+interface DetectedTeslaCamDrive {
+  drive: string
+  teslacam_path: string
+}
+
 interface ImportPanelProps {
   selectedFolder: string
   isDraggingFolder: boolean
   onChooseFolder: () => void
+  detectedDrive: DetectedTeslaCamDrive | null
+  onUseDetectedDrive: () => void
+  onDismissDetectedDrive: () => void
   onAnalyze: () => void
   onCancelScan: () => void
   isCancellingScan: boolean
@@ -93,13 +101,9 @@ function failedSystemChecks(systemCheck: SystemCheckResult | null) {
 function SystemStatusPill({
   systemCheck,
   isCheckingSystem,
-  localAiStatus,
-  isCheckingLocalAi,
 }: {
   systemCheck: SystemCheckResult | null
   isCheckingSystem: boolean
-  localAiStatus: LocalAiStatus | null
-  isCheckingLocalAi: boolean
 }) {
   if (isCheckingSystem) {
     return (
@@ -666,6 +670,9 @@ export function ImportPanel({
   selectedFolder,
   isDraggingFolder,
   onChooseFolder,
+  detectedDrive,
+  onUseDetectedDrive,
+  onDismissDetectedDrive,
   onAnalyze,
   onCancelScan,
   isCancellingScan,
@@ -721,12 +728,7 @@ export function ImportPanel({
     <main className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1480px] flex-col overflow-hidden rounded-2xl border border-white/[0.065] bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.10),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.038),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] shadow-[0_34px_110px_rgba(0,0,0,0.56)] sm:min-h-[calc(100vh-48px)]">
       <header className="flex min-h-[76px] shrink-0 items-center justify-between px-5 sm:px-7">
         <img src={mimirLockup} alt="Mimir" className="h-8 w-auto opacity-95" />
-        <SystemStatusPill
-          systemCheck={systemCheck}
-          isCheckingSystem={isCheckingSystem}
-          localAiStatus={localAiStatus}
-          isCheckingLocalAi={isCheckingLocalAi}
-        />
+        <SystemStatusPill systemCheck={systemCheck} isCheckingSystem={isCheckingSystem} />
       </header>
 
       <section className="grid flex-1 gap-8 px-5 pb-8 pt-5 sm:px-8 lg:grid-cols-[minmax(0,0.86fr)_minmax(430px,1.14fr)] lg:items-center lg:px-12 xl:px-16">
@@ -748,6 +750,41 @@ export function ImportPanel({
         <div className="flex min-h-[540px] flex-col rounded-2xl border border-white/[0.055] bg-[linear-gradient(180deg,rgba(255,255,255,0.042),rgba(255,255,255,0.016))] p-4 shadow-[0_28px_86px_rgba(0,0,0,0.36)] sm:p-5">
           {!showScanStatus && (
             <>
+              {detectedDrive && (
+                <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[rgba(157,183,170,0.28)] bg-[var(--mimir-accent-soft)] px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--mimir-accent)]/15">
+                      <span className="absolute inset-0 animate-ping rounded-full bg-[var(--mimir-accent)]/25" />
+                      <span className="relative h-2 w-2 rounded-full bg-[var(--mimir-accent)]" />
+                    </span>
+                    <div>
+                      <div className="text-[13px] font-semibold text-[var(--mimir-text)]">
+                        TeslaCam drive detected on {detectedDrive.drive}\
+                      </div>
+                      <div className="mt-1 text-[12px] text-[var(--mimir-text-muted)]">
+                        {detectedDrive.teslacam_path}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={onDismissDetectedDrive}
+                      className="h-9 rounded-full px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)]"
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onUseDetectedDrive}
+                      className="h-9 rounded-full bg-[var(--mimir-text)] px-4 text-[12px] font-semibold text-black transition hover:opacity-90"
+                    >
+                      Use this drive
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {hasLatestSession && (
                 <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-white/[0.055] bg-black/18 px-4 py-3">
                   <div>

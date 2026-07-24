@@ -7,39 +7,34 @@ export default {
   ],
   theme: {
     extend: {
+      // Mirrors the CSS custom properties defined in src/index.css so new work can
+      // reach for `bg-mimir-accent` etc. instead of `bg-[var(--mimir-accent)]`.
+      // Existing components mostly use the arbitrary-value form directly and don't
+      // need to be migrated, but this keeps the config truthful rather than
+      // describing a palette (red accent, dark.bg #0c0c0e) nothing renders with.
       colors: {
-        'dark': {
-          'bg': '#0c0c0e',
-          'card': '#111114',
-          'input': '#1a1a1f',
-          'border': '#1e1e22',
-          'hover': '#2a2a30',
-          'muted': '#5a5a6a',
-          'text': '#f0f0f2',
-        },
-        'accent': '#e8392a',
-        'warn': '#e09b20',
-        'ok': '#2ecc71',
+        'mimir-bg': 'var(--mimir-bg)',
+        'mimir-bg-depth': 'var(--mimir-bg-depth)',
+        'mimir-surface': 'var(--mimir-surface)',
+        'mimir-surface-soft': 'var(--mimir-surface-soft)',
+        'mimir-surface-muted': 'var(--mimir-surface-muted)',
+        'mimir-text': 'var(--mimir-text)',
+        'mimir-text-muted': 'var(--mimir-text-muted)',
+        'mimir-text-subtle': 'var(--mimir-text-subtle)',
+        'mimir-border': 'var(--mimir-border)',
+        'mimir-border-strong': 'var(--mimir-border-strong)',
+        'mimir-accent': 'var(--mimir-accent)',
+        'mimir-accent-soft': 'var(--mimir-accent-soft)',
+        'mimir-red': 'var(--mimir-status-red)',
+        'mimir-amber': 'var(--mimir-status-amber)',
+        'mimir-green': 'var(--mimir-status-green)',
+        'mimir-slate': 'var(--mimir-status-slate)',
       },
       fontFamily: {
-        'sans': ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-      },
-      spacing: {
-        'gutter': '14px',
-        'gap': '12px',
-      },
-      borderRadius: {
-        'xs': '4px',
-        'sm': '6px',
-        'md': '8px',
-      },
-      fontSize: {
-        'xs': '10px',
-        'sm': '12px',
-        'base': '13px',
-        'lg': '14px',
-        'xl': '16px',
-        '2xl': '18px',
+        // No webfont is bundled, so this stays an honest system-font stack rather
+        // than naming a face ('Inter') that would silently fall back.
+        'sans': ['-apple-system', 'ui-sans-serif', 'system-ui', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        'mono': ['ui-monospace', 'Cascadia Code', 'SF Mono', 'Consolas', 'monospace'],
       },
     },
   },

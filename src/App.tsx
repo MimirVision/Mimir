@@ -89,6 +89,11 @@ interface ProgressLineEvent {
   line: string
 }
 
+interface TeslaCamDriveEvent {
+  drive: string
+  teslacam_path: string
+}
+
 interface LocalAiInstallLineEvent {
   line: string
 }
@@ -204,6 +209,7 @@ export default function App() {
   const [sessionHistory, setSessionHistory] = useState<SessionHistoryEntry[]>([])
   const [isCancellingScan, setIsCancellingScan] = useState(false)
   const [aiEnrichmentRefreshToken, setAiEnrichmentRefreshToken] = useState(0)
+  const [detectedTeslaCamDrive, setDetectedTeslaCamDrive] = useState<TeslaCamDriveEvent | null>(null)
   const activeProgressSessionId = useRef('')
   const scanCancellationRequested = useRef(false)
 
@@ -406,10 +412,43 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    let unlistenDetected: (() => void) | undefined
+    let unlistenRemoved: (() => void) | undefined
+
+    listen<TeslaCamDriveEvent>('mimir-teslacam-drive-detected', event => {
+      setDetectedTeslaCamDrive(event.payload)
+    }).then(unlistenFn => {
+      unlistenDetected = unlistenFn
+    })
+
+    listen<TeslaCamDriveEvent>('mimir-teslacam-drive-removed', event => {
+      setDetectedTeslaCamDrive(previous =>
+        previous?.drive === event.payload.drive ? null : previous,
+      )
+    }).then(unlistenFn => {
+      unlistenRemoved = unlistenFn
+    })
+
+    return () => {
+      unlistenDetected?.()
+      unlistenRemoved?.()
+    }
+  }, [])
+
+  useEffect(() => {
     if (!showOnboarding && !hasAcceptedBetaNotice) {
       setIsBetaNoticeOpen(true)
     }
   }, [hasAcceptedBetaNotice, showOnboarding])
+
+  const useDetectedTeslaCamDrive = async () => {
+    if (!detectedTeslaCamDrive) {
+      return
+    }
+    const path = detectedTeslaCamDrive.teslacam_path
+    setDetectedTeslaCamDrive(null)
+    await selectFolder(path)
+  }
 
   const chooseFolder = async () => {
     const selected = await open({
@@ -762,7 +801,7 @@ export default function App() {
   if (showOnboarding) {
     return (
       <div className="min-h-screen overflow-hidden bg-[var(--mimir-bg)] text-[var(--mimir-text)]">
-        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-18%,rgba(255,255,255,0.06),transparent_34%),linear-gradient(140deg,rgba(255,255,255,0.028),transparent_46%)]" />
+        <div className="mimir-page-glow pointer-events-none fixed inset-0" />
         <div className="relative h-screen overflow-y-auto p-4 sm:p-6">
           <OnboardingFlow initialScanMode={scanMode} onComplete={completeOnboarding} />
         </div>
@@ -773,7 +812,7 @@ export default function App() {
   if (appView === 'library' && latestSession) {
     return (
       <div className="min-h-screen overflow-hidden bg-[var(--mimir-bg)] text-[var(--mimir-text)]">
-        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-18%,rgba(255,255,255,0.06),transparent_34%),linear-gradient(140deg,rgba(255,255,255,0.028),transparent_46%)]" />
+        <div className="mimir-page-glow pointer-events-none fixed inset-0" />
         <div className="relative h-screen overflow-y-auto p-4 sm:p-6">
           <CrashSafeBoundary title="Incident library error" onBack={returnToImport}>
             <IncidentLibraryView
@@ -801,6 +840,11 @@ export default function App() {
           selectedFolder={selectedFolder}
           isDraggingFolder={isDraggingFolder}
           onChooseFolder={chooseFolder}
+          detectedDrive={scanState === 'running' ? null : detectedTeslaCamDrive}
+          onUseDetectedDrive={() => {
+            void useDetectedTeslaCamDrive()
+          }}
+          onDismissDetectedDrive={() => setDetectedTeslaCamDrive(null)}
           onAnalyze={analyzeSelectedFolder}
           onCancelScan={() => {
             void cancelScan()
