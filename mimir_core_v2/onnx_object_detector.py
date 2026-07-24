@@ -45,8 +45,12 @@ def _configuration() -> tuple[dict, Path | None]:
         if not item.get("exists") or not item.get("checksum_matches"):
             continue
         filename = str(item.get("filename") or "")
-        if filename.lower().endswith(".onnx"):
-            return manifest, Path(__file__).resolve().parents[1] / filename
+        if not filename.lower().endswith(".onnx"):
+            continue
+        path = str(item.get("path") or "")
+        if path:
+            return manifest, Path(path)
+        return manifest, Path(__file__).resolve().parents[1] / filename
     return manifest, None
 
 
