@@ -1,8 +1,8 @@
-# Mimir Private Beta Testing
+# Mimir Beta Testing
 
 ## How to install
 
-Run the Windows installer from the release build output. For this unsigned private beta, Windows may show a warning before opening the installer.
+Run the Windows installer from the release build output. For this unsigned beta, Windows may show a warning before opening the installer.
 
 Installer artifacts are created under:
 
@@ -72,13 +72,13 @@ Use the app's feedback export feature when available, or send a manual report wi
 - Whether the issue was missed impact, door contact, vandalism, normal traffic, harmless movement, or another case.
 - A short note describing what happened.
 
-Do not share private footage publicly. Use the private transfer method agreed with the Mimir beta tester group.
+Email reports to **feedback.mimir@gmail.com**. Do not share private footage over public channels (forums, social media, chat rooms) -- send it directly to that address.
 
 ## Known limitations
 
 - Mimir is still learning and may misclassify events.
 - Always review important footage yourself before moving clips or sending them to Mimir Trash.
-- The private beta is local-first and does not include cloud accounts or shared review.
+- The beta is local-first and does not include cloud accounts or shared review.
 - The installer is unsigned for early beta testing.
 - Some media formats may not preview in the viewer even if the scan output is valid.
 - Detection thresholds for rear-end crashes, door dings, and close contact events are still being tuned.

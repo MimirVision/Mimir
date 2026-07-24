@@ -17,7 +17,7 @@ export function BetaPrivacyNotice({ open, onAccept }: BetaPrivacyNoticeProps) {
       <section className="w-full max-w-[560px] rounded-[24px] border border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.06),transparent_34%),var(--mimir-bg-depth)] p-6 shadow-[0_34px_110px_rgba(0,0,0,0.68)] sm:p-7">
         <div className="mb-5 h-1 w-12 rounded-full bg-white/24" />
         <div className="text-[12px] font-medium uppercase tracking-[0.22em] text-[var(--mimir-text-subtle)]">
-          Mimir Private Beta
+          Mimir Free Beta
         </div>
         <h2 className="mt-4 text-[30px] font-semibold leading-tight text-[var(--mimir-text)]">
           Review carefully. Stay in control.
@@ -54,7 +54,7 @@ export function BetaNoticeFooter({ onOpen }: BetaNoticeFooterProps) {
         onClick={onOpen}
         className="pointer-events-auto rounded-full border border-white/[0.075] bg-black/38 px-3.5 py-2 text-[11px] font-medium text-[var(--mimir-text-subtle)] shadow-[0_12px_34px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:border-white/14 hover:bg-black/52 hover:text-[var(--mimir-text-muted)]"
       >
-        Private beta notice
+        Beta notice
       </button>
     </footer>
   )

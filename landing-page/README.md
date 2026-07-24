@@ -1,6 +1,6 @@
 # Mimir Landing Page
 
-This folder is a static private beta download page for Mimir. It has no build step and no external dependencies.
+This folder is a static free public beta download page for Mimir. It has no build step and no external dependencies.
 
 ## Files
 

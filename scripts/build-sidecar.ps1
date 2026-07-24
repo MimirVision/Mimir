@@ -43,7 +43,8 @@ $RequiredExecutables = @(
   "mimir-core-v2-scan.exe",
   "mimir-core-v2-ai-enrich.exe",
   "mimir-core-v2-actions.exe",
-  "mimir-core-v2-dataset.exe"
+  "mimir-core-v2-dataset.exe",
+  "mimir-core-v2-model-update.exe"
 )
 
 foreach ($ExecutableName in $RequiredExecutables) {

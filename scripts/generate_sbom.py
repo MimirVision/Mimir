@@ -137,7 +137,7 @@ def main() -> int:
         "metadata": {
             "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "component": {"type": "application", "name": "Mimir", "version": "0.5.0-beta.1"},
-            "properties": [{"name": "mimir:release_channel", "value": "free-invite-only-beta"}],
+            "properties": [{"name": "mimir:release_channel", "value": "free-beta"}],
         },
         "components": sorted(unique.values(), key=lambda item: (item["type"], item["name"], item["version"])),
     }

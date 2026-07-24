@@ -13,6 +13,7 @@ build-backend/
 dist-release/
 Test/
 beta-smoke-test/
+landing-page/MimirSetup.exe
 
 # Rust/Tauri
 src-tauri/target/

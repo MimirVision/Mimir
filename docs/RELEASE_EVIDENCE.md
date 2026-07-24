@@ -11,8 +11,8 @@ External invitations are fail-closed. The release check requires:
 - a locked candidate evaluation report that passes every promotion gate.
 
 Missing evidence is a blocker, not a warning. The current unsigned installer remains
-for internal dogfood only. The beta is free and invite-only; distribution controls
-access without runtime activation, accounts, billing, or an expiration switch.
+for internal dogfood only. The beta is free; whatever distribution model is used,
+there is no runtime activation, accounts, billing, or expiration switch.
 
 External builds require `MIMIR_SIGNING_CERT_THUMBPRINT` and an HTTPS
 `MIMIR_UPDATE_ENDPOINT`. The release script signs every packaged executable,

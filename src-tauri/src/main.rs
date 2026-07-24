@@ -35,6 +35,8 @@ const DEV_CORE_V2_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_actions
 #[allow(dead_code)]
 const DEV_CORE_V2_DATASET_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_dataset.py";
 #[allow(dead_code)]
+const DEV_CORE_V2_MODEL_UPDATE_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_model_update.py";
+#[allow(dead_code)]
 const DEV_CORE_V2_SCAN_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe";
 #[allow(dead_code)]
 const DEV_CORE_V2_AI_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-ai-enrich.exe";
@@ -42,14 +44,19 @@ const DEV_CORE_V2_AI_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-a
 const DEV_CORE_V2_ACTIONS_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe";
 #[allow(dead_code)]
 const DEV_CORE_V2_DATASET_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-dataset.exe";
+#[allow(dead_code)]
+const DEV_CORE_V2_MODEL_UPDATE_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-model-update.exe";
 const BACKEND_RESOURCE_FOLDER: &str = "mimir-backend";
 const CORE_V2_SCAN_EXE_NAME: &str = "mimir-core-v2-scan.exe";
 const CORE_V2_AI_EXE_NAME: &str = "mimir-core-v2-ai-enrich.exe";
 const CORE_V2_ACTIONS_EXE_NAME: &str = "mimir-core-v2-actions.exe";
 const CORE_V2_DATASET_EXE_NAME: &str = "mimir-core-v2-dataset.exe";
+const CORE_V2_MODEL_UPDATE_EXE_NAME: &str = "mimir-core-v2-model-update.exe";
+const MODEL_OVERRIDE_DIR_ENV: &str = "MIMIR_MODEL_OVERRIDE_DIR";
 const AGE_EXE_NAME: &str = "age.exe";
 const TRAINING_AGE_RECIPIENT: &str = "age1ahsfxe3vh8u86cvrknya8pjg8nhydlw0jxw72h68s886qsp8lu2sxq942n";
 const DEFAULT_VISION_MODEL: &str = "qwen2.5vl:7b";
+const FEEDBACK_EMAIL: &str = "feedback.mimir@gmail.com";
 const OLLAMA_DOWNLOAD_URL: &str = "https://ollama.com/download";
 
 #[derive(Serialize)]
@@ -120,6 +127,24 @@ struct TrainingContributionResult {
     backend_runner: String,
     backend_command: String,
     message: String,
+}
+
+#[derive(Serialize)]
+struct ModelUpdateResult {
+    ok: bool,
+    detector_id: String,
+    detector_version: String,
+    installed_to: String,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct ModelStatusResult {
+    installed: bool,
+    source: String,
+    detector_id: String,
+    detector_version: String,
+    target_dir: String,
 }
 
 #[derive(Serialize)]
@@ -475,6 +500,53 @@ fn resolve_core_v2_dataset_runtime(app: &tauri::AppHandle) -> Result<BackendRunt
         "training contribution",
         &[DEV_CORE_V2_DATASET_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_DATASET_SCRIPT],
     ))
+}
+
+fn resolve_core_v2_model_update_runtime(app: &tauri::AppHandle) -> Result<BackendRuntime, ScanFailure> {
+    #[cfg(debug_assertions)]
+    {
+        let session_path = configured_output_dir(app).join("latest_session.json");
+        if Path::new(DEV_BACKEND_PYTHON).exists() && Path::new(DEV_CORE_V2_MODEL_UPDATE_SCRIPT).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_BACKEND_PYTHON),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path,
+                mode: BackendMode::CoreV2Python,
+            });
+        }
+        if Path::new(DEV_CORE_V2_MODEL_UPDATE_EXE).exists() {
+            return Ok(BackendRuntime {
+                executable: PathBuf::from(DEV_CORE_V2_MODEL_UPDATE_EXE),
+                current_dir: PathBuf::from(DEV_BACKEND_ROOT),
+                session_path,
+                mode: BackendMode::CoreV2Exe,
+            });
+        }
+    }
+    if let Some(runtime) = resource_core_v2_runtime(app, CORE_V2_MODEL_UPDATE_EXE_NAME) {
+        return Ok(runtime);
+    }
+    Err(backend_missing_failure(
+        "model update",
+        &[DEV_CORE_V2_MODEL_UPDATE_EXE, DEV_BACKEND_PYTHON, DEV_CORE_V2_MODEL_UPDATE_SCRIPT],
+    ))
+}
+
+// Detector model files normally ship baked into the scan exe (see
+// build_backend_exe.py). This directory lets a validated model update be
+// installed without rebuilding or reinstalling the app: model_manifest.py
+// checks here first (via MIMIR_MODEL_OVERRIDE_DIR) and only falls back to
+// the bundled model if nothing valid is installed here.
+fn model_override_dir(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| {
+            env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("Mimir")
+        })
+        .join("models")
 }
 
 fn age_executable_for_runtime(app: &tauri::AppHandle, runtime: &BackendRuntime) -> Option<PathBuf> {
@@ -1092,7 +1164,9 @@ fn save_incident_feedback_sync(
         feedback_folder: feedback_folder.to_string_lossy().to_string(),
         feedback_file: feedback_file.to_string_lossy().to_string(),
         video_copied,
-        message: "Feedback saved locally. No upload was performed.".to_string(),
+        message: format!(
+            "Feedback saved locally. No upload was performed. Email the saved file to {FEEDBACK_EMAIL} if you'd like to share it."
+        ),
     })
 }
 
@@ -1630,6 +1704,7 @@ fn run_scan_sync(
         .map_err(|error| ScanFailure::new(error.to_string()))?;
 
     let mut command = backend_command(&runtime);
+    command.env(MODEL_OVERRIDE_DIR_ENV, model_override_dir(&app));
     append_backend_scan_args(
         &mut command,
         &runtime,
@@ -2417,6 +2492,86 @@ async fn export_training_contribution(
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+fn run_model_update_command(
+    app: &tauri::AppHandle,
+    args: &[&str],
+) -> Result<Value, ScanFailure> {
+    let runtime = resolve_core_v2_model_update_runtime(app)?;
+    let mut command = backend_command(&runtime);
+    if runtime.is_python_fallback() {
+        command.arg(DEV_CORE_V2_MODEL_UPDATE_SCRIPT);
+    }
+    command.args(args);
+    let result = command
+        .output()
+        .map_err(|error| ScanFailure::new(format!("Could not start the model updater: {error}")))?;
+    let stdout = String::from_utf8_lossy(&result.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+    let parsed: Value = stdout
+        .lines()
+        .rev()
+        .find_map(|line| serde_json::from_str(line).ok())
+        .unwrap_or(Value::Null);
+    if !result.status.success() {
+        let message = parsed
+            .get("message")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| "The model update could not be completed.".to_string());
+        return Err(ScanFailure::with_output(message, stdout, stderr));
+    }
+    Ok(parsed)
+}
+
+fn install_model_update_sync(app: tauri::AppHandle, package_path: String) -> Result<ModelUpdateResult, ScanFailure> {
+    let package = PathBuf::from(&package_path);
+    if !package.is_absolute() || !package.is_dir() {
+        return Err(ScanFailure::new("Choose a folder containing a model_manifest.json and its model file."));
+    }
+    let target = model_override_dir(&app);
+    let package_text = package.to_string_lossy().to_string();
+    let target_text = target.to_string_lossy().to_string();
+    let parsed = run_model_update_command(
+        &app,
+        &["install", "--package", &package_text, "--target", &target_text],
+    )?;
+    Ok(ModelUpdateResult {
+        ok: true,
+        detector_id: parsed.get("detector_id").and_then(Value::as_str).unwrap_or_default().to_string(),
+        detector_version: parsed.get("detector_version").and_then(Value::as_str).unwrap_or_default().to_string(),
+        installed_to: parsed.get("installed_to").and_then(Value::as_str).unwrap_or(&target_text).to_string(),
+        message: "Model update installed. It takes effect on the next scan; nothing else about the app changed.".to_string(),
+    })
+}
+
+#[tauri::command]
+async fn install_model_update(app: tauri::AppHandle, package_path: String) -> Result<ModelUpdateResult, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || install_model_update_sync(app, package_path))
+        .await
+        .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
+fn active_model_status_sync(app: tauri::AppHandle) -> Result<ModelStatusResult, ScanFailure> {
+    let target = model_override_dir(&app);
+    let target_text = target.to_string_lossy().to_string();
+    let parsed = run_model_update_command(&app, &["status", "--target", &target_text])?;
+    let installed = parsed.get("installed").and_then(Value::as_bool).unwrap_or(false);
+    Ok(ModelStatusResult {
+        installed,
+        source: if installed { "override".to_string() } else { "bundled".to_string() },
+        detector_id: parsed.get("detector_id").and_then(Value::as_str).unwrap_or_default().to_string(),
+        detector_version: parsed.get("detector_version").and_then(Value::as_str).unwrap_or_default().to_string(),
+        target_dir: target_text,
+    })
+}
+
+#[tauri::command]
+async fn active_model_status(app: tauri::AppHandle) -> Result<ModelStatusResult, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || active_model_status_sync(app))
+        .await
+        .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
 #[derive(Deserialize)]
 struct ReportImage {
     label: String,
@@ -2815,6 +2970,8 @@ fn main() {
             list_session_history,
             export_training_contribution,
             export_incident_report,
+            install_model_update,
+            active_model_status,
             open_containing_folder,
             open_mimir_storage_folder,
             log_incident_diagnostic

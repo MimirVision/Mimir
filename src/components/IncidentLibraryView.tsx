@@ -5,7 +5,7 @@ import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
-import { formatDateTime, formatEventType, sourceEventReason, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
+import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import {
   incidentOverrideKey,
   normalizeSeverity,
@@ -15,9 +15,39 @@ import {
   type SeverityGroup,
   type SeverityResolution,
 } from '../lib/incidentStatus'
+import {
+  severityClass,
+  severityCopy,
+  severityStripeClass,
+  storageBadgeClass,
+} from '../lib/incidentLibraryStyles'
+import {
+  cameraClips,
+  cameraCountLabel,
+  cameraNameLabel,
+  currentStorageState,
+  errorMessage,
+  eventLabel,
+  formatTechnicalValue,
+  incidentActionId,
+  incidentCardImages,
+  incidentCardSubtitle,
+  incidentCardTitle,
+  incidentFolderPath,
+  incidentsForSeverity,
+  isGenericBestEffortIncident,
+  pluralize,
+  reviewModeCopy,
+  scanResultCopy,
+  searchText,
+  sessionFeatureFlags,
+  sessionMayBeStale,
+  sortIncidents,
+  sourceClipsRemain,
+  technicalJson,
+} from '../lib/incidentLibraryHelpers'
 import type {
   FrontendScanDiagnostics,
-  MimirCameraClip,
   MimirIncident,
   MimirSession,
   SessionLoadState,
@@ -33,188 +63,6 @@ interface IncidentLibraryViewProps {
   onLoadLatest: () => void
   onReloadSession: () => Promise<MimirSession | null>
   scanDiagnostics?: FrontendScanDiagnostics | null
-}
-
-const severityRank: Record<SeverityGroup, number> = {
-  IMPORTANT: 0,
-  REVIEW: 1,
-  IGNORE: 2,
-}
-
-// ============================================================================
-// Error/formatting helpers
-// ============================================================================
-
-function errorMessage(error: unknown) {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-  ) {
-    return (error as { message: string }).message
-  }
-
-  return error instanceof Error ? error.message : String(error)
-}
-
-// ============================================================================
-// Severity styling
-// ============================================================================
-
-function severityCopy(severity: string) {
-  const normalized = normalizeSeverity(severity)
-
-  if (normalized === 'IMPORTANT') {
-    return 'Important'
-  }
-
-  if (normalized === 'REVIEW') {
-    return 'Review'
-  }
-
-  return 'Ignored'
-}
-
-function severityClass(severity: string) {
-  const normalized = normalizeSeverity(severity)
-
-  if (normalized === 'IMPORTANT') {
-    return 'border-[rgba(196,119,114,0.28)] bg-[rgba(196,119,114,0.115)] text-red-100/92'
-  }
-
-  if (normalized === 'REVIEW') {
-    return 'border-[rgba(195,160,98,0.28)] bg-[rgba(195,160,98,0.115)] text-amber-100/92'
-  }
-
-  return 'border-[rgba(133,139,139,0.20)] bg-[rgba(133,139,139,0.085)] text-[var(--mimir-text-muted)]'
-}
-
-// A left-edge color stripe alongside the text badge above, so severity reads at a
-// glance across a shelf of cards instead of requiring each label to be read.
-function severityStripeClass(severity: string) {
-  const normalized = normalizeSeverity(severity)
-
-  if (normalized === 'IMPORTANT') {
-    return 'before:bg-[var(--mimir-status-red)]'
-  }
-
-  if (normalized === 'REVIEW') {
-    return 'before:bg-[var(--mimir-status-amber)]'
-  }
-
-  return 'before:bg-[var(--mimir-status-slate)]'
-}
-
-function pluralize(count: number, singular: string, plural = `${singular}s`) {
-  return count === 1 ? singular : plural
-}
-
-// ============================================================================
-// Session-level summary copy
-// ============================================================================
-
-function scanResultCopy(session: MimirSession) {
-  const incidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
-  const clipCount = session.scan_summary?.clips_scanned ?? session.clips_scanned ?? session.clips_processed ?? 0
-
-  if (incidentCount === 0) {
-    return 'No reviewable incidents found.'
-  }
-
-  return `${incidentCount} ${pluralize(incidentCount, 'incident')} found from ${clipCount} ${pluralize(
-    clipCount,
-    'clip',
-  )} scanned.`
-}
-
-function reviewModeCopy(session: MimirSession) {
-  return session.ai_enabled ? 'Local review + AI second opinion' : 'Local review'
-}
-
-function sessionClipsScanned(session: MimirSession) {
-  return session.scan_summary?.clips_scanned ?? session.clips_scanned ?? session.clips_processed ?? null
-}
-
-function sessionFeatureFlags(session: MimirSession) {
-  return session.feature_flags && typeof session.feature_flags === 'object' ? session.feature_flags : {}
-}
-
-function sessionMayBeStale(session: MimirSession) {
-  const incidentCount = (session.incidents ?? []).filter(incident => !incident.user_deleted).length
-  const clipsScanned = sessionClipsScanned(session)
-  const featureFlags = sessionFeatureFlags(session)
-
-  return (
-    !session.core_version ||
-    !session.scan_summary ||
-    (incidentCount > 0 && clipsScanned === 0) ||
-    featureFlags.no_yolo_crash_fallback !== true ||
-    featureFlags.key_moments !== true
-  )
-}
-
-function formatTechnicalValue(value?: string | number | null) {
-  if (value === undefined || value === null || value === '') {
-    return 'Not reported'
-  }
-
-  return String(value)
-}
-
-function technicalJson(value: unknown) {
-  try {
-    return JSON.stringify(value ?? null, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
-
-function searchText(incident: MimirIncident) {
-  return [
-    incident.id,
-    incident.source_video,
-    incident.severity,
-    incident.ai_decision,
-    incident.event_type,
-    incident.summary,
-    incident.recommended_action,
-    incident.user_note,
-    sourceEventReason(incident),
-    sourceEventTimestamp(incident),
-    ...(incident.evidence ?? []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-}
-
-// ============================================================================
-// Session/incident data helpers
-// ============================================================================
-
-function sortIncidents(incidents: MimirIncident[], manualOverrides: ManualStatusOverrides, identity: string) {
-  return [...incidents].sort((left, right) => {
-    const severityDelta =
-      severityRank[resolveIncidentSeverity(left, manualOverrides, identity).displaySeverity] -
-      severityRank[resolveIncidentSeverity(right, manualOverrides, identity).displaySeverity]
-
-    if (severityDelta !== 0) {
-      return severityDelta
-    }
-
-    return String(left.created_at || '').localeCompare(String(right.created_at || ''))
-  })
-}
-
-function incidentCardImages(incident: MimirIncident) {
-  return [
-    incident.hero_thumbnail,
-    incident.thumbnail,
-    incident.best_frame_image,
-    incident.contact_sheet,
-  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
 }
 
 // ============================================================================
@@ -285,213 +133,6 @@ function FilterChip({
 // ============================================================================
 // Camera/path/storage helpers for incident cards
 // ============================================================================
-
-function incidentActionId(incident: MimirIncident) {
-  return incident.id || String(incident.event_id ?? '')
-}
-
-function cameraClips(incident: MimirIncident) {
-  const raw = incident.camera_clips
-  const clips: MimirCameraClip[] = []
-
-  if (Array.isArray(raw)) {
-    clips.push(...raw.filter((clip): clip is MimirCameraClip => Boolean(clip && typeof clip === 'object')))
-  } else if (raw && typeof raw === 'object') {
-    clips.push(
-      ...Object.entries(raw)
-        .map(([camera, value]): MimirCameraClip | null => {
-          if (!value) {
-            return null
-          }
-
-          if (typeof value === 'string') {
-            return { camera, path: value }
-          }
-
-          return { ...value, camera: value.camera || camera }
-        })
-        .filter((value): value is MimirCameraClip => value !== null),
-    )
-  }
-
-  const seen = new Set<string>()
-
-  return clips.filter(clip => {
-    const camera = String(clip.camera || '').trim().toLowerCase()
-    const path = String(clip.library_path || clip.trash_path || clip.path || clip.video_path || clip.source_video || clip.source_clip || clip.filename || '').trim().toLowerCase()
-    const key = `${camera}|${path}`
-
-    if (!key.trim() || seen.has(key)) {
-      return false
-    }
-
-    seen.add(key)
-    return true
-  })
-}
-
-function cameraCount(incident: MimirIncident) {
-  const explicitCount = typeof incident.camera_count === 'number' ? incident.camera_count : 0
-  return Math.max(explicitCount, cameraClips(incident).length, 1)
-}
-
-function cameraCountLabel(incident: MimirIncident) {
-  const count = cameraCount(incident)
-  return `${count} ${count === 1 ? 'angle' : 'angles'}`
-}
-
-function cameraNameLabel(value?: string | null) {
-  const raw = typeof value === 'string' ? value.trim() : ''
-  
-  if (!raw) {
-    return ''
-  }
-
-  const normalized = raw.toLowerCase().replace(/[^a-z0-9]+/g, '_')
-
-  if (normalized === 'front') {
-    return 'Front'
-  }
-
-  if (normalized === 'back' || normalized === 'rear') {
-    return 'Rear'
-  }
-
-  if (normalized === 'left_repeater') {
-    return 'Left repeater'
-  }
-
-  if (normalized === 'right_repeater') {
-    return 'Right repeater'
-  }
-
-  if (normalized === 'left_pillar') {
-    return 'Left pillar'
-  }
-
-  if (normalized === 'right_pillar') {
-    return 'Right pillar'
-  }
-
-  if (normalized === 'left') {
-    return 'Left'
-  }
-
-  if (normalized === 'right') {
-    return 'Right'
-  }
-
-  return raw
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
-
-function eventLabel(incident: MimirIncident) {
-  const summary = typeof incident.summary === 'string' ? incident.summary.trim() : ''
-  if (summary) {
-    return summary.length > 82 ? `${summary.slice(0, 79)}...` : summary
-  }
-
-  if (incident.event_type) {
-    return formatEventType(incident.event_type)
-  }
-
-  return 'Review moment'
-}
-
-function incidentCardTitle(severity: SeverityGroup) {
-  if (severity === 'IMPORTANT') {
-    return 'Impact/contact detected'
-  }
-
-  if (severity === 'REVIEW') {
-    return 'Needs review'
-  }
-
-  return 'No issue found'
-}
-
-function incidentCardSubtitle(incident: MimirIncident) {
-  const explicitTitle = incident.display_title || incident.source_stem || ''
-  const fileName =
-    incident.source_filename ||
-    sourceFilename(incident.source_video || incident.original_source_video || incident.video_path || '') ||
-    ''
-  const timestamp = formatDateTime(sourceEventTimestamp(incident))
-  const source = explicitTitle || fileName
-
-  return [timestamp, source].filter(Boolean).join(' - ')
-}
-
-function isGenericBestEffortIncident(incident: MimirIncident) {
-  return incident.filename_timestamp_detected === false
-}
-
-function currentStorageState(incident: MimirIncident) {
-  if (incident.user_deleted || incident.storage_state === 'trash') {
-    return 'In Mimir Trash'
-  }
-
-  if (incident.moved_to_library || incident.library_video_path || incident.storage_state === 'library') {
-    return 'In Mimir Library'
-  }
-
-  if (incident.video_exists === false) {
-    return 'Missing file'
-  }
-
-  return 'On USB / Original source'
-}
-
-function storageBadgeClass(state: string) {
-  if (state === 'In Mimir Library') {
-    return 'border-green-300/18 bg-green-500/10 text-green-100/86'
-  }
-
-  if (state === 'In Mimir Trash') {
-    return 'border-red-300/18 bg-red-500/10 text-red-100/86'
-  }
-
-  if (state === 'Missing file') {
-    return 'border-amber-300/20 bg-amber-500/10 text-amber-100/88'
-  }
-
-  return 'border-white/[0.08] bg-white/[0.035] text-[var(--mimir-text-muted)]'
-}
-
-function incidentFolderPath(incident: MimirIncident) {
-  const paths = [
-    incident.library_video_path,
-    incident.trash_video_path,
-    incident.video_path,
-    incident.source_video,
-    incident.original_source_video,
-    ...cameraClips(incident).map(clip => clip.library_path || clip.trash_path || clip.path || clip.video_path || clip.source_video),
-  ]
-
-  return paths.find((value): value is string => typeof value === 'string' && value.trim().length > 0) || ''
-}
-
-function sourceClipsRemain(incidents: MimirIncident[]) {
-  return incidents.some(incident => {
-    if (incident.user_deleted || incident.moved_to_library || incident.storage_state === 'trash' || incident.storage_state === 'library') {
-      return false
-    }
-
-    return Boolean(incident.source_video || incident.original_source_video || cameraClips(incident).length > 0)
-  })
-}
-
-function incidentsForSeverity(
-  incidents: MimirIncident[],
-  severity: SeverityGroup,
-  manualOverrides: ManualStatusOverrides,
-  identity: string,
-) {
-  return incidents.filter(incident => resolveIncidentSeverity(incident, manualOverrides, identity).displaySeverity === severity)
-}
 
 // ============================================================================
 // Main components: cards, sections, drawers. IncidentLibraryView (below)
@@ -1412,6 +1053,10 @@ export function IncidentLibraryView({
             </div>
           </div>
 
+          <div className="mt-4 rounded-xl border border-amber-200/14 bg-amber-300/8 px-3.5 py-2.5 text-[12px] leading-5 text-amber-50/82">
+            Detection accuracy hasn't been measured against a real evaluation set yet. Review every flagged incident yourself, especially anything marked Ignore.
+          </div>
+
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.045] pt-4">
             <div className="flex flex-wrap gap-2 rounded-full bg-black/16 p-1">
               <FilterChip label="Important" count={counts.important} active={filter === 'IMPORTANT'} onClick={() => setFilter('IMPORTANT')} />
@@ -1552,7 +1197,7 @@ export function IncidentLibraryView({
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
           <section className="w-full max-w-[460px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
             <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
-              Private Beta
+              Free Beta
             </div>
             <h2 className="mt-2 text-[28px] font-semibold text-[var(--mimir-text)]">Mimir</h2>
             <div className="mt-2 text-[13px] font-medium text-[var(--mimir-text-muted)]">

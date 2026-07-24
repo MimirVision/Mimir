@@ -1,6 +1,6 @@
 # Free Beta Release Readiness
 
-The free private beta uses staged distribution, not runtime licensing. No billing,
+The free beta uses staged distribution, not runtime licensing. No billing,
 entitlement server, or destructive expiration switch is permitted.
 
 Run the internal operational check:

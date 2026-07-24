@@ -89,7 +89,7 @@ export function OnboardingFlow({ initialScanMode, onComplete }: OnboardingFlowPr
           <img src={mimirMark} alt="" className="h-9 w-9 object-contain opacity-95" />
           <div>
             <div className="text-[15px] font-semibold text-[var(--mimir-text)]">Mimir</div>
-            <div className="text-[12px] text-[var(--mimir-text-subtle)]">Private beta setup</div>
+            <div className="text-[12px] text-[var(--mimir-text-subtle)]">Free beta setup</div>
           </div>
         </div>
         <StepIndicator currentStep={step} />

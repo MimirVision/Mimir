@@ -1,21 +1,21 @@
-# Mimir Private Beta Testing
+# Mimir Beta Testing
 
 ## Install
 
 1. Open `README_START_HERE.html`.
 2. Run `MimirSetup.exe`.
-3. If Windows shows an unsigned app warning, choose the advanced option to continue.
+3. If Windows shows an unrecognized-app warning, choose the advanced option to continue.
 4. Open Mimir from the Start menu or desktop shortcut if one was created.
 
-## Scan Test Footage
+## How to select a USB drive or footage folder
 
-To test with the current local test folder:
+1. Open Mimir.
+2. Click **Choose USB drive or footage folder**.
+3. Select the USB drive root, the footage folder, or any folder containing MP4 clips.
+4. Confirm the selected path is shown on the import screen.
+5. Pick a scan mode and click **Analyze footage**.
 
-```text
-C:\mimir\test
-```
-
-You can also choose another folder containing vehicle or security footage. In the beta flow, scanning reads the selected folder and builds a local incident timeline.
+Scanning reads the selected folder and builds a local incident timeline. It does not move, copy, or delete clips during scan; your original clips stay where they are until you manually choose an action after reviewing an incident.
 
 ## Scan Modes
 
@@ -40,7 +40,7 @@ Use **Move to Mimir Library** only after reviewing an incident. This moves the c
 Default location:
 
 ```text
-%USERPROFILE%\Videos\Mimir Library\Manual Imports
+%USERPROFILE%\Videos\Mimir Library
 ```
 
 ## Mimir Trash
@@ -51,7 +51,7 @@ Use **Move to Mimir Trash** for clips you no longer want in normal review. This 
 %USERPROFILE%\Videos\Mimir Library\_Mimir Trash
 ```
 
-Deleted/trash incidents are hidden from normal Important, Review, and Ignored lists by default.
+Deleted/trash incidents are hidden from normal Important, Review, and Ignored lists by default, and can be recovered from Mimir Trash.
 
 ## What Feedback We Need
 
@@ -65,12 +65,12 @@ For each issue, please report:
 - Whether the timeline markers made sense.
 - Any error message shown by the app.
 
-Do not post private footage publicly. Use the private tester transfer method agreed with the Mimir team.
+Email reports to **feedback.mimir@gmail.com**. Do not share private footage over public channels (forums, social media, chat rooms) -- send it directly to that address.
 
 ## Known Limitations
 
-- The installer is unsigned during private beta, so Windows may show a warning.
-- The backend must be available at the expected local path for this development beta build.
-- Some AI summaries may be conservative or imperfect.
+- Mimir ships with a stock, general-purpose detector, not yet fine-tuned on real Sentry footage. It can miss real events and can flag ordinary activity as noteworthy.
+- The installer is unsigned for this early beta, so Windows may show a warning.
+- Some media formats may not preview in the viewer even if the scan output is valid.
 - Move to Mimir Trash is recoverable, but there is no in-app restore button yet.
 - Cloud sync and account features are not part of this beta.
