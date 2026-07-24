@@ -24,6 +24,7 @@ REQUIRED_FILES = [
     ROOT / "mimir_core_v2_ai_enrich.py",
     ROOT / "mimir_core_v2_actions.py",
     ROOT / "mimir_core_v2_dataset.py",
+    ROOT / "mimir_core_v2_model_update.py",
 ]
 
 OPTIONAL_FILES = [
@@ -43,6 +44,7 @@ CORE_MODULES = [
     ROOT / "mimir_core_v2" / "ego_vehicle.py",
     ROOT / "mimir_core_v2" / "key_moment_refiner.py",
     ROOT / "mimir_core_v2" / "model_manifest.py",
+    ROOT / "mimir_core_v2" / "model_update.py",
     ROOT / "mimir_core_v2" / "onnx_object_detector.py",
     ROOT / "mimir_core_v2" / "progress.py",
     ROOT / "mimir_core_v2" / "runtime_paths.py",
@@ -209,6 +211,7 @@ def main() -> int:
         build_executable("mimir-core-v2-ai-enrich", ROOT / "mimir_core_v2_ai_enrich.py")
         build_executable("mimir-core-v2-actions", ROOT / "mimir_core_v2_actions.py")
         build_executable("mimir-core-v2-dataset", ROOT / "mimir_core_v2_dataset.py")
+        build_executable("mimir-core-v2-model-update", ROOT / "mimir_core_v2_model_update.py")
 
         release_check = ROOT / "mimir_core_v2_release_check.py"
         if release_check.exists():
@@ -221,6 +224,7 @@ def main() -> int:
         print(f"- {DIST_DIR / 'mimir-core-v2-ai-enrich.exe'}")
         print(f"- {DIST_DIR / 'mimir-core-v2-actions.exe'}")
         print(f"- {DIST_DIR / 'mimir-core-v2-dataset.exe'}")
+        print(f"- {DIST_DIR / 'mimir-core-v2-model-update.exe'}")
         return 0
     except PackagingError as exc:
         print()

@@ -1,4 +1,4 @@
-"""Private beta validation wrapper for Mimir Core v2.
+"""Beta validation wrapper for Mimir Core v2.
 
 This script only runs validation commands and reads their reports. It does not
 change scanner behavior, frontend behavior, or source footage.
