@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { CrashSafeBoundary, logIncidentDiagnostic } from './CrashSafeBoundary'
+import { FEEDBACK_EMAIL } from '../config'
 import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import { type SeverityGroup } from '../lib/incidentStatus'
 import {
@@ -1496,13 +1497,13 @@ function AiFeedbackPanel({
       >
         <span className="inline-flex items-center gap-2">
           {busy && <SmallSpinner />}
-          Save feedback
+          Send feedback
         </span>
       </button>
 
       {message && (
         <div className="mt-3 rounded-lg border border-white/[0.075] bg-white/[0.035] p-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
-          {message}
+          {message} Opened the file location and a pre-filled email - just attach the file and hit send.
         </div>
       )}
       {error && (
@@ -2168,6 +2169,27 @@ export function IncidentViewerScreen({
       })
 
       setFeedbackMessage(result.message || `Feedback saved to ${result.feedback_folder}`)
+
+      const subject = `Mimir feedback: ${feedbackChoice} - ${eventDisplayTitle(incident)}`
+      const attachmentNote = feedbackIncludeVideo
+        ? 'A copy of the video clip was saved alongside the feedback file - please attach both.'
+        : 'Please attach the feedback file below (no video was included).'
+      const body = [
+        `Feedback: ${feedbackChoice}`,
+        feedbackNotes.trim() ? `Notes: ${feedbackNotes.trim()}` : '',
+        `Incident: ${eventDisplayTitle(incident)} (${incidentActionId(incident)})`,
+        '',
+        attachmentNote,
+        `File location: ${result.feedback_file || result.feedback_folder}`,
+      ].filter(Boolean).join('\n')
+
+      try {
+        await invoke<void>('open_containing_folder', { path: result.feedback_file || result.feedback_folder })
+      } catch {
+        // Non-fatal: the feedback was already saved successfully.
+      }
+      window.location.href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+
       setFeedbackNotes('')
       setFeedbackIncludeVideo(false)
     } catch (error) {
