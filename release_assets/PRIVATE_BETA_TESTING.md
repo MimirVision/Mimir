@@ -53,9 +53,11 @@ Use **Move to Mimir Trash** for clips you no longer want in normal review. This 
 
 Deleted/trash incidents are hidden from normal Important, Review, and Ignored lists by default, and can be recovered from Mimir Trash.
 
-## What Feedback We Need
+## How to Send Feedback
 
-For each issue, please report:
+Open an incident, pick an AI feedback label, add a note if you want, and click **Send feedback**. Mimir saves the feedback file, opens its folder, and opens a pre-filled email to feedback.mimir@gmail.com -- just drag the file in and hit send. Nothing is sent automatically; the app never uploads anything on its own.
+
+For each issue, it helps to mention:
 
 - Original clip filename.
 - What Mimir classified it as.
@@ -65,7 +67,7 @@ For each issue, please report:
 - Whether the timeline markers made sense.
 - Any error message shown by the app.
 
-Email reports to **feedback.mimir@gmail.com**. Do not share private footage over public channels (forums, social media, chat rooms) -- send it directly to that address.
+Do not share private footage over public channels (forums, social media, chat rooms) -- send it directly to feedback.mimir@gmail.com.
 
 ## Known Limitations
 

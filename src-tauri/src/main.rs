@@ -56,7 +56,6 @@ const MODEL_OVERRIDE_DIR_ENV: &str = "MIMIR_MODEL_OVERRIDE_DIR";
 const AGE_EXE_NAME: &str = "age.exe";
 const TRAINING_AGE_RECIPIENT: &str = "age1ahsfxe3vh8u86cvrknya8pjg8nhydlw0jxw72h68s886qsp8lu2sxq942n";
 const DEFAULT_VISION_MODEL: &str = "qwen2.5vl:7b";
-const FEEDBACK_EMAIL: &str = "feedback.mimir@gmail.com";
 const OLLAMA_DOWNLOAD_URL: &str = "https://ollama.com/download";
 
 #[derive(Serialize)]
@@ -1164,9 +1163,7 @@ fn save_incident_feedback_sync(
         feedback_folder: feedback_folder.to_string_lossy().to_string(),
         feedback_file: feedback_file.to_string_lossy().to_string(),
         video_copied,
-        message: format!(
-            "Feedback saved locally. No upload was performed. Email the saved file to {FEEDBACK_EMAIL} if you'd like to share it."
-        ),
+        message: "Feedback saved locally. No upload was performed.".to_string(),
     })
 }
 
