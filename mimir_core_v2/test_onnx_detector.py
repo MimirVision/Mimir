@@ -13,7 +13,11 @@ def run(input_path: Path) -> None:
     import cv2  # type: ignore
 
     manifest = active_detector_manifest()
-    assert manifest.get("detector_id") == "rfdetr_nano_coco"
+    # Variant-agnostic: the packaged detector may be upgraded (nano -> small ->
+    # medium) without this smoke test needing an edit, but it must still be an
+    # RF-DETR COCO checkpoint rather than some unreviewed model.
+    detector_id = str(manifest.get("detector_id") or "")
+    assert detector_id.startswith("rfdetr_") and detector_id.endswith("_coco"), detector_id
     assert manifest.get("license") == "Apache-2.0"
     resolved = manifest.get("resolved_model_files")
     assert isinstance(resolved, list) and resolved

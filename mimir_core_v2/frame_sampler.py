@@ -24,11 +24,18 @@ def _load_cv2() -> Any:
 def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict, list[str]]:
     cv2 = _load_cv2()
     warnings: list[str] = []
+    # max_frames must be large enough to actually deliver sample_fps across a
+    # full-length clip, otherwise the cap silently halves (or worse) the
+    # requested rate. Tesla Sentry clips are ~60s, so a 60s budget is the
+    # sizing target: 60s * sample_fps. Previously balanced asked for 2 fps but
+    # the 60-frame cap reduced it to ~1 fps on a 60s clip, and thorough asked
+    # for 4 fps and got ~2 -- brief contact events (0.2-0.5s) could fall
+    # entirely between two sampled frames and never reach the detector.
     settings = {
-        "fast": {"sample_fps": 1.0, "max_frames": 30},
-        "balanced": {"sample_fps": 2.0, "max_frames": 60},
-        "thorough": {"sample_fps": 4.0, "max_frames": 120},
-    }.get(mode, {"sample_fps": 2.0, "max_frames": 60})
+        "fast": {"sample_fps": 1.0, "max_frames": 60},
+        "balanced": {"sample_fps": 2.0, "max_frames": 120},
+        "thorough": {"sample_fps": 4.0, "max_frames": 240},
+    }.get(mode, {"sample_fps": 2.0, "max_frames": 120})
     sample_fps = float(settings["sample_fps"])
     max_frames = int(settings["max_frames"])
     samples: list[dict] = []
