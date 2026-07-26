@@ -2365,7 +2365,7 @@ export function IncidentViewerScreen({
       ref={viewerRef}
       tabIndex={-1}
       onKeyDown={handleViewerKeyDown}
-      className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-white/[0.065] bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] shadow-[0_34px_110px_rgba(0,0,0,0.54)] outline-none sm:min-h-[calc(100vh-48px)]"
+      className="flex min-h-screen w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] outline-none"
     >
       <header className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-7">
         <button

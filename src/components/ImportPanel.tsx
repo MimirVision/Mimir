@@ -726,13 +726,13 @@ export function ImportPanel({
   const canAnalyze = hasSelectedFolder && scannerReady && (!aiRequired || aiReviewReady) && !isWorking
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1480px] flex-col overflow-hidden rounded-2xl border border-white/[0.065] bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.10),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.038),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] shadow-[0_34px_110px_rgba(0,0,0,0.56)] sm:min-h-[calc(100vh-48px)]">
-      <header className="flex min-h-[76px] shrink-0 items-center justify-between px-5 sm:px-7">
+    <main className="flex min-h-screen w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.10),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.038),rgba(255,255,255,0.012)),var(--mimir-bg-depth)]">
+      <header className="mx-auto flex min-h-[76px] w-full max-w-[1600px] shrink-0 items-center justify-between px-5 sm:px-7">
         <img src={mimirLockup} alt="Mimir" className="h-8 w-auto opacity-95" />
         <SystemStatusPill systemCheck={systemCheck} isCheckingSystem={isCheckingSystem} />
       </header>
 
-      <section className="grid flex-1 gap-8 px-5 pb-8 pt-5 sm:px-8 lg:grid-cols-[minmax(0,0.86fr)_minmax(430px,1.14fr)] lg:items-center lg:px-12 xl:px-16">
+      <section className="mx-auto grid w-full max-w-[1600px] flex-1 gap-8 px-5 pb-8 pt-5 sm:px-8 lg:grid-cols-[minmax(0,0.86fr)_minmax(430px,1.14fr)] lg:items-center lg:px-12 xl:px-16">
         <div className="max-w-[650px]">
           <div className="mb-5 inline-flex rounded-full border border-[rgba(157,183,170,0.15)] bg-[var(--mimir-accent-soft)] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
             Local incident review

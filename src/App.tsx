@@ -805,7 +805,7 @@ export default function App() {
     return (
       <div className="min-h-screen overflow-hidden bg-[var(--mimir-bg)] text-[var(--mimir-text)]">
         <div className="mimir-page-glow pointer-events-none fixed inset-0" />
-        <div className="relative h-screen overflow-y-auto p-4 sm:p-6">
+        <div className="relative h-screen overflow-y-auto">
           <OnboardingFlow initialScanMode={scanMode} onComplete={completeOnboarding} />
         </div>
       </div>
@@ -816,7 +816,7 @@ export default function App() {
     return (
       <div className="min-h-screen overflow-hidden bg-[var(--mimir-bg)] text-[var(--mimir-text)]">
         <div className="mimir-page-glow pointer-events-none fixed inset-0" />
-        <div className="relative h-screen overflow-y-auto p-4 sm:p-6">
+        <div className="relative h-screen overflow-y-auto">
           <CrashSafeBoundary title="Incident library error" onBack={returnToImport}>
             <IncidentLibraryView
               session={latestSession}
@@ -838,7 +838,7 @@ export default function App() {
   return (
     <div className="min-h-screen overflow-hidden bg-[var(--mimir-bg)] text-[var(--mimir-text)]">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-18%,rgba(255,255,255,0.06),transparent_34%),linear-gradient(140deg,rgba(255,255,255,0.028),transparent_46%)]" />
-      <div className="relative h-screen overflow-y-auto p-4 sm:p-6">
+      <div className="relative h-screen overflow-y-auto">
         <ImportPanel
           selectedFolder={selectedFolder}
           isDraggingFolder={isDraggingFolder}
