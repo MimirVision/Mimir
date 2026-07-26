@@ -1503,7 +1503,7 @@ function AiFeedbackPanel({
 
       {message && (
         <div className="mt-3 rounded-lg border border-white/[0.075] bg-white/[0.035] p-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
-          {message} Opened the file location and a pre-filled email - just attach the file and hit send.
+          {message}
         </div>
       )}
       {error && (
@@ -1590,6 +1590,12 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
       <p className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">
         Export this incident only after confirming you own the footage or have permission to use it for model development. Nothing uploads automatically.
       </p>
+      <div className="rounded-lg border border-[rgba(157,183,170,0.16)] bg-[var(--mimir-accent-soft)] p-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+        <span className="font-semibold text-[var(--mimir-text)]">Where this goes:</span> contributed clips are
+        human-annotated and counted toward a review set that a future detector is trained and tested against.
+        Detection never changes on its own -- an improved model only ships after it is measured against clips it
+        never trained on and a person approves it.
+      </div>
       <input
         value={recordedBy}
         onChange={event => setRecordedBy(event.target.value)}
@@ -2168,8 +2174,6 @@ export function IncidentViewerScreen({
         videoPath: feedbackIncludeVideo ? videoPath : null,
       })
 
-      setFeedbackMessage(result.message || `Feedback saved to ${result.feedback_folder}`)
-
       const subject = `Mimir feedback: ${feedbackChoice} - ${eventDisplayTitle(incident)}`
       const attachmentNote = feedbackIncludeVideo
         ? 'A copy of the video clip was saved alongside the feedback file - please attach both.'
@@ -2183,13 +2187,35 @@ export function IncidentViewerScreen({
         `File location: ${result.feedback_file || result.feedback_folder}`,
       ].filter(Boolean).join('\n')
 
+      // mailto: only works if the OS has a configured desktop mail client, which
+      // most people don't have anymore (webmail in a browser is the norm). Clipboard
+      // copy is the one step here that works regardless of what email the user
+      // actually uses, so it's the primary path -- mailto is just a bonus if it works.
+      let copiedToClipboard = false
+      try {
+        await navigator.clipboard.writeText(`To: ${FEEDBACK_EMAIL}\nSubject: ${subject}\n\n${body}`)
+        copiedToClipboard = true
+      } catch {
+        // Clipboard access can be denied in some contexts; not fatal.
+      }
+
       try {
         await invoke<void>('open_containing_folder', { path: result.feedback_file || result.feedback_folder })
       } catch {
         // Non-fatal: the feedback was already saved successfully.
       }
-      window.location.href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 
+      try {
+        window.location.href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      } catch {
+        // Non-fatal: no default mail app configured is common and expected.
+      }
+
+      setFeedbackMessage(
+        copiedToClipboard
+          ? `${result.message || 'Feedback saved.'} Copied the email text to your clipboard and opened the file's folder -- paste into an email to ${FEEDBACK_EMAIL} and attach the file.`
+          : `${result.message || 'Feedback saved.'} Opened the file's folder -- email it to ${FEEDBACK_EMAIL}.`,
+      )
       setFeedbackNotes('')
       setFeedbackIncludeVideo(false)
     } catch (error) {

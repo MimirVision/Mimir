@@ -64,7 +64,7 @@ Default trash location:
 
 ## How to send feedback
 
-Open an incident, pick an AI feedback label, add a note if you want, and click **Send feedback**. Mimir saves the feedback file, opens its folder, and opens a pre-filled email to feedback.mimir@gmail.com -- just drag the file in and hit send. Nothing is sent automatically; the app never uploads anything on its own.
+Open an incident, pick an AI feedback label, add a note if you want, and click **Send feedback**. Mimir saves the feedback file, opens its folder, copies the email text to your clipboard, and tries to open your default mail app (which may not be set up -- most people don't have one). If nothing opens, just paste what's on your clipboard into whatever email you actually use, addressed to feedback.mimir@gmail.com, and attach the file. Nothing is sent automatically; the app never uploads anything on its own.
 
 If you'd rather write a manual report, include:
 
