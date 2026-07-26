@@ -2803,6 +2803,20 @@ async fn open_containing_folder(path: String) -> Result<(), ScanFailure> {
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+// Destination for one-click / batch contributions, so the user isn't forced
+// through a save dialog for every incident. Consent is still explicit in the
+// UI; this only removes the "where do I put it" step.
+#[tauri::command]
+async fn default_contribution_folder() -> Result<String, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let folder = default_mimir_library_root()?.join("Contributions");
+        fs::create_dir_all(&folder).map_err(|error| ScanFailure::new(error.to_string()))?;
+        Ok(folder.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
 #[tauri::command]
 async fn open_mimir_storage_folder(kind: String) -> Result<(), ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -2971,6 +2985,7 @@ fn main() {
             active_model_status,
             open_containing_folder,
             open_mimir_storage_folder,
+            default_contribution_folder,
             log_incident_diagnostic
         ])
         .run(tauri::generate_context!())

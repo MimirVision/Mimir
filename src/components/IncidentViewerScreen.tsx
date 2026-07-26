@@ -3,6 +3,13 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { CrashSafeBoundary, logIncidentDiagnostic } from './CrashSafeBoundary'
 import { FEEDBACK_EMAIL } from '../config'
+import {
+  contributionFileName,
+  readContributorIdentity,
+  rightsBasisLabel,
+  saveContributorIdentity,
+  type RightsBasis,
+} from '../lib/contributionIdentity'
 import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import { type SeverityGroup } from '../lib/incidentStatus'
 import {
@@ -1516,19 +1523,26 @@ function AiFeedbackPanel({
 }
 
 function TrainingContributionPanel({ incident, session }: { incident: MimirIncident; session?: MimirSession }) {
-  const [recordedBy, setRecordedBy] = useState('')
-  const [rightsBasis, setRightsBasis] = useState<'owned' | 'explicit_permission' | 'public_license'>('owned')
-  const [permissionReference, setPermissionReference] = useState('')
+  const savedIdentity = readContributorIdentity()
+  const [recordedBy, setRecordedBy] = useState(savedIdentity?.recordedBy ?? '')
+  const [rightsBasis, setRightsBasis] = useState<RightsBasis>(savedIdentity?.rightsBasis ?? 'owned')
+  const [permissionReference, setPermissionReference] = useState(savedIdentity?.permissionReference ?? '')
   const [permissionRecord, setPermissionRecord] = useState('')
   const [rightsConfirmed, setRightsConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  // When consent details are already on file, collapse the whole form down to
+  // a single confirm button. The rights confirmation itself is never skipped --
+  // only the re-typing of answers that don't change between incidents.
+  const [useSavedDetails, setUseSavedDetails] = useState(Boolean(savedIdentity))
 
   useEffect(() => {
-    setRecordedBy('')
-    setRightsBasis('owned')
-    setPermissionReference('')
+    const identity = readContributorIdentity()
+    setRecordedBy(identity?.recordedBy ?? '')
+    setRightsBasis(identity?.rightsBasis ?? 'owned')
+    setPermissionReference(identity?.permissionReference ?? '')
+    setUseSavedDetails(Boolean(identity))
     setPermissionRecord('')
     setRightsConfirmed(false)
     setMessage('')
@@ -1542,26 +1556,43 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
     }
   }
 
-  const exportPackage = async () => {
-    if (!rightsConfirmed || !recordedBy.trim() || !permissionReference.trim()) {
-      setError('Confirm your rights and complete the consent details first.')
+  const exportPackage = async (oneClick: boolean) => {
+    if (!recordedBy.trim() || !permissionReference.trim()) {
+      setError('Complete the consent details first.')
       return
     }
-    const suggestedName = `${safeText(incident.source_stem, incidentActionId(incident))}.mimir-dataset.age`
-      .replace(/[<>:"/\\|?*]+/g, '_')
-    const destination = await saveDialog({
-      title: 'Export encrypted Mimir training package',
-      defaultPath: suggestedName,
-      filters: [{ name: 'Mimir encrypted dataset', extensions: ['age'] }],
-    })
-    if (!destination) {
+    if (!oneClick && !rightsConfirmed) {
+      setError('Confirm your rights before exporting.')
       return
     }
-    const outputPath = destination.toLowerCase().endsWith('.mimir-dataset.age')
-      ? destination
-      : destination.toLowerCase().endsWith('.age')
-        ? destination.slice(0, -4) + '.mimir-dataset.age'
-        : destination + '.mimir-dataset.age'
+    const suggestedName = contributionFileName(incidentActionId(incident), safeText(incident.source_stem, ''))
+    let outputPath = ''
+    if (oneClick) {
+      // Saved-details path: drop it in the standard Contributions folder so the
+      // user isn't picking a location for every single incident.
+      try {
+        const folder = await invoke<string>('default_contribution_folder')
+        const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\'
+        outputPath = `${folder}${separator}${suggestedName}`
+      } catch (value) {
+        setError(actionErrorMessage(value))
+        return
+      }
+    } else {
+      const destination = await saveDialog({
+        title: 'Export encrypted Mimir training package',
+        defaultPath: suggestedName,
+        filters: [{ name: 'Mimir encrypted dataset', extensions: ['age'] }],
+      })
+      if (!destination) {
+        return
+      }
+      outputPath = destination.toLowerCase().endsWith('.mimir-dataset.age')
+        ? destination
+        : destination.toLowerCase().endsWith('.age')
+          ? destination.slice(0, -4) + '.mimir-dataset.age'
+          : destination + '.mimir-dataset.age'
+    }
     setBusy(true)
     setError('')
     setMessage('Encrypting selected footage locally...')
@@ -1575,6 +1606,8 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         permissionReference: permissionReference.trim(),
         independentPermissionRecord: permissionRecord || null,
       })
+      saveContributorIdentity({ recordedBy: recordedBy.trim(), rightsBasis, permissionReference: permissionReference.trim() })
+      setUseSavedDetails(true)
       setMessage(result.message)
       setRightsConfirmed(false)
     } catch (value) {
@@ -1596,6 +1629,32 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         Detection never changes on its own -- an improved model only ships after it is measured against clips it
         never trained on and a person approves it.
       </div>
+      {useSavedDetails ? (
+        <>
+          <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+            Using your saved consent details: <span className="text-[var(--mimir-text)]">{recordedBy}</span>
+            {' - '}{rightsBasisLabel(rightsBasis)}.
+            <button
+              type="button"
+              onClick={() => setUseSavedDetails(false)}
+              className="ml-1 underline underline-offset-2 hover:text-[var(--mimir-text)]"
+            >
+              Change
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => void exportPackage(true)}
+            disabled={busy}
+            className="h-10 rounded-lg bg-[var(--mimir-text)] px-3 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="inline-flex items-center gap-2">{busy && <SmallSpinner />}Contribute this incident</span>
+          </button>
+          {message && <div className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">{message}</div>}
+          {error && <div className="text-[12px] leading-5 text-red-100/85">{error}</div>}
+        </>
+      ) : (
+      <>
       <input
         value={recordedBy}
         onChange={event => setRecordedBy(event.target.value)}
@@ -1635,7 +1694,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
       </label>
       <button
         type="button"
-        onClick={() => void exportPackage()}
+        onClick={() => void exportPackage(false)}
         disabled={busy || !rightsConfirmed}
         className="h-10 rounded-lg bg-[var(--mimir-text)] px-3 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -1643,6 +1702,8 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
       </button>
       {message && <div className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">{message}</div>}
       {error && <div className="text-[12px] leading-5 text-red-100/85">{error}</div>}
+      </>
+      )}
     </div>
   )
 }
