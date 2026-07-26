@@ -1,20 +1,20 @@
 {
   "manifest_version": "mimir_model_manifest_v1",
-  "detector_id": "rfdetr_nano_coco",
-  "detector_version": "rfdetr-1.8.3-nano-onnx-384",
+  "detector_id": "rfdetr_small_coco",
+  "detector_version": "rfdetr-small-onnx-512",
   "runtime": "onnxruntime",
   "architecture": "rf_detr",
   "model_files": [
-    "models/rfdetr-nano.onnx"
+    "models/rfdetr-small.onnx"
   ],
   "models": [
     {
-      "filename": "models/rfdetr-nano.onnx",
-      "sha256": "1c7e251f349923a9baf31bed00532a7f487b2d03ef28f357c8e140c00214157c",
-      "size_bytes": 113156831,
-      "upstream_model": "RF-DETR Nano",
+      "filename": "models/rfdetr-small.onnx",
+      "sha256": "df6abfc61c4374d053a810d9855e72be0edab9884a79f26882963faf3741c444",
+      "size_bytes": 120952841,
+      "upstream_model": "RF-DETR Small",
       "upstream_package_version": "1.8.3",
-      "export_resolution": 384
+      "export_resolution": 512
     }
   ],
   "license": "Apache-2.0",
@@ -23,11 +23,18 @@
   "commercial_distribution_approved": true,
   "release_blocker": false,
   "purpose": "person and vehicle candidate detection",
-  "input_size": 384,
+  "input_size": 512,
   "confidence_threshold": 0.3,
   "max_detections_per_frame": 20,
-  "person_class_ids": [1],
-  "vehicle_class_ids": [3, 4, 6, 8],
+  "person_class_ids": [
+    1
+  ],
+  "vehicle_class_ids": [
+    3,
+    4,
+    6,
+    8
+  ],
   "limitations": [
     "Bounding boxes do not prove physical contact.",
     "Vehicle doors are not a dedicated class.",
