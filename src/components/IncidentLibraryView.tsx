@@ -5,6 +5,7 @@ import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
+import { contributionFileName, readContributorIdentity, rightsBasisLabel } from '../lib/contributionIdentity'
 import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import {
   incidentOverrideKey,
@@ -442,6 +443,8 @@ function SelectionToolbar({
   onSetStatus,
   onMoveToLibrary,
   onMoveToTrash,
+  onContribute,
+  canContribute,
   onClear,
 }: {
   count: number
@@ -449,6 +452,8 @@ function SelectionToolbar({
   onSetStatus: (status: SeverityGroup) => void
   onMoveToLibrary: () => void
   onMoveToTrash: () => void
+  onContribute: () => void
+  canContribute: boolean
   onClear: () => void
 }) {
   return (
@@ -460,6 +465,9 @@ function SelectionToolbar({
         <button type="button" disabled={busy || count === 0} onClick={() => onSetStatus('IGNORE')} className="h-9 rounded-md bg-white/[0.04] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50">Mark Ignore</button>
         <button type="button" disabled={busy || count === 0} onClick={onMoveToLibrary} className="h-9 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50">Move to Library</button>
         <button type="button" disabled={busy || count === 0} onClick={onMoveToTrash} className="h-9 rounded-md border border-red-300/18 bg-red-500/10 px-3 text-[12px] font-semibold text-red-100/88 transition hover:bg-red-500/16 disabled:cursor-not-allowed disabled:opacity-50">Move to Mimir Trash</button>
+        {canContribute && (
+          <button type="button" disabled={busy || count === 0} onClick={onContribute} className="h-9 rounded-md border border-[rgba(157,183,170,0.24)] bg-[var(--mimir-accent-soft)] px-3 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-[rgba(157,183,170,0.18)] disabled:cursor-not-allowed disabled:opacity-50">Contribute selected</button>
+        )}
         <button type="button" disabled={busy} onClick={onClear} className="h-9 rounded-md bg-transparent px-3 text-[12px] font-medium text-[var(--mimir-text-subtle)] transition hover:text-[var(--mimir-text)] disabled:opacity-60">Clear selection</button>
       </div>
     </div>
@@ -540,6 +548,9 @@ export function IncidentLibraryView({
   const [page, setPage] = useState<ReviewPage>('review')
   const [selectedIncident, setSelectedIncident] = useState<MimirIncident | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
+  // Batch contribute only appears once consent details exist, so the first
+  // contribution always goes through the full form in the incident viewer.
+  const hasSavedContributorIdentity = Boolean(readContributorIdentity())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [filesIncident, setFilesIncident] = useState<MimirIncident | null>(null)
   const [showFreeUpModal, setShowFreeUpModal] = useState(false)
@@ -753,6 +764,77 @@ export function IncidentLibraryView({
       setBulkMessage(`${actionable.length} ${pluralize(actionable.length, 'incident')} ${actionCopy}.`)
       setSelectedIds(new Set())
       setShowFreeUpModal(false)
+    }
+
+    setBulkBusy(false)
+  }
+
+  // Batch contribute: one confirmation for the whole selection instead of
+  // walking the consent form once per incident. Uses the consent details the
+  // user already saved; if none exist, the viewer's full form is still the
+  // way in, so first-time consent is never silently skipped.
+  const contributeSelected = async () => {
+    const identity = readContributorIdentity()
+    if (!identity) {
+      setBulkMessage('Open one incident and contribute it once first, so your consent details are on file.')
+      return
+    }
+
+    const actionable = selectedIncidents
+    if (actionable.length === 0) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Contribute ${actionable.length} ${pluralize(actionable.length, 'incident')} for model training?\n\n` +
+        `Rights basis: ${rightsBasisLabel(identity.rightsBasis)} (${identity.recordedBy})\n\n` +
+        'Each one is encrypted into your local Contributions folder. Nothing uploads automatically.',
+    )
+    if (!confirmed) {
+      return
+    }
+
+    setBulkBusy(true)
+    setBulkMessage('')
+    setStorageOpenError('')
+
+    let folder = ''
+    try {
+      folder = await invoke<string>('default_contribution_folder')
+    } catch (error) {
+      setStorageOpenError(errorMessage(error))
+      setBulkBusy(false)
+      return
+    }
+
+    const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\'
+    const failures: string[] = []
+    let exported = 0
+
+    for (const incident of actionable) {
+      const incidentId = incidentActionId(incident)
+      try {
+        await invoke('export_training_contribution', {
+          sessionPath: session?.session_archive_path || session?.output_path || null,
+          incidentId,
+          outputPath: `${folder}${separator}${contributionFileName(incidentId, String(incident.source_stem || ''))}`,
+          recordedBy: identity.recordedBy,
+          rightsBasis: identity.rightsBasis,
+          permissionReference: identity.permissionReference,
+          independentPermissionRecord: null,
+        })
+        exported += 1
+      } catch (error) {
+        failures.push(`${incidentId}: ${errorMessage(error)}`)
+      }
+    }
+
+    if (failures.length > 0) {
+      setStorageOpenError(failures.join('\n'))
+      setBulkMessage(`${exported} contributed, ${failures.length} failed.`)
+    } else {
+      setBulkMessage(`${exported} ${pluralize(exported, 'incident')} contributed to ${folder}.`)
+      setSelectedIds(new Set())
     }
 
     setBulkBusy(false)
@@ -1086,6 +1168,8 @@ export function IncidentLibraryView({
             onSetStatus={status => void runBulkAction(selectedIncidents, 'set_status', status)}
             onMoveToLibrary={() => void runBulkAction(selectedIncidents, 'move_to_library')}
             onMoveToTrash={() => void runBulkAction(selectedIncidents, 'delete')}
+            onContribute={() => void contributeSelected()}
+            canContribute={hasSavedContributorIdentity}
             onClear={() => setSelectedIds(new Set())}
           />
         )}
