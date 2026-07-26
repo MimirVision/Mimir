@@ -2367,7 +2367,7 @@ export function IncidentViewerScreen({
       onKeyDown={handleViewerKeyDown}
       className="flex min-h-screen w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] outline-none"
     >
-      <header className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-7">
+      <header className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-7">
         <button
           onClick={onBack}
           className="h-9 rounded-lg bg-white/[0.03] px-3.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)]"
@@ -2381,7 +2381,7 @@ export function IncidentViewerScreen({
         </div>
       </header>
 
-      <section className="flex-1 overflow-y-auto px-5 pb-7 pt-2 lg:px-7">
+      <section className="mx-auto w-full max-w-[1600px] flex-1 overflow-y-auto px-5 pb-7 pt-2 lg:px-7">
         <div className="mb-4">
           <div className="mb-2 text-[12px] font-medium text-[var(--mimir-text-subtle)]">
             Incident viewer

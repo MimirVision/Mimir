@@ -968,7 +968,7 @@ export function IncidentLibraryView({
         </div>
       </header>
 
-      <section className="flex-1 overflow-y-auto px-5 pb-7 pt-4 lg:px-7">
+      <section className="mx-auto w-full max-w-[1600px] flex-1 overflow-y-auto px-5 pb-7 pt-4 lg:px-7">
         {page === 'library' ? (
           <>
             <div className="mb-5">
