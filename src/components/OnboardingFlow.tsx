@@ -83,7 +83,7 @@ export function OnboardingFlow({ initialScanMode, onComplete }: OnboardingFlowPr
   }
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-32px)] w-full max-w-[1180px] flex-col overflow-hidden rounded-xl border border-[var(--mimir-border)] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.055),transparent_34%),var(--mimir-bg-depth)] shadow-[0_30px_100px_rgba(0,0,0,0.56)] sm:min-h-[calc(100vh-48px)]">
+    <main className="flex min-h-screen w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.055),transparent_34%),var(--mimir-bg-depth)]">
       <header className="flex min-h-[78px] items-center justify-between gap-4 px-5 sm:px-7">
         <div className="flex items-center gap-3">
           <img src={mimirMark} alt="" className="h-9 w-9 object-contain opacity-95" />
