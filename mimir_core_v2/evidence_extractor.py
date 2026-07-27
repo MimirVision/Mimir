@@ -413,8 +413,15 @@ def _first_visual_contact_sample(motion_samples: list[dict], max_localized: floa
         start_time = _safe_float(segment[0].get("time_sec"))
         end_time = _safe_float(segment[-1].get("time_sec"))
         body_zone_hits = sum(1 for item in segment if "body" in str(item.get("ego_vehicle_zone") or "") or item.get("ego_vehicle_zone") == "lower_band")
+        # "Sustained" must mean the same real-world duration in every scan mode.
+        # This previously also required len(segment) >= 3 raw samples, but a
+        # sample count scales with sample_fps: 3 samples is ~2.0s at 1 fps but
+        # only ~0.5s at 4 fps, so the binding constraint flipped between modes
+        # and fast/thorough took different branches, selecting different events
+        # entirely. The span check below is the rate-independent expression of
+        # the same intent; the >= 2 guard only rejects a single isolated blip.
         sustained = (
-            len(segment) >= VISUAL_CONTACT_MIN_CLUSTER_SAMPLES
+            len(segment) >= 2
             and end_time - start_time >= VISUAL_CONTACT_MIN_CLUSTER_SEC
         )
         if sustained and body_zone_hits >= max(1, len(segment) // 2):
