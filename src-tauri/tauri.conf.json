@@ -27,7 +27,9 @@
           "requireLiteralLeadingDot": true
         }
       },
-      "capabilities": ["main-capability"]
+      "capabilities": [
+        "main-capability"
+      ]
     },
     "windows": [
       {
@@ -67,7 +69,9 @@
       "resources/mimir-backend/AGE-LICENSE.txt"
     ],
     "shortDescription": "Local incident review for vehicle footage",
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "windows": {
       "webviewInstallMode": {
         "type": "offlineInstaller",
@@ -76,7 +80,8 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "headerImage": "icons/nsis/header.bmp",
-        "sidebarImage": "icons/nsis/sidebar.bmp"
+        "sidebarImage": "icons/nsis/sidebar.bmp",
+        "template": "installer.nsi"
       }
     }
   },
