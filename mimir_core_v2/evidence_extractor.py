@@ -1146,8 +1146,19 @@ def _track_detections(detections: list[dict]) -> list[dict]:
 
 def _dwell_flags(tracks: list[dict], class_name: str, passby_sec: float, linger_sec: float) -> tuple[bool, bool]:
     matching = [track for track in tracks if track.get("class_name") == class_name]
-    passby = any(track.get("dwell_time_sec", 0.0) <= passby_sec or track.get("frame_count", 0) <= 2 for track in matching)
-    lingering = any(track.get("dwell_time_sec", 0.0) >= linger_sec or track.get("frame_count", 0) >= 5 for track in matching)
+    # Thresholds are deliberately expressed in seconds only.
+    #
+    # An earlier version also tested raw frame_count (<=2 => passby, >=5 =>
+    # lingering). frame_count counts *sampled* frames, so it scales with the
+    # sampling rate and those constants were implicitly calibrated for 1 fps.
+    # At 4 fps ">=5 frames" is only ~1.25s, so a brief walk-past was reported
+    # as lingering -- denser sampling produced *more* spurious flags than
+    # sparse sampling, which is why thorough looked worse than fast.
+    #
+    # dwell_time_sec measures the same intent (how long was it actually there)
+    # and is independent of how often we sample, so scan modes stay comparable.
+    passby = any(track.get("dwell_time_sec", 0.0) <= passby_sec for track in matching)
+    lingering = any(track.get("dwell_time_sec", 0.0) >= linger_sec for track in matching)
     return passby, lingering
 
 
