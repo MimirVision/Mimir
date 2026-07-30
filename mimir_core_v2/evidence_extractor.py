@@ -314,11 +314,35 @@ def _ego_vehicle_zone_motion(diff: Any) -> tuple[str, float, dict[str, float]]:
     return zone_name, round(score, 4), {key: round(value, 4) for key, value in zones.items()}
 
 
+# Region extraction failing returns [], which disables contact escalation for
+# that frame. That is the right degradation -- one bad frame must not abort a
+# scan -- but it used to happen with no trace at all, so a systematic failure
+# looked identical to "there was nothing there". Counted here and surfaced in
+# evidence_warnings.
+_REGION_FAILURES: dict[str, Any] = {"count": 0, "last_error": ""}
+
+
+def _reset_region_failures() -> None:
+    _REGION_FAILURES["count"] = 0
+    _REGION_FAILURES["last_error"] = ""
+
+
+def _region_failure_warnings() -> list[str]:
+    count = int(_REGION_FAILURES["count"] or 0)
+    if count <= 0:
+        return []
+    return [
+        f"Motion region extraction failed on {count} frame(s), so contact "
+        f"escalation was reduced for them. Last error: {_REGION_FAILURES['last_error']}"
+    ]
+
+
 def _motion_regions_from_diff(diff: Any) -> list[dict]:
+    cv2 = _load_cv2()
+    if cv2 is None:
+        return []
+
     try:
-        cv2 = _load_cv2()
-        if cv2 is None:
-            return []
         height, width = diff.shape[:2]
         if height <= 0 or width <= 0:
             return []
@@ -328,7 +352,9 @@ def _motion_regions_from_diff(diff: Any) -> list[dict]:
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         mask = cv2.dilate(mask, kernel, iterations=1)
         count, labels, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
-    except Exception:
+    except (cv2.error, AttributeError, IndexError, TypeError, ValueError) as error:
+        _REGION_FAILURES["count"] = int(_REGION_FAILURES["count"] or 0) + 1
+        _REGION_FAILURES["last_error"] = f"{type(error).__name__}: {error}"
         return []
 
     regions: list[dict] = []
@@ -1740,6 +1766,7 @@ def fallback_evidence(event_group: dict, warning: str) -> dict:
 
 
 def extract_evidence(event_group: dict, sample_result: dict, object_detection_enabled: bool = True) -> dict:
+    _reset_region_failures()
     clips = event_group.get("clips") if isinstance(event_group.get("clips"), list) else []
     cameras = event_group.get("available_cameras") if isinstance(event_group.get("available_cameras"), list) else []
     duration = 0.0
@@ -2140,6 +2167,6 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         **key_moment_result,
         "hero_thumbnail": "",
         "contact_sheet": "",
-        "evidence_warnings": [],
+        "evidence_warnings": _region_failure_warnings(),
         **get_evidence_runtime_diagnostics(),
     }
