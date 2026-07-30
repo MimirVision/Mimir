@@ -78,6 +78,19 @@ COMPILE_TARGETS = [
     "mimir_core_v2/test_onnx_detector.py",
     "mimir_core_v2/benchmark.py",
     "mimir_core_v2_audit.py",
+    # model_manifest is on the critical path for the permissive_detector gate
+    # and the real-footage smoke test, but was never compile-checked.
+    "mimir_core_v2/model_manifest.py",
+    "mimir_core_v2/model_update.py",
+    "mimir_core_v2/validators.py",
+    "mimir_core_v2/source_discovery.py",
+    "mimir_core_v2/ai_reviewer.py",
+    "mimir_core_v2_model_update.py",
+    "mimir_core_v2/test_mode_invariance.py",
+    "mimir_core_v2/test_dwell_flags.py",
+    "mimir_core_v2/test_motion_baseline.py",
+    "mimir_core_v2/test_selection_grid.py",
+    "mimir_core_v2/test_model_update.py",
 ]
 
 FORBIDDEN_TRACKED_PREFIXES = (
@@ -282,6 +295,10 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-ai-enrich.exe",
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-actions.exe",
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-dataset.exe",
+        # Built by build-sidecar.ps1 and signed by sign_release.ps1, but was
+        # missing here -- so an unsigned model-update sidecar would have passed
+        # this gate. It can replace the active detector, so it must be verified.
+        frontend_root / "src-tauri" / "resources" / "mimir-backend" / "mimir-core-v2-model-update.exe",
         frontend_root / "src-tauri" / "resources" / "mimir-backend" / "age.exe",
     ]
     installer_path = locate_installer(frontend_root, installer)
@@ -375,6 +392,17 @@ def run_operational_checks(args: argparse.Namespace, output_dir: Path) -> dict[s
         "mimir_core_v2.test_data_pipeline",
         "mimir_core_v2.test_otw_auxiliary",
         "mimir_core_v2.test_carla_data",
+        # Regression guards for the sampling-rate bug class: several thresholds
+        # were once expressed as raw sampled-frame counts, so the slower scan
+        # modes behaved worse than the fast one. The gate must actually run
+        # these, not merely compile them.
+        "mimir_core_v2.test_mode_invariance",
+        "mimir_core_v2.test_dwell_flags",
+        "mimir_core_v2.test_motion_baseline",
+        "mimir_core_v2.test_selection_grid",
+        # Guards that a malformed or tampered model package cannot become the
+        # active detector.
+        "mimir_core_v2.test_model_update",
     ):
         run_required([sys.executable, "-m", module], module)
 
@@ -460,7 +488,7 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         "schema_version": "mimir_release_check_v2",
         "generated_at": utc_now(),
-        "release_channel": "free_invite_only_beta",
+        "release_channel": "free_public_beta",
         "billing_enabled": False,
         "activation_required": False,
         "internal_mode": bool(args.internal),
