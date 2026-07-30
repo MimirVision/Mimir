@@ -646,11 +646,23 @@ export default function App() {
     setIsCancellingScan(true)
     setLastProgressMessage('Stopping scan safely...')
     try {
-      await invoke<boolean>('cancel_local_scan')
+      const stopped = await invoke<boolean>('cancel_local_scan')
+      if (!stopped) {
+        // No scan process was registered yet -- e.g. cancel pressed while the
+        // backend was still starting. Ignoring this left the button stuck on
+        // "Stopping..." and, if the scan then succeeded, showed results for a
+        // scan the user had cancelled.
+        scanCancellationRequested.current = false
+        setIsCancellingScan(false)
+        setLastProgressMessage('')
+        setScanError('The scan could not be stopped because it was not running yet. Try again in a moment.')
+      }
     } catch (error) {
       scanCancellationRequested.current = false
       setIsCancellingScan(false)
-      setScanError(error instanceof Error ? error.message : String(error))
+      setLastProgressMessage('')
+      setScanError('Mimir could not stop the scan. See technical details below, or try again.')
+      setScanOutput({ stdout: '', stderr: error instanceof Error ? error.message : String(error) })
     }
   }
 
