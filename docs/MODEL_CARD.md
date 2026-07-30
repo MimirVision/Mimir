@@ -15,7 +15,8 @@ uncertainty. Optional local vision-language review is not authoritative.
 
 ## Detector Distribution Status
 
-Mimir uses RF-DETR Nano exported to ONNX and runs it through ONNX Runtime. The exact
+Mimir uses RF-DETR Small exported to ONNX at 512px and runs it through ONNX
+Runtime. The exact
 model filename, upstream version, SHA-256 checksum, size, class mapping, and Apache
 2.0 notice are recorded in `mimir_core_v2/model_manifest.json`. Ultralytics and the
 RF-DETR training package are not runtime dependencies. Release builds are rejected

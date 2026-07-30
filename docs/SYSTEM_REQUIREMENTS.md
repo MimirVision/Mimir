@@ -8,9 +8,11 @@ your machine.
 
 - **Windows 10 (64-bit) or Windows 11.** The installer only builds a 64-bit
   package; there is no 32-bit or ARM build.
-- **~350 MB of free disk space** for the install itself (the app bundles its
-  own detector model and a full offline copy of the Microsoft Edge WebView2
-  runtime, so it doesn't need to download anything during setup).
+- **A ~395 MB download and about 325 MB installed.** Allow roughly 750 MB
+  free while installing, since the installer and the installed files coexist
+  briefly. The installer is large because it bundles the detector model and a
+  full offline copy of the Microsoft Edge WebView2 runtime, so setup never
+  needs to download anything.
 - **Additional free space if you use Move to Library / Move to Trash** on
   footage that lives on a different drive than your library folder (default:
   `%USERPROFILE%\Videos\Mimir Library`) -- those actions copy the file, so
@@ -31,10 +33,11 @@ your machine.
 
 ## Honest unknowns
 
-- **RAM**: not precisely profiled yet. Video decoding plus the detector model
-  plus normal OS/browser overhead means 8 GB is a reasonable floor; more
-  helps if you're doing other memory-heavy things at the same time. Don't
-  treat this as a measured number -- it's a reasonable estimate, not a
+- **RAM**: not precisely profiled. Video decoding plus the detector model plus
+  normal OS/browser overhead means 8 GB is a reasonable floor; more helps if
+  you're doing other memory-heavy things at the same time. The detector was
+  since moved from 384px to 512px input, which raises per-frame cost, and this
+  figure has not been re-measured against it. Treat it as an estimate, not a
   benchmark result.
 - **The installer is unsigned** for this beta. Windows SmartScreen will show
   an "unrecognized app" warning on first run -- choose the advanced option to
