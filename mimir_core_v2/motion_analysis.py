@@ -36,6 +36,35 @@ MOTION_BASELINE_MIN_RATIO = 0.75
 MOTION_HISTORY_SPAN = 2.0
 
 
+def _selection_grid(
+    motion_samples: list[dict],
+    safe_float: Callable[[object, float], float],
+    interval_sec: float = MOTION_BASELINE_SEC,
+) -> list[dict]:
+    """Thin motion samples to a fixed ~``interval_sec`` grid.
+
+    Candidate selection is what actually decides *which* event becomes the
+    incident, and it is the part the 1 fps `fast` mode gets right: clusters are
+    judged on a coarse, evenly spaced grid. Denser modes previously selected on
+    every sampled frame, so they surfaced extra short-lived clusters that 1 fps
+    never saw and drifted onto different events.
+
+    Selecting on this grid makes every mode agree with `fast` by construction,
+    while the finer samples are still used for object detection and for key
+    moment refinement -- so denser modes keep their advantages (better recall,
+    better sub-second localisation) without changing which event is chosen.
+    """
+
+    grid: list[dict] = []
+    last_time: float | None = None
+    for sample in motion_samples:
+        time_sec = safe_float(sample.get("time_sec"), 0.0)
+        if last_time is None or time_sec - last_time >= interval_sec - 1e-6:
+            grid.append(sample)
+            last_time = time_sec
+    return grid
+
+
 def _baseline_reference(history: list[tuple[float, Any]], current_time: float) -> tuple[float, Any] | None:
     """Buffered frame closest to one baseline before ``current_time``."""
 
@@ -150,7 +179,15 @@ def analyze_motion(
         (safe_float(sample.get("duration_sec"), 0.0) for sample in motion_samples),
         default=0.0,
     )
-    visual_contact = first_visual_contact_sample(motion_samples, max_localized, duration_sec)
+    # Choose the candidate on the fixed grid so every mode selects the same
+    # event as fast; the dense samples above still drive object detection and
+    # downstream key-moment refinement.
+    selection_samples = _selection_grid(motion_samples, safe_float)
+    selection_max_localized = max(
+        (safe_float(sample.get("localized_motion_score"), 0.0) for sample in selection_samples),
+        default=max_localized,
+    )
+    visual_contact = first_visual_contact_sample(selection_samples, selection_max_localized, duration_sec)
     abrupt_scene_change = bool(
         max_score >= thresholds["motion_medium"]
         and (

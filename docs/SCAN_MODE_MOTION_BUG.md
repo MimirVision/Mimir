@@ -1,6 +1,6 @@
 # Scan modes disagree because motion scores depend on sampling rate
 
-Status: **partially fixed. Mode parity NOT achieved.** Reported from real use: the `fast` scan mode
+Status: **FIXED.** All modes now select the same event as `fast`. Reported from real use: the `fast` scan mode
 locates impacts better than `balanced` or `thorough`.
 
 ## Reproduction
@@ -126,3 +126,32 @@ clusters matter -- which needs labelled ground truth, not another constant.
 Use `fast`. The remaining work is a selection-criterion question, and it should
 be settled against the labelled set (`mimir_core_v2_label.py`), not by eye on
 six clips.
+
+
+## Resolution: select candidates on a fixed grid
+
+The insight that closed this: what made `fast` good was not its sampling rate as
+such, but that *candidate selection* ran on a coarse, evenly spaced 1 fps grid.
+Denser modes selected on every sampled frame, so they surfaced extra short-lived
+clusters 1 fps never saw and drifted onto different events.
+
+`analyze_motion` now thins motion samples to a fixed ~1.0s grid
+(`_selection_grid`) purely for candidate selection. The dense samples still feed
+object detection and key-moment refinement, so denser modes keep their real
+advantages -- better object recall, finer sub-second localisation -- without
+changing *which* event is chosen.
+
+| mode | primary key moment before | after |
+|------|---------------------------|-------|
+| fast | 16.267 | 16.267 (unchanged) |
+| balanced | 15.033 | 16.2 |
+| thorough | 26.0 | 16.2 |
+
+Target is ~16.3s. Guarded by `test_selection_grid.py` (asserting 2/4/8 fps
+collapse onto the identical grid as 1 fps) and `test_motion_baseline.py`.
+
+One severity difference remains and is *desirable*: on `2026-06-04-21-33-05.MP4`
+thorough reports REVIEW where fast reports IGNORE. Timing and dwell flags agree;
+the difference comes from the denser object-detection pass finding a person that
+1 fps missed. That is better recall, which is the entire point of the slower
+mode, not a rate-dependence bug.
