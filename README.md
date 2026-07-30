@@ -34,7 +34,7 @@ The strict gate must pass before an installer is shared:
 C:\Mimir_Backend\.venv-runtime\Scripts\python.exe C:\Mimir_Backend\mimir_core_v2_release_check.py --gate-only
 ```
 
-The runtime detector is the checksum-pinned RF-DETR Nano ONNX model described in
+The runtime detector is the checksum-pinned RF-DETR Small ONNX model described in
 the model card and backend model manifest. External release remains blocked until
 the locked evaluation, signatures, clean-VM, accessibility, and update evidence
 also pass.

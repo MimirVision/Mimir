@@ -52,7 +52,12 @@ clips), it scans locally, and you review what it found.
 
 ## How to join
 
-Access is invite-only — the installer isn't publicly posted. If you're in, you'll
-get the installer directly plus the tester guide
-([PRIVATE_BETA_TESTING.md](../PRIVATE_BETA_TESTING.md)) for how to install it and
-where to send feedback.
+The installer is a free public download -- no invite, no account, no signup.
+Grab it from the download page, which also carries the tester guide
+([PRIVATE_BETA_TESTING.md](../release_assets/PRIVATE_BETA_TESTING.md)) covering install steps
+and where to send feedback.
+
+Note that the strict release gate
+(`mimir_core_v2_release_check.py`) is deliberately still red: the accuracy
+evidence it demands does not exist yet. That is disclosed rather than hidden --
+see [MODEL_CARD.md](MODEL_CARD.md) and [LIMITATIONS.md](LIMITATIONS.md).

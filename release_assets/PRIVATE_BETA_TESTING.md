@@ -21,7 +21,7 @@ Scanning reads the selected folder and builds a local incident timeline. It does
 
 - **Fast**: Quick scan, fewer AI checks. Use this for a first pass on larger folders.
 - **Balanced**: Recommended. Good speed and detection quality for most testers.
-- **Quality**: Slower scan with more careful review. Use this when a folder contains subtle or important events.
+- **Thorough**: Slower scan with more careful review. Use this when a folder contains subtle or important events.
 
 ## Manual Status Changes
 
