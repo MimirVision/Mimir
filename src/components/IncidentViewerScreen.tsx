@@ -1483,6 +1483,7 @@ function AiFeedbackPanel({
         rows={3}
         className="mt-3 w-full resize-none rounded-lg border border-white/[0.08] bg-black/18 p-3 text-[13px] leading-5 text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/18 disabled:cursor-wait disabled:opacity-60"
         placeholder="Notes"
+        aria-label="Feedback notes"
       />
 
       <label className="mt-3 flex items-center gap-2 text-[12px] text-[var(--mimir-text-muted)]">
@@ -1659,9 +1660,11 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         value={recordedBy}
         onChange={event => setRecordedBy(event.target.value)}
         placeholder="Your name"
+        aria-label="Your name"
         className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
       />
       <select
+        aria-label="Rights basis for this footage"
         value={rightsBasis}
         onChange={event => setRightsBasis(event.target.value as typeof rightsBasis)}
         className="h-10 rounded-lg border border-white/[0.08] bg-[var(--mimir-bg-depth)] px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
@@ -1674,6 +1677,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         value={permissionReference}
         onChange={event => setPermissionReference(event.target.value)}
         placeholder="Ownership, permission, or license reference"
+        aria-label="Ownership, permission, or license reference"
         className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
       />
       <button
@@ -1930,6 +1934,7 @@ function ReviewActionsPanel({
               rows={4}
               className="w-full resize-none rounded-lg border border-white/[0.08] bg-black/18 p-3 text-[13px] leading-5 text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/18"
               placeholder="Add your review note..."
+            aria-label="Review note"
             />
             <div className="mt-3 flex justify-end gap-2">
               <button
