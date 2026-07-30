@@ -13,13 +13,37 @@ from .detector_cache import shared_cache
 from .video_decode import read_frames_at_indexes
 
 
-REFINEMENT_VERSION = "two_pass_contact_timing_v3"
+REFINEMENT_VERSION = "two_pass_contact_timing_v4_time_normalised"
 REFINEMENT_SETTINGS = {
     "fast": {"fps": 6.0, "window": 2.5, "max_frames": 24, "coarse_fps": 4.0, "coarse_window": 5.0, "coarse_max_frames": 30},
     "balanced": {"fps": 12.0, "window": 3.0, "max_frames": 42, "coarse_fps": 6.0, "coarse_window": 6.0, "coarse_max_frames": 42},
     "thorough": {"fps": 15.0, "window": 3.5, "max_frames": 60, "coarse_fps": 8.0, "coarse_window": 7.0, "coarse_max_frames": 64},
 }
 _ANALYSIS_CACHE = shared_cache()
+
+# This pass differences neighbouring frames inside a short window, so unlike the
+# coarse pass it *wants* fine intervals -- sub-second localisation is its whole
+# job. But an absdiff's magnitude scales with the gap between the two frames,
+# and that gap is mode-dependent: at 36 fps native the effective interval is
+# ~0.167s at fast, ~0.083s at balanced, ~0.056s at thorough. The /55.0 divisors
+# and the absolute floors below (threshold 12.0, confidence 0.18/0.42) were
+# calibrated for the fast interval, so at thorough every signal came out ~3x
+# smaller, the 12.0 floor bound, and contact detection was suppressed.
+#
+# Scores are therefore normalised to change-per-REFERENCE_INTERVAL using each
+# frame pair's *actual* elapsed time. Two benefits: modes become comparable, and
+# the uneven intervals left by frame decimation stop producing phantom spikes,
+# because a double-length gap is divided by a double-length delta.
+MOTION_REFERENCE_INTERVAL_SEC = 1.0 / 6.0
+MOTION_SCALE_MAX = 4.0
+
+
+def signal_time_scale(delta_sec: float) -> float:
+    """Factor bringing a per-interval diff onto the reference interval."""
+
+    if delta_sec <= 0.0:
+        return 1.0
+    return min(MOTION_REFERENCE_INTERVAL_SEC / delta_sec, MOTION_SCALE_MAX)
 
 
 def _calibration_checksum(calibration_path: str | Path | None) -> str:
@@ -143,8 +167,19 @@ def _read_frames(path: Path, center_sec: float, settings: dict, coarse_pass: boo
         indexes = list(range(first_index, last_index + 1, step))
         max_frames = int(settings.get("coarse_max_frames") if coarse_pass else settings.get("max_frames") or 54)
         if len(indexes) > max_frames:
-            stride = len(indexes) / max_frames
-            indexes = [indexes[int(index * stride)] for index in range(max_frames)]
+            # Evenly spaced pick. `int(index * stride)` truncation used to drop
+            # scattered indexes, leaving occasional double-length gaps; since an
+            # absdiff scales with the gap, those seams produced motion spikes
+            # unrelated to the scene and could win the impulse argmax.
+            if max_frames == 1:
+                indexes = [indexes[0]]
+            else:
+                last = len(indexes) - 1
+                indexes = [
+                    indexes[round(position * last / (max_frames - 1))]
+                    for position in range(max_frames)
+                ]
+                indexes = sorted(dict.fromkeys(indexes))
 
         frames: list[dict] = []
         for frame_index, frame in read_frames_at_indexes(capture, indexes, cv2):
@@ -178,6 +213,7 @@ def _dense_signals(frames: list[dict], camera: str, calibration: dict) -> tuple[
     import numpy as np  # type: ignore
 
     previous_gray = None
+    previous_signal_time: float | None = None
     previous_contact_distance = 1.0
     signals: list[dict] = []
     mask_source = ""
@@ -185,9 +221,16 @@ def _dense_signals(frames: list[dict], camera: str, calibration: dict) -> tuple[
         frame = item["frame"]
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (5, 5), 0)
+        current_signal_time = _safe_float(item.get("time_sec"))
         if previous_gray is None:
             previous_gray = gray
+            previous_signal_time = current_signal_time
             continue
+        # Normalise this pair's diff onto the reference interval so absolute
+        # thresholds mean the same thing at every sampling rate.
+        time_scale = signal_time_scale(
+            current_signal_time - previous_signal_time if previous_signal_time is not None else 0.0
+        )
         try:
             shift, response = cv2.phaseCorrelate(
                 previous_gray.astype("float32"),
@@ -241,10 +284,13 @@ def _dense_signals(frames: list[dict], camera: str, calibration: dict) -> tuple[
                 component_score = score
                 component_distance = minimum_distance
                 component_area_ratio = area_ratio
-        global_motion = min(float(diff.mean()) / 55.0, 1.0)
-        ego_motion = min(float(cv2.mean(diff, mask=ego_mask)[0]) / 55.0, 1.0)
-        boundary_motion = min(float(cv2.mean(diff, mask=boundary_mask)[0]) / 55.0, 1.0)
-        shake = min(((shift[0] ** 2 + shift[1] ** 2) ** 0.5) / 12.0, 1.0)
+        # time_scale keeps these comparable across scan modes and across the
+        # uneven gaps left by frame decimation. Camera shift is a per-interval
+        # pixel displacement, so it scales the same way.
+        global_motion = min(float(diff.mean()) / 55.0 * time_scale, 1.0)
+        ego_motion = min(float(cv2.mean(diff, mask=ego_mask)[0]) / 55.0 * time_scale, 1.0)
+        boundary_motion = min(float(cv2.mean(diff, mask=boundary_mask)[0]) / 55.0 * time_scale, 1.0)
+        shake = min(((shift[0] ** 2 + shift[1] ** 2) ** 0.5) / 12.0 * time_scale, 1.0)
         approach = max(0.0, previous_contact_distance - component_distance)
         signal = boundary_motion * 0.36 + ego_motion * 0.20 + global_motion * 0.12 + shake * 0.10 + component_score * 0.22
         signals.append(
@@ -265,6 +311,7 @@ def _dense_signals(frames: list[dict], camera: str, calibration: dict) -> tuple[
         )
         previous_contact_distance = component_distance
         previous_gray = gray
+        previous_signal_time = current_signal_time
     return signals, mask_source
 
 
@@ -276,23 +323,37 @@ def _select_impulse(signals: list[dict], coarse_time: float, contact_expected: b
     deviations = [abs(value - baseline) for value in values]
     mad = max(statistics.median(deviations), 0.01)
     best: dict = {}
-    previous_values: list[float] = []
-    previous_contacts: list[float] = []
-    previous_shakes: list[float] = []
+    previous_values: list[tuple[float, float]] = []
+    previous_contacts: list[tuple[float, float]] = []
+    previous_shakes: list[tuple[float, float]] = []
     contact_streak_sec = 0.0
     previous_time = 0.0
+    # Lookbacks are expressed in seconds, not sample counts. `[-4:]` / `[-6:]`
+    # meant 0.67s / 1.0s of history at fast but only 0.22s / 0.33s at thorough,
+    # so `impulse` was measured against a different real-world baseline per mode.
+    baseline_lookback_sec = 0.67
+    shake_lookback_sec = 1.0
+
+    def recent(history: list[tuple[float, float]], now: float, span_sec: float) -> list[float]:
+        return [value for stamp, value in history if now - stamp <= span_sec] or [
+            value for _, value in history[-1:]
+        ]
+
     for index, item in enumerate(signals):
         value = values[index]
         time_sec = _safe_float(item.get("time_sec"))
-        previous_baseline = statistics.median(previous_values[-4:]) if previous_values else baseline
+        recent_values = recent(previous_values, time_sec, baseline_lookback_sec)
+        previous_baseline = statistics.median(recent_values) if recent_values else baseline
         impulse = max(0.0, value - previous_baseline)
         robust_z = max(0.0, (value - baseline) / (1.4826 * mad))
         proximity = max(0.0, 1.0 - abs(_safe_float(item.get("time_sec")) - coarse_time) / 5.0)
         apparent_contact = _safe_float(item.get("apparent_contact_score"))
         approach = min(_safe_float(item.get("approach_delta")) / 0.04, 1.0)
         camera_shift = _safe_float(item.get("camera_shift"))
-        previous_contact = statistics.median(previous_contacts[-4:]) if previous_contacts else 0.0
-        previous_shake = statistics.median(previous_shakes[-6:]) if previous_shakes else 0.0
+        recent_contacts = recent(previous_contacts, time_sec, baseline_lookback_sec)
+        previous_contact = statistics.median(recent_contacts) if recent_contacts else 0.0
+        recent_shakes = recent(previous_shakes, time_sec, shake_lookback_sec)
+        previous_shake = statistics.median(recent_shakes) if recent_shakes else 0.0
         delta_sec = max(0.0, time_sec - previous_time) if previous_time > 0.0 else 0.0
         mature_contact = min(contact_streak_sec / 0.6, 1.0)
         contact_drop = max(0.0, previous_contact - apparent_contact)
@@ -321,9 +382,9 @@ def _select_impulse(signals: list[dict], coarse_time: float, contact_expected: b
         candidate["terminal_contact_score"] = round(terminal_contact, 5)
         if not best or score > _safe_float(best.get("selection_score")):
             best = candidate
-        previous_values.append(value)
-        previous_contacts.append(apparent_contact)
-        previous_shakes.append(camera_shift)
+        previous_values.append((time_sec, value))
+        previous_contacts.append((time_sec, apparent_contact))
+        previous_shakes.append((time_sec, camera_shift))
         if apparent_contact >= 0.55:
             contact_streak_sec += delta_sec
         else:
