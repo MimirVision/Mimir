@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { ErrorNotice } from './ErrorNotice'
+import { describeError, type DescribedError } from '../lib/errorMessages'
 
 interface ModelStatusResult {
   installed: boolean
@@ -18,19 +20,6 @@ interface ModelUpdateResult {
   message: string
 }
 
-function errorMessage(error: unknown) {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-  ) {
-    return (error as { message: string }).message
-  }
-
-  return error instanceof Error ? error.message : String(error)
-}
-
 // Lets a validated detector model update be installed without reinstalling
 // the app -- points the backend at a locally downloaded model package
 // (a folder with a model_manifest.json + the model file it declares) and
@@ -40,18 +29,18 @@ function errorMessage(error: unknown) {
 // yet, so today this is a manual, verified install path only.
 export function ModelUpdatePanel() {
   const [status, setStatus] = useState<ModelStatusResult | null>(null)
-  const [statusError, setStatusError] = useState('')
+  const [statusError, setStatusError] = useState<DescribedError | null>(null)
   const [installing, setInstalling] = useState(false)
   const [installMessage, setInstallMessage] = useState('')
-  const [installError, setInstallError] = useState('')
+  const [installError, setInstallError] = useState<DescribedError | null>(null)
 
   const refreshStatus = async () => {
     try {
       const result = await invoke<ModelStatusResult>('active_model_status')
       setStatus(result)
-      setStatusError('')
+      setStatusError(null)
     } catch (error) {
-      setStatusError(errorMessage(error))
+      setStatusError(describeError(error, 'The current detector model could not be read.'))
     }
   }
 
@@ -60,24 +49,30 @@ export function ModelUpdatePanel() {
   }, [])
 
   const handleInstall = async () => {
-    const selected = await openDialog({
-      multiple: false,
-      directory: true,
-      title: 'Choose a model update folder (contains model_manifest.json)',
-    })
-    if (!selected || Array.isArray(selected)) {
-      return
-    }
+    setInstallError(null)
 
-    setInstalling(true)
-    setInstallMessage('')
-    setInstallError('')
+    // The folder picker is inside the try: a cancelled or failed dialog
+    // rejects, and letting that escape surfaced as an unhandled rejection
+    // rather than as anything the user could see.
     try {
+      const selected = await openDialog({
+        multiple: false,
+        directory: true,
+        title: 'Choose a model update folder (contains model_manifest.json)',
+      })
+      if (!selected || Array.isArray(selected)) {
+        return
+      }
+
+      setInstalling(true)
+      setInstallMessage('')
       const result = await invoke<ModelUpdateResult>('install_model_update', { packagePath: selected })
       setInstallMessage(`${result.message} (${result.detector_id} ${result.detector_version})`)
       await refreshStatus()
     } catch (error) {
-      setInstallError(errorMessage(error))
+      setInstallError(
+        describeError(error, 'That model update could not be installed. Check the folder contains a model_manifest.json.'),
+      )
     } finally {
       setInstalling(false)
     }
@@ -93,7 +88,7 @@ export function ModelUpdatePanel() {
 
       <div className="mt-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
         {statusError ? (
-          <span className="text-red-100/78">Could not read model status: {statusError}</span>
+          <span className="text-red-100/78">{statusError.message}</span>
         ) : status?.installed ? (
           <span>
             Using installed update: <span className="text-[var(--mimir-text)]">{status.detector_id} {status.detector_version}</span>
@@ -115,9 +110,7 @@ export function ModelUpdatePanel() {
       {installMessage && (
         <p className="mt-2 text-[12px] leading-5 text-emerald-100/78">{installMessage}</p>
       )}
-      {installError && (
-        <p className="mt-2 text-[12px] leading-5 text-red-100/78">{installError}</p>
-      )}
+      <ErrorNotice error={installError} className="mt-2" />
     </div>
   )
 }

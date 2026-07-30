@@ -3,6 +3,8 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { documentDir } from '@tauri-apps/api/path'
 import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
+import { ErrorNotice } from './ErrorNotice'
+import { describeError, describeFailures, type DescribedError } from '../lib/errorMessages'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
 import { contributionFileName, readContributorIdentity, rightsBasisLabel } from '../lib/contributionIdentity'
@@ -27,7 +29,6 @@ import {
   cameraCountLabel,
   cameraNameLabel,
   currentStorageState,
-  errorMessage,
   eventLabel,
   formatTechnicalValue,
   incidentActionId,
@@ -358,7 +359,7 @@ function FilesDrawer({
   onOpenFolder,
 }: {
   incident: MimirIncident
-  error: string
+  error: DescribedError | null
   onClose: () => void
   onOpenFolder: (path: string) => void
 }) {
@@ -427,11 +428,7 @@ function FilesDrawer({
           </button>
         </div>
 
-        {error && (
-          <div className="mt-3 rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/86">
-            {error}
-          </div>
-        )}
+        <ErrorNotice error={error} className="mt-3" />
       </aside>
     </div>
   )
@@ -559,7 +556,7 @@ export function IncidentLibraryView({
   const [moreOpen, setMoreOpen] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState('')
-  const [storageOpenError, setStorageOpenError] = useState('')
+  const [storageOpenError, setStorageOpenError] = useState<DescribedError | null>(null)
   const [manualOverrides, setManualOverrides] = useState<ManualStatusOverrides>({})
   const isLoading = loadState === 'loading'
   const identity = useMemo(() => sessionIdentity(session, scanDiagnostics), [scanDiagnostics, session])
@@ -568,7 +565,7 @@ export function IncidentLibraryView({
     setManualOverrides({})
     setSelectedIds(new Set())
     setBulkMessage('')
-    setStorageOpenError('')
+    setStorageOpenError(null)
   }, [identity])
 
   const applyManualStatusLocally = (incident: MimirIncident, status: SeverityGroup) => {
@@ -608,7 +605,7 @@ export function IncidentLibraryView({
   const setManualIncidentStatus = (incident: MimirIncident, status: SeverityGroup) => {
     applyManualStatusLocally(incident, status)
     void persistManualStatus(incident, status).catch(error => {
-      setStorageOpenError(`Status could not be saved: ${errorMessage(error)}`)
+      setStorageOpenError(describeError(error, 'That status change could not be saved to the session file.'))
     })
   }
 
@@ -727,9 +724,9 @@ export function IncidentLibraryView({
 
     setBulkBusy(true)
     setBulkMessage('')
-    setStorageOpenError('')
+    setStorageOpenError(null)
 
-    const failures: string[] = []
+    const failures: { label: string; error: unknown }[] = []
 
     if (action === 'set_status' && status) {
       let saved = 0
@@ -739,13 +736,15 @@ export function IncidentLibraryView({
           await persistManualStatus(incident, status)
           saved += 1
         } catch (error) {
-          failures.push(`${eventLabel(incident)}: ${errorMessage(error)}`)
+          failures.push({ label: eventLabel(incident), error })
         }
       }
 
       if (failures.length > 0) {
-        setStorageOpenError(failures.join('\n'))
         setBulkMessage(`${saved} marked ${severityCopy(status)}, ${failures.length} failed.`)
+        setStorageOpenError(
+          describeFailures(failures, 'Some status changes could not be saved:', 'The session file could not be updated.'),
+        )
       } else {
         setBulkMessage(`${saved} ${pluralize(saved, 'incident')} marked ${severityCopy(status)}.`)
         setSelectedIds(new Set())
@@ -764,19 +763,19 @@ export function IncidentLibraryView({
           action: action === 'delete' ? 'move_to_trash' : 'move_to_library',
         })
       } catch (error) {
-        failures.push(`${eventLabel(incident)}: ${errorMessage(error)}`)
+        failures.push({ label: eventLabel(incident), error })
       }
     }
 
     try {
       await onReloadSession()
     } catch (error) {
-      failures.push(`Refresh failed: ${errorMessage(error)}`)
+      failures.push({ label: 'Refreshing the library', error })
     }
 
     if (failures.length > 0) {
-      setStorageOpenError(failures.join('\n'))
       setBulkMessage(`${actionable.length - failures.length} completed, ${failures.length} failed.`)
+      setStorageOpenError(describeFailures(failures, 'Some clips could not be moved:', 'The clip could not be moved.'))
     } else {
       const actionCopy =
         action === 'delete'
@@ -819,19 +818,19 @@ export function IncidentLibraryView({
 
     setBulkBusy(true)
     setBulkMessage('')
-    setStorageOpenError('')
+    setStorageOpenError(null)
 
     let folder = ''
     try {
       folder = await invoke<string>('default_contribution_folder')
     } catch (error) {
-      setStorageOpenError(errorMessage(error))
+      setStorageOpenError(describeError(error, 'The Contributions folder could not be located.'))
       setBulkBusy(false)
       return
     }
 
     const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\'
-    const failures: string[] = []
+    const failures: { label: string; error: unknown }[] = []
     let exported = 0
 
     for (const incident of actionable) {
@@ -848,13 +847,15 @@ export function IncidentLibraryView({
         })
         exported += 1
       } catch (error) {
-        failures.push(`${incidentId}: ${errorMessage(error)}`)
+        failures.push({ label: incidentId, error })
       }
     }
 
     if (failures.length > 0) {
-      setStorageOpenError(failures.join('\n'))
       setBulkMessage(`${exported} contributed, ${failures.length} failed.`)
+      setStorageOpenError(
+        describeFailures(failures, 'Some incidents could not be contributed:', 'The contribution package could not be written.'),
+      )
     } else {
       setBulkMessage(`${exported} ${pluralize(exported, 'incident')} contributed to ${folder}.`)
       setSelectedIds(new Set())
@@ -864,33 +865,35 @@ export function IncidentLibraryView({
   }
 
   const openMimirStorageFolder = async (kind: 'library' | 'trash') => {
-    setStorageOpenError('')
+    setStorageOpenError(null)
 
     try {
       await invoke<void>('open_mimir_storage_folder', { kind })
     } catch (error) {
-      setStorageOpenError(errorMessage(error))
+      setStorageOpenError(describeError(error, 'That Mimir folder could not be opened.'))
     }
   }
 
   const openContainingFolder = async (path: string) => {
-    setStorageOpenError('')
+    setStorageOpenError(null)
 
     try {
       await invoke<void>('open_containing_folder', { path })
     } catch (error) {
-      setStorageOpenError(errorMessage(error))
+      setStorageOpenError(describeError(error, 'That folder could not be opened.'))
     }
   }
 
   const openFeedbackFolder = async () => {
-    setStorageOpenError('')
+    setStorageOpenError(null)
 
     try {
       const documentsPath = await documentDir()
       await invoke<void>('open_containing_folder', { path: `${documentsPath}Mimir Feedback` })
     } catch (error) {
-      setStorageOpenError(errorMessage(error))
+      setStorageOpenError(
+        describeError(error, 'The Mimir Feedback folder could not be opened. It is created the first time you send feedback.'),
+      )
     }
   }
 
@@ -1088,17 +1091,7 @@ export function IncidentLibraryView({
               </div>
             </div>
 
-            {(storageOpenError || bulkMessage) && (
-              <div
-                className={`mb-4 whitespace-pre-wrap rounded-lg border p-3 text-[12px] leading-5 ${
-                  storageOpenError
-                    ? 'border-red-300/20 bg-red-500/10 text-red-100/86'
-                    : 'border-white/[0.08] bg-white/[0.025] text-[var(--mimir-text-muted)]'
-                }`}
-              >
-                {storageOpenError || bulkMessage}
-              </div>
-            )}
+            <ErrorNotice error={storageOpenError} info={bulkMessage} className="mb-4" />
 
             <div className="grid gap-6 xl:grid-cols-2">
               <LibrarySection
@@ -1197,17 +1190,7 @@ export function IncidentLibraryView({
           />
         )}
 
-        {(storageOpenError || bulkMessage) && (
-          <div
-            className={`mb-4 whitespace-pre-wrap rounded-lg border p-3 text-[12px] leading-5 ${
-              storageOpenError
-                ? 'border-red-300/20 bg-red-500/10 text-red-100/86'
-                : 'border-white/[0.08] bg-white/[0.025] text-[var(--mimir-text-muted)]'
-            }`}
-          >
-            {storageOpenError || bulkMessage}
-          </div>
-        )}
+        <ErrorNotice error={storageOpenError} info={bulkMessage} className="mb-4" />
 
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[17px] font-semibold text-[var(--mimir-text)]">

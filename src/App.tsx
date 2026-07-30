@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { BetaNoticeFooter, BetaPrivacyNotice } from './components/BetaPrivacyNotice'
 import { CrashSafeBoundary } from './components/CrashSafeBoundary'
+import { friendlyMessage } from './lib/errorMessages'
 import { ImportPanel } from './components/ImportPanel'
 import { IncidentLibraryView } from './components/IncidentLibraryView'
 import { OnboardingFlow } from './components/OnboardingFlow'
@@ -451,14 +452,21 @@ export default function App() {
   }
 
   const chooseFolder = async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: 'Choose footage folder',
-    })
+    // The picker itself can reject (dismissed, or the shell dialog fails to
+    // open). Letting that escape produced an unhandled rejection and no
+    // feedback at all -- the button simply did nothing.
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Choose footage folder',
+      })
 
-    if (typeof selected === 'string') {
-      await selectFolder(selected)
+      if (typeof selected === 'string') {
+        await selectFolder(selected)
+      }
+    } catch (error) {
+      setScanError(friendlyMessage(error, 'The folder picker could not be opened.'))
     }
   }
 
@@ -708,7 +716,7 @@ export default function App() {
         setIsLocalAiSetupOpen(false)
       }
     } catch (error) {
-      setLocalAiSetupError(error instanceof Error ? error.message : String(error))
+      setLocalAiSetupError(friendlyMessage(error, 'That model could not be downloaded. Check Ollama is running and try again.'))
     } finally {
       setIsPullingLocalAiModel(false)
     }
@@ -718,7 +726,7 @@ export default function App() {
     try {
       await invoke('open_local_ai_download_page')
     } catch (error) {
-      setLocalAiSetupError(error instanceof Error ? error.message : String(error))
+      setLocalAiSetupError(friendlyMessage(error, 'The download page could not be opened in your browser.'))
     }
   }
 
