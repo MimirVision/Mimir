@@ -71,7 +71,6 @@ VISUAL_CONTACT_MIN_LOCALIZED = 0.48
 VISUAL_CONTACT_MIN_GLOBAL = 0.10
 VISUAL_CONTACT_LOCALIZED_RATIO = 0.55
 VISUAL_CONTACT_MIN_CLUSTER_SEC = 1.25
-VISUAL_CONTACT_MIN_CLUSTER_SAMPLES = 3
 VISUAL_CONTACT_BODY_ZONE_BONUS = 0.08
 VISUAL_CONTACT_MIN_SCORE = 0.32
 
@@ -162,16 +161,6 @@ def _max_level(left: str, right: str) -> str:
     return left if _level_rank(left) >= _level_rank(right) else right
 
 
-def _motion_level(score: float) -> str:
-    if score >= MOTION_HIGH_THRESHOLD:
-        return "HIGH"
-    if score >= MOTION_MEDIUM_THRESHOLD:
-        return "MEDIUM"
-    if score >= MOTION_LOW_THRESHOLD:
-        return "LOW"
-    return "NONE"
-
-
 def _clip_samples_by_camera(sample_result: dict) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {}
     for sample in sample_result.get("samples", []):
@@ -216,9 +205,23 @@ def _empty_motion_metrics() -> dict:
 
 
 def _spike_ratio(scores: list[float], max_score: float) -> float:
+    """How far the peak stands out from the ordinary level of the clip.
+
+    The baseline excludes the top decile rather than a fixed count. Dropping
+    exactly one sample (`sorted(scores)[:-1]`) was calibrated for sparse
+    sampling: an impact contaminates roughly one sample at 1 fps but several at
+    4 fps, so at denser rates the remaining spike samples stayed inside the
+    baseline mean and depressed the ratio. Since this ratio gates
+    `hard_contact_candidate` and the IMPORTANT floor, that made the same clip
+    less likely to escalate in the slower, supposedly more careful modes.
+    A proportional exclusion behaves the same at any sample count.
+    """
+
     if len(scores) < 2:
         return 0.0
-    baseline_scores = sorted(scores)[:-1] or scores
+    ordered = sorted(scores)
+    keep = max(1, int(len(ordered) * 0.9))
+    baseline_scores = ordered[:keep]
     baseline = sum(baseline_scores) / len(baseline_scores)
     if baseline <= 0.01:
         baseline = 0.01
