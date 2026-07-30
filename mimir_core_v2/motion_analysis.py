@@ -166,28 +166,44 @@ def analyze_motion(
     if not motion_scores:
         return empty_metrics()
 
-    average = sum(score for _, score, _, _ in motion_scores) / len(motion_scores)
-    spike_time, max_score, localized_at_spike, _ = max(motion_scores, key=lambda item: item[1])
-    max_localized = max(score for _, _, score, _ in motion_scores)
+    # Everything reported out of here is derived from the fixed ~1.0s grid, not
+    # the dense sample list.
+    #
+    # These scalars gate hard severity floors (max_motion -> impact_level HIGH
+    # -> IMPORTANT), and a max() over more samples is a systematically tighter
+    # estimate of the same underlying peak -- a bias, not noise. Computing them
+    # densely meant thorough escalated clips that fast rated REVIEW: the same
+    # failure the selection grid was introduced to remove, one layer up.
+    #
+    # The dense samples are still what object detection and key-moment
+    # refinement consume, so slower modes keep better recall and finer
+    # localisation without changing severity.
+    selection_samples = _selection_grid(motion_samples, safe_float)
+    selection_scores = [
+        (
+            safe_float(sample.get("time_sec"), 0.0),
+            safe_float(sample.get("motion_score"), 0.0),
+            safe_float(sample.get("localized_motion_score"), 0.0),
+            safe_float(sample.get("camera_shake_score"), 0.0),
+        )
+        for sample in selection_samples
+    ] or motion_scores
+
+    average = sum(score for _, score, _, _ in selection_scores) / len(selection_scores)
+    spike_time, max_score, localized_at_spike, _ = max(selection_scores, key=lambda item: item[1])
+    max_localized = max(score for _, _, score, _ in selection_scores)
     max_ego_motion = max(
-        (safe_float(sample.get("ego_zone_motion_score"), 0.0) for sample in motion_samples),
+        (safe_float(sample.get("ego_zone_motion_score"), 0.0) for sample in selection_samples),
         default=0.0,
     )
-    max_camera_shake = max(score for _, _, _, score in motion_scores)
-    spike_ratio = spike_ratio_for_scores([score for _, score, _, _ in motion_scores], max_score)
+    max_camera_shake = max(score for _, _, _, score in selection_scores)
+    spike_ratio = spike_ratio_for_scores([score for _, score, _, _ in selection_scores], max_score)
+    # duration_sec describes the clip, not the sampling, so it may use any sample.
     duration_sec = max(
         (safe_float(sample.get("duration_sec"), 0.0) for sample in motion_samples),
         default=0.0,
     )
-    # Choose the candidate on the fixed grid so every mode selects the same
-    # event as fast; the dense samples above still drive object detection and
-    # downstream key-moment refinement.
-    selection_samples = _selection_grid(motion_samples, safe_float)
-    selection_max_localized = max(
-        (safe_float(sample.get("localized_motion_score"), 0.0) for sample in selection_samples),
-        default=max_localized,
-    )
-    visual_contact = first_visual_contact_sample(selection_samples, selection_max_localized, duration_sec)
+    visual_contact = first_visual_contact_sample(selection_samples, max_localized, duration_sec)
     abrupt_scene_change = bool(
         max_score >= thresholds["motion_medium"]
         and (
