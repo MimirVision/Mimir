@@ -823,6 +823,32 @@ fn valid_status(value: &str) -> bool {
     matches!(value, "IGNORE" | "REVIEW" | "IMPORTANT")
 }
 
+// Several frontend strings are forwarded straight into a child process
+// argument list. A value beginning with '-' is read by the receiving CLI as a
+// flag rather than a value, so an unvalidated string can inject options into
+// the scanner, the dataset exporter or `ollama pull`. These guards keep such
+// values to a conservative shape instead of relying on the child's parser.
+fn valid_cli_token(value: &str, max_len: usize) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed.len() <= max_len
+        && !trimmed.starts_with('-')
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ':' | '/'))
+}
+
+// Free text the user types (a name, a permission reference). Punctuation and
+// non-ASCII are fine here; the only real hazards are a leading '-', control
+// characters, and unbounded length.
+fn valid_free_text_argument(value: &str, max_len: usize) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed.len() <= max_len
+        && !trimmed.starts_with('-')
+        && !trimmed.chars().any(|c| c.is_control())
+}
+
 fn open_folder_with_explorer(path: &Path) -> Result<(), ScanFailure> {
     Command::new("explorer")
         .arg(path)
@@ -951,6 +977,12 @@ fn pull_local_ai_model_sync(
     let selected_model = selected_model
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_VISION_MODEL.to_string());
+    // Becomes `ollama pull <value>`.
+    if !valid_cli_token(&selected_model, 120) {
+        return Err(ScanFailure::new(
+            "That AI model name isn't valid. Use letters, numbers, and : _ - . / only.",
+        ));
+    }
 
     let mut child = Command::new("ollama")
         .arg("pull")
@@ -1728,6 +1760,12 @@ fn run_scan_sync(
     let vision_model = vision_model
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_VISION_MODEL.to_string());
+    // Forwarded as `--vlm <value>`; the UI allows a free-text custom model.
+    if !valid_cli_token(&vision_model, 120) {
+        return Err(ScanFailure::new(
+            "That AI model name isn't valid. Use letters, numbers, and : _ - . / only.",
+        ));
+    }
     let output_dir = active_output_dir(&runtime);
     fs::create_dir_all(&output_dir).map_err(|error| ScanFailure::new(error.to_string()))?;
     app.asset_protocol_scope()
@@ -1952,6 +1990,10 @@ fn run_core_v2_storage_action_sync(
 ) -> Result<StorageActionResult, ScanFailure> {
     if action != "move_to_library" && action != "move_to_trash" && action != "restore_from_trash" {
         return Err(ScanFailure::new("Unsupported storage action."));
+    }
+    // Forwarded as `--incident-id <value>` to the actions CLI.
+    if !valid_cli_token(&incident_id, 160) {
+        return Err(ScanFailure::new("The selected incident id is invalid."));
     }
     // This command physically moves clips, so it must act on the session the
     // user is looking at rather than whichever scan happens to be newest.
@@ -2444,10 +2486,12 @@ fn export_training_contribution_sync(
     }
     let recorder = recorded_by.trim();
     let permission = permission_reference.trim();
-    if recorder.is_empty() || recorder.len() > 200 {
+    // Both are forwarded as CLI argument values, so a leading '-' would be
+    // parsed as a flag by the dataset exporter.
+    if !valid_free_text_argument(recorder, 200) {
         return Err(ScanFailure::new("Enter the person recording this consent."));
     }
-    if permission.is_empty() || permission.len() > 500 {
+    if !valid_free_text_argument(permission, 500) {
         return Err(ScanFailure::new("Enter an auditable ownership, permission, or license reference."));
     }
     let output = PathBuf::from(output_path);
@@ -2914,6 +2958,35 @@ async fn log_incident_diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // These values are forwarded into child-process argument lists, so a
+    // leading '-' would be parsed as a flag by the receiving CLI.
+    #[test]
+    fn cli_tokens_reject_flag_injection_and_junk() {
+        assert!(valid_cli_token("qwen2.5vl:7b", 120));
+        assert!(valid_cli_token("incident_0007", 160));
+        assert!(valid_cli_token("some/model-name.v2", 120));
+
+        assert!(!valid_cli_token("--output", 120), "leading dashes are flags");
+        assert!(!valid_cli_token("-rf", 120));
+        assert!(!valid_cli_token("", 120), "empty");
+        assert!(!valid_cli_token("   ", 120), "whitespace only");
+        assert!(!valid_cli_token("model name", 120), "spaces");
+        assert!(!valid_cli_token("model;rm", 120), "shell punctuation");
+        assert!(!valid_cli_token(&"a".repeat(200), 120), "over length");
+    }
+
+    #[test]
+    fn free_text_arguments_allow_prose_but_not_flags_or_controls() {
+        assert!(valid_free_text_argument("Andreas Gunneroed", 200));
+        assert!(valid_free_text_argument("Owner of vehicle, receipt #12345", 500));
+        assert!(valid_free_text_argument("Bruker med æøå", 200), "non-ascii is fine");
+
+        assert!(!valid_free_text_argument("--recipient=evil", 200));
+        assert!(!valid_free_text_argument("", 200));
+        assert!(!valid_free_text_argument("line\nbreak", 200), "control chars");
+        assert!(!valid_free_text_argument(&"a".repeat(600), 500), "over length");
+    }
 
     // Guards the data-loss fix: the previous implementation deleted the target
     // before renaming, so a crash in that window destroyed the whole session.
