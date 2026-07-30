@@ -13,7 +13,7 @@ from .detector_cache import shared_cache
 from .video_decode import read_frames_at_indexes
 
 
-REFINEMENT_VERSION = "two_pass_contact_timing_v4_time_normalised"
+REFINEMENT_VERSION = "two_pass_contact_timing_v5_uniform_window_sampling"
 REFINEMENT_SETTINGS = {
     "fast": {"fps": 6.0, "window": 2.5, "max_frames": 24, "coarse_fps": 4.0, "coarse_window": 5.0, "coarse_max_frames": 30},
     "balanced": {"fps": 12.0, "window": 3.0, "max_frames": 42, "coarse_fps": 6.0, "coarse_window": 6.0, "coarse_max_frames": 42},
@@ -174,12 +174,15 @@ def _read_frames(path: Path, center_sec: float, settings: dict, coarse_pass: boo
             if max_frames == 1:
                 indexes = [indexes[0]]
             else:
-                last = len(indexes) - 1
-                indexes = [
-                    indexes[round(position * last / (max_frames - 1))]
+                # Spread across the window rather than decimating onto the
+                # `step` grid: staying on that grid forces every gap to a
+                # multiple of `step`, so the gaps alternate between two
+                # lengths and the absdiff between them alternates with it.
+                span = last_index - first_index
+                indexes = sorted({
+                    first_index + round(position * span / (max_frames - 1))
                     for position in range(max_frames)
-                ]
-                indexes = sorted(dict.fromkeys(indexes))
+                })
 
         frames: list[dict] = []
         for frame_index, frame in read_frames_at_indexes(capture, indexes, cv2):
