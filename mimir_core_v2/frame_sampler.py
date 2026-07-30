@@ -69,16 +69,19 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
                 step = max(1, int(round(fps / sample_fps)))
                 indexes = list(range(0, frame_count, step))
                 if len(indexes) > max_frames:
-                    # Evenly spaced. int(index * stride) truncation dropped
-                    # scattered indexes, leaving occasional double-length gaps;
-                    # motion is a frame difference, so those gaps read as
-                    # spurious spikes.
+                    # Once the cap binds, sample_fps cannot be met anyway, so
+                    # the step grid built for it stops being worth preserving:
+                    # decimating onto it forced every gap to a multiple of
+                    # `step`, which on a long clip alternated 5*step/6*step.
+                    # Motion is a frame difference, so uneven gaps scale the
+                    # signal. Spread the budget uniformly across the clip
+                    # instead -- gaps then differ by at most one frame.
                     if max_frames == 1:
                         indexes = [indexes[0]]
                     else:
-                        last = len(indexes) - 1
+                        last_frame = frame_count - 1
                         indexes = sorted({
-                            indexes[round(position * last / (max_frames - 1))]
+                            round(position * last_frame / (max_frames - 1))
                             for position in range(max_frames)
                         })
             elif frame_count > 0:
