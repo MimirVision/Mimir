@@ -1,7 +1,7 @@
 {
   "name": "mimir-desktop",
   "private": true,
-  "version": "0.5.0-beta.1",
+  "version": "0.5.0-free-beta.1",
   "description": "Local-first incident review for vehicle footage",
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
     "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
     "build": "vite build",
     "test": "vitest run",
-    "test:accessibility": "playwright test tests/e2e/accessibility.spec.ts",
+    "test:accessibility": "playwright test tests/e2e/accessibility.spec.ts tests/e2e/screens.a11y.spec.ts",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
   },

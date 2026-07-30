@@ -1,36 +1,8 @@
 import { normalizeSeverity } from './incidentStatus'
 
-// Severity/storage badge styling specific to the incident library view. The
-// viewer screen has its own near-identical but not-quite-identical palette
-// (different opacity values) -- kept separate rather than force-unified.
-
-export function severityCopy(severity: string) {
-  const normalized = normalizeSeverity(severity)
-
-  if (normalized === 'IMPORTANT') {
-    return 'Important'
-  }
-
-  if (normalized === 'REVIEW') {
-    return 'Review'
-  }
-
-  return 'Ignored'
-}
-
-export function severityClass(severity: string) {
-  const normalized = normalizeSeverity(severity)
-
-  if (normalized === 'IMPORTANT') {
-    return 'border-[rgba(196,119,114,0.28)] bg-[rgba(196,119,114,0.115)] text-red-100/92'
-  }
-
-  if (normalized === 'REVIEW') {
-    return 'border-[rgba(195,160,98,0.28)] bg-[rgba(195,160,98,0.115)] text-amber-100/92'
-  }
-
-  return 'border-[rgba(133,139,139,0.20)] bg-[rgba(133,139,139,0.085)] text-[var(--mimir-text-muted)]'
-}
+// Storage badge and stripe styling specific to the incident library view.
+// The severity label and badge are shared with the viewer -- see
+// severityStyles.ts, re-exported at the bottom of this file.
 
 // A left-edge color stripe alongside the text badge above, so severity reads at a
 // glance across a shelf of cards instead of requiring each label to be read.
@@ -63,3 +35,5 @@ export function storageBadgeClass(state: string) {
 
   return 'border-white/[0.08] bg-white/[0.035] text-[var(--mimir-text-muted)]'
 }
+
+export { severityClass, severityCopy } from './severityStyles'

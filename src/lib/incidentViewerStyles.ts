@@ -1,37 +1,9 @@
 import { normalizeSeverity } from './incidentStatus'
 import type { MimirTimelineMarker } from '../types'
 
-// Severity/marker visual styling specific to the incident viewer screen. The
-// library view has its own near-identical but not-quite-identical palette
-// (different opacity values) -- kept separate rather than force-unified.
-
-export function severityCopy(severity?: string) {
-  const value = normalizeSeverity(severity)
-
-  if (value === 'IMPORTANT') {
-    return 'Important'
-  }
-
-  if (value === 'REVIEW') {
-    return 'Review'
-  }
-
-  return 'Ignored'
-}
-
-export function severityClass(severity?: string) {
-  const value = normalizeSeverity(severity)
-
-  if (value === 'IMPORTANT') {
-    return 'border-[rgba(196,119,114,0.28)] bg-[rgba(196,119,114,0.115)] text-red-100/92'
-  }
-
-  if (value === 'REVIEW') {
-    return 'border-[rgba(195,160,98,0.28)] bg-[rgba(195,160,98,0.115)] text-amber-100/92'
-  }
-
-  return 'border-[rgba(133,139,139,0.20)] bg-[rgba(133,139,139,0.085)] text-[var(--mimir-text-muted)]'
-}
+// Timeline marker styling specific to the incident viewer screen. The severity
+// label and badge are shared with the library -- see severityStyles.ts,
+// re-exported at the bottom of this file.
 
 export function markerClass(severity?: string) {
   const value = normalizeSeverity(severity)
@@ -99,3 +71,5 @@ export function markerSeverityCopy(severity?: string) {
 
   return value || 'Neutral'
 }
+
+export { severityClass, severityCopy } from './severityStyles'

@@ -57,13 +57,6 @@ export function saveContributorIdentity(identity: ContributorIdentity): boolean 
   }
 }
 
-export function clearContributorIdentity(): void {
-  try {
-    window.localStorage.removeItem(STORAGE_KEY)
-  } catch {
-    // Non-fatal: worst case the details are offered again next time.
-  }
-}
 
 export function rightsBasisLabel(basis: RightsBasis): string {
   if (basis === 'owned') {
