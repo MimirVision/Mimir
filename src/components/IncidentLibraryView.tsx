@@ -571,7 +571,7 @@ export function IncidentLibraryView({
     setStorageOpenError('')
   }, [identity])
 
-  const setManualIncidentStatus = (incident: MimirIncident, status: SeverityGroup) => {
+  const applyManualStatusLocally = (incident: MimirIncident, status: SeverityGroup) => {
     const key = incidentOverrideKey(incident, identity)
     const mimirSeverity = normalizeSeverity(incident.final_severity || incident.severity)
 
@@ -586,24 +586,30 @@ export function IncidentLibraryView({
 
       return next
     })
+  }
 
-    setSelectedIncident(current => {
-      if (!current) {
-        return current
-      }
-
-      return incidentActionId(current) === incidentActionId(incident) ? current : current
-    })
-
+  // Awaitable so bulk actions can persist one at a time. Firing these
+  // concurrently used to lose writes: each call is a read-modify-write of the
+  // session file, so parallel callers all read the same pre-state and the last
+  // one to finish silently discarded the rest.
+  const persistManualStatus = async (incident: MimirIncident, status: SeverityGroup) => {
     const id = incidentActionId(incident)
-    if (id) {
-      void invoke('save_manual_status', {
-        incidentId: id,
-        status,
-      }).catch(error => {
-        setStorageOpenError(`Status could not be saved: ${errorMessage(error)}`)
-      })
+    if (!id) {
+      return
     }
+
+    await invoke('save_manual_status', {
+      sessionPath: session?.session_archive_path || session?.output_path || null,
+      incidentId: id,
+      status,
+    })
+  }
+
+  const setManualIncidentStatus = (incident: MimirIncident, status: SeverityGroup) => {
+    applyManualStatusLocally(incident, status)
+    void persistManualStatus(incident, status).catch(error => {
+      setStorageOpenError(`Status could not be saved: ${errorMessage(error)}`)
+    })
   }
 
   const allSortedIncidents = useMemo(
@@ -726,9 +732,25 @@ export function IncidentLibraryView({
     const failures: string[] = []
 
     if (action === 'set_status' && status) {
-      actionable.forEach(incident => setManualIncidentStatus(incident, status))
-      setBulkMessage(`${actionable.length} ${pluralize(actionable.length, 'incident')} marked ${severityCopy(status)}.`)
-      setSelectedIds(new Set())
+      let saved = 0
+      for (const incident of actionable) {
+        applyManualStatusLocally(incident, status)
+        try {
+          await persistManualStatus(incident, status)
+          saved += 1
+        } catch (error) {
+          failures.push(`${eventLabel(incident)}: ${errorMessage(error)}`)
+        }
+      }
+
+      if (failures.length > 0) {
+        setStorageOpenError(failures.join('\n'))
+        setBulkMessage(`${saved} marked ${severityCopy(status)}, ${failures.length} failed.`)
+      } else {
+        setBulkMessage(`${saved} ${pluralize(saved, 'incident')} marked ${severityCopy(status)}.`)
+        setSelectedIds(new Set())
+      }
+
       setShowFreeUpModal(false)
       setBulkBusy(false)
       return
@@ -737,6 +759,7 @@ export function IncidentLibraryView({
     for (const incident of actionable) {
       try {
         await invoke('run_core_v2_storage_action', {
+          sessionPath: session?.session_archive_path || session?.output_path || null,
           incidentId: incidentActionId(incident),
           action: action === 'delete' ? 'move_to_trash' : 'move_to_library',
         })

@@ -1436,7 +1436,7 @@ fn run_system_check_sync(app: tauri::AppHandle) -> SystemCheckResult {
     }
 }
 
-fn incident_matches(incident: &Value, incident_id: &str, index: usize) -> bool {
+fn incident_matches(incident: &Value, incident_id: &str, _index: usize) -> bool {
     let candidates = [
         incident.get("id"),
         incident.get("incident_id"),
@@ -1460,7 +1460,11 @@ fn incident_matches(incident: &Value, incident_id: &str, index: usize) -> bool {
         return true;
     }
 
-    incident_id == index.to_string() || incident_id == (index + 1).to_string()
+    // Deliberately no positional fallback. Matching `incident_id` against the
+    // array index meant a numeric id from one session could silently select a
+    // *different* incident in another, and the actions here move real files.
+    // Better to fail to find than to act on the wrong clip.
+    false
 }
 
 fn write_json_atomically(path: &Path, value: &Value) -> Result<(), ScanFailure> {
@@ -1469,26 +1473,59 @@ fn write_json_atomically(path: &Path, value: &Value) -> Result<(), ScanFailure> 
         .ok_or_else(|| ScanFailure::new("JSON path has no parent folder."))?;
     fs::create_dir_all(parent).map_err(|error| ScanFailure::new(error.to_string()))?;
 
+    // Unique per call: a shared temp name let two concurrent writers truncate
+    // and rename the same file, interleaving their content.
     let temp_path = parent.join(format!(
-        ".{}.tmp",
+        ".{}.{}.tmp",
         path.file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("mimir-session")
+            .unwrap_or("mimir-session"),
+        next_temp_suffix()
     ));
     let rendered =
         serde_json::to_string_pretty(value).map_err(|error| ScanFailure::new(error.to_string()))?;
-    let mut file =
-        fs::File::create(&temp_path).map_err(|error| ScanFailure::new(error.to_string()))?;
-    file.write_all(rendered.as_bytes())
-        .map_err(|error| ScanFailure::new(error.to_string()))?;
-    file.write_all(b"\n")
-        .map_err(|error| ScanFailure::new(error.to_string()))?;
-    drop(file);
-    if path.exists() {
-        fs::remove_file(path).map_err(|error| ScanFailure::new(error.to_string()))?;
+    let write_result = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&temp_path)?;
+        file.write_all(rendered.as_bytes())?;
+        file.write_all(b"\n")?;
+        // Flush to disk before the rename, so a crash cannot leave a renamed
+        // but empty session file.
+        file.sync_all()?;
+        Ok(())
+    })();
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(ScanFailure::new(error.to_string()));
     }
-    fs::rename(&temp_path, path).map_err(|error| ScanFailure::new(error.to_string()))?;
+    // No remove_file first: fs::rename maps to MoveFileEx with
+    // MOVEFILE_REPLACE_EXISTING on Windows, so deleting the target beforehand
+    // only created a window where the session file did not exist at all. The
+    // Python side already does this correctly via os.replace.
+    if let Err(error) = fs::rename(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(ScanFailure::new(error.to_string()));
+    }
     Ok(())
+}
+
+// Every session mutation is a read-modify-write of one JSON file. Without a
+// lock, concurrent commands (e.g. a bulk status change, or a note saved while
+// AI enrichment rewrites the session) all read the same pre-state and the last
+// writer silently discards the others. Held across read+write, not just write.
+static SESSION_WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+fn session_guard<'a>() -> Result<std::sync::MutexGuard<'a, ()>, ScanFailure> {
+    SESSION_WRITE_LOCK
+        .lock()
+        .map_err(|_| ScanFailure::new("Could not acquire the session write lock."))
+}
+
+// Monotonic suffix so concurrent atomic writes never share a temp path.
+fn next_temp_suffix() -> u64 {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let pid = std::process::id() as u64;
+    (pid << 20) ^ seq
 }
 
 fn incident_json_path(incident: &Value) -> Option<PathBuf> {
@@ -1909,12 +1946,16 @@ async fn cancel_local_scan(
 
 fn run_core_v2_storage_action_sync(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     action: String,
 ) -> Result<StorageActionResult, ScanFailure> {
     if action != "move_to_library" && action != "move_to_trash" && action != "restore_from_trash" {
         return Err(ScanFailure::new("Unsupported storage action."));
     }
+    // This command physically moves clips, so it must act on the session the
+    // user is looking at rather than whichever scan happens to be newest.
+    let target_session = validated_session_path(&app, session_path)?;
 
     let runtime = resolve_core_v2_actions_runtime(&app)?;
     let mut command = backend_command(&runtime);
@@ -1928,7 +1969,7 @@ fn run_core_v2_storage_action_sync(
     let journal_path = output_dir.join("storage_action_journal.json");
     command
         .arg("--session")
-        .arg(&runtime.session_path)
+        .arg(&target_session)
         .arg("--report")
         .arg(&report_path)
         .arg("--journal")
@@ -1990,7 +2031,7 @@ fn run_core_v2_storage_action_sync(
         action,
         incident_id,
         message,
-        updated_session: runtime.session_path.to_string_lossy().to_string(),
+        updated_session: target_session.to_string_lossy().to_string(),
         report_json,
         backend_runner: runtime.runner_label().to_string(),
         stdout,
@@ -2001,11 +2042,12 @@ fn run_core_v2_storage_action_sync(
 #[tauri::command]
 async fn run_core_v2_storage_action(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     action: String,
 ) -> Result<StorageActionResult, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_core_v2_storage_action_sync(app, incident_id, action)
+        run_core_v2_storage_action_sync(app, session_path, incident_id, action)
     })
     .await
     .map_err(|error| ScanFailure::new(error.to_string()))?
@@ -2013,13 +2055,17 @@ async fn run_core_v2_storage_action(
 
 fn save_incident_note_sync(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     note: String,
 ) -> Result<ClipActionResult, ScanFailure> {
-    let runtime = resolve_backend_runtime(&app)?;
-    let session_path = runtime.session_path;
-    let contents =
-        fs::read_to_string(&session_path).map_err(|error| ScanFailure::new(error.to_string()))?;
+    // Edit the session the UI actually has open. Previously this always
+    // resolved the newest session, so editing an archived scan wrote into a
+    // different scan's file.
+    let session_path = validated_session_path(&app, session_path)?;
+    let _guard = session_guard()?;
+    let contents = fs::read_to_string(&session_path)
+        .map_err(|_| ScanFailure::new("Could not read this Mimir session file."))?;
     let mut session: Value =
         serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
     let incidents = session
@@ -2082,16 +2128,20 @@ fn chrono_like_now() -> String {
 #[tauri::command]
 async fn save_incident_note(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     note: String,
 ) -> Result<ClipActionResult, ScanFailure> {
-    tauri::async_runtime::spawn_blocking(move || save_incident_note_sync(app, incident_id, note))
+    tauri::async_runtime::spawn_blocking(move || {
+        save_incident_note_sync(app, session_path, incident_id, note)
+    })
         .await
         .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
 fn save_manual_status_sync(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     status: String,
 ) -> Result<ClipActionResult, ScanFailure> {
@@ -2100,9 +2150,10 @@ fn save_manual_status_sync(
             "Status must be IGNORE, REVIEW, or IMPORTANT.",
         ));
     }
-    let session_path = configured_output_dir(&app).join("latest_session.json");
-    let contents =
-        fs::read_to_string(&session_path).map_err(|error| ScanFailure::new(error.to_string()))?;
+    let session_path = validated_session_path(&app, session_path)?;
+    let _guard = session_guard()?;
+    let contents = fs::read_to_string(&session_path)
+        .map_err(|_| ScanFailure::new("Could not read this Mimir session file."))?;
     let mut session: Value =
         serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
     let incidents = session
@@ -2159,16 +2210,20 @@ fn save_manual_status_sync(
 #[tauri::command]
 async fn save_manual_status(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     status: String,
 ) -> Result<ClipActionResult, ScanFailure> {
-    tauri::async_runtime::spawn_blocking(move || save_manual_status_sync(app, incident_id, status))
+    tauri::async_runtime::spawn_blocking(move || {
+        save_manual_status_sync(app, session_path, incident_id, status)
+    })
         .await
         .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
 fn save_key_moment_correction_sync(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     time_sec: f64,
 ) -> Result<ClipActionResult, ScanFailure> {
@@ -2177,9 +2232,10 @@ fn save_key_moment_correction_sync(
             "The corrected key-moment time is invalid.",
         ));
     }
-    let session_path = configured_output_dir(&app).join("latest_session.json");
-    let contents =
-        fs::read_to_string(&session_path).map_err(|error| ScanFailure::new(error.to_string()))?;
+    let session_path = validated_session_path(&app, session_path)?;
+    let _guard = session_guard()?;
+    let contents = fs::read_to_string(&session_path)
+        .map_err(|_| ScanFailure::new("Could not read this Mimir session file."))?;
     let mut session: Value =
         serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
     let incidents = session
@@ -2225,11 +2281,12 @@ fn save_key_moment_correction_sync(
 #[tauri::command]
 async fn save_key_moment_correction(
     app: tauri::AppHandle,
+    session_path: Option<String>,
     incident_id: String,
     time_sec: f64,
 ) -> Result<ClipActionResult, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
-        save_key_moment_correction_sync(app, incident_id, time_sec)
+        save_key_moment_correction_sync(app, session_path, incident_id, time_sec)
     })
     .await
     .map_err(|error| ScanFailure::new(error.to_string()))?
@@ -2857,6 +2914,60 @@ async fn log_incident_diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Guards the data-loss fix: the previous implementation deleted the target
+    // before renaming, so a crash in that window destroyed the whole session.
+    #[test]
+    fn atomic_write_replaces_without_ever_removing_the_target() {
+        let dir = std::env::temp_dir().join(format!("mimir-atomic-{}", next_temp_suffix()));
+        fs::create_dir_all(&dir).expect("temp dir");
+        let target = dir.join("latest_session.json");
+
+        assert!(write_json_atomically(&target, &json!({"incidents": [1]})).is_ok(), "first write failed");
+        assert!(target.exists());
+
+        // Overwriting must succeed and must not leave the target missing.
+        assert!(write_json_atomically(&target, &json!({"incidents": [1, 2]})).is_ok(), "overwrite failed");
+        let parsed: Value =
+            serde_json::from_str(&fs::read_to_string(&target).expect("read")).expect("json");
+        assert_eq!(parsed["incidents"].as_array().map(Vec::len), Some(2));
+
+        // No temp files left behind.
+        let leftovers: Vec<_> = fs::read_dir(&dir)
+            .expect("read_dir")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp files left: {leftovers:?}");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn atomic_write_temp_paths_are_unique_per_call() {
+        // A shared temp name let concurrent writers truncate each other's file.
+        let a = next_temp_suffix();
+        let b = next_temp_suffix();
+        assert_ne!(a, b);
+    }
+
+    // An id must never select an incident by position: a numeric id from one
+    // session could otherwise act on a different incident in another session,
+    // and these actions move real files.
+    #[test]
+    fn incident_matching_never_falls_back_to_position() {
+        let incident = json!({"id": "incident_0007"});
+        assert!(incident_matches(&incident, "incident_0007", 0));
+        assert!(!incident_matches(&incident, "0", 0));
+        assert!(!incident_matches(&incident, "1", 0));
+    }
+
+    #[test]
+    fn incident_matching_accepts_numeric_event_ids() {
+        let incident = json!({"id": "", "event_id": 42});
+        assert!(incident_matches(&incident, "42", 3));
+        assert!(!incident_matches(&incident, "3", 3));
+    }
 
     fn command_args(command: &Command) -> Vec<String> {
         command

@@ -2082,6 +2082,7 @@ export function IncidentViewerScreen({
 
     try {
       const result = await invoke<StorageActionResult>('run_core_v2_storage_action', {
+        sessionPath: session?.session_archive_path || session?.output_path || null,
         incidentId: incidentActionId(incident),
         action,
       })
@@ -2184,6 +2185,7 @@ export function IncidentViewerScreen({
 
     try {
       const result = await invoke<ClipActionResult>('save_incident_note', {
+        sessionPath: session?.session_archive_path || session?.output_path || null,
         incidentId: incidentActionId(incident),
         note: noteDraft,
       })
@@ -2203,6 +2205,7 @@ export function IncidentViewerScreen({
     setActionDetails('')
     try {
       const result = await invoke<ClipActionResult>('save_key_moment_correction', {
+        sessionPath: session?.session_archive_path || session?.output_path || null,
         incidentId: incidentActionId(incident),
         timeSec,
       })
