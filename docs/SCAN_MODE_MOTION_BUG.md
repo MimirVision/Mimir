@@ -1,6 +1,6 @@
 # Scan modes disagree because motion scores depend on sampling rate
 
-Status: **diagnosed, not fixed.** Reported from real use: the `fast` scan mode
+Status: **partially fixed. Mode parity NOT achieved.** Reported from real use: the `fast` scan mode
 locates impacts better than `balanced` or `thorough`.
 
 ## Reproduction
@@ -80,3 +80,49 @@ Use `fast` for impact timing. Related rate-dependence bugs already fixed:
   with sampling rate"), guarded by `test_dwell_flags.py`.
 - `_first_visual_contact_sample` required `len(segment) >= 3` raw samples
   (commit "Make visual-contact clustering rate-independent").
+
+
+## Update: fixed-baseline differencing (implemented)
+
+`analyze_motion` now differences each frame against the buffered frame closest
+to `MOTION_BASELINE_SEC` (1.0s) earlier, rather than its immediate predecessor.
+The measured interval is therefore ~1.0s in every mode, and magnitudes become
+comparable by construction with no scaling constant:
+
+| mode | `max_motion_score` before | after |
+|------|---------------------------|-------|
+| fast | 0.5706 | 0.5706 (unchanged, as intended) |
+| balanced | 0.4404 | 0.6329 |
+| thorough | 0.3338 | 0.6532 |
+
+Guarded by `test_motion_baseline.py`. `fast` output is byte-identical, since its
+predecessor already was the 1.0s-old frame.
+
+**This did not deliver mode parity.** On `reddit 3.mp4` the primary key moment
+became fast 16.267 / balanced 15.033 / thorough 9.7 -- thorough moved off 26.0
+but is still wrong. Comparable magnitudes were a prerequisite, not the whole fix.
+
+## Also tried and reverted: ranking segments instead of taking the earliest
+
+`_first_visual_contact_sample` returns the *earliest* sustained segment. That
+looks order-dependent, so it was changed to rank segments by strength. All three
+modes then agreed -- on ~25.7s, i.e. they agreed and were all wrong, including
+fast which had been correct.
+
+The lesson is that "earliest sustained" is not an accident: for a parked-vehicle
+incident the first sustained contact-like cluster *is* the impact, and later
+motion (the other car leaving, passers-by) often scores higher. Ranking by peak
+strength actively selects the aftermath. Reverted.
+
+The residual rate-dependence is subtler than a threshold: at 4 fps a cluster
+around 9.8s reaches 2+ samples spanning 1.25s and qualifies as sustained, while
+at 1 fps that region yields a single sample and is never a candidate at all.
+Denser sampling genuinely detects more events, so "earliest sustained" shifts
+earlier with density. Making that scale-free needs a real definition of which
+clusters matter -- which needs labelled ground truth, not another constant.
+
+## Current recommendation
+
+Use `fast`. The remaining work is a selection-criterion question, and it should
+be settled against the labelled set (`mimir_core_v2_label.py`), not by eye on
+six clips.

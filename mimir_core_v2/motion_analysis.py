@@ -9,6 +9,45 @@ from __future__ import annotations
 from typing import Any, Callable
 
 
+# Motion is an absdiff between two frames, so its magnitude depends entirely on
+# how much time separates them. Comparing each frame to the immediately
+# preceding *sampled* frame therefore made a score mean "change per sampling
+# interval" -- a different quantity in every scan mode. A sharp impact filled
+# one 1.0s delta at 1 fps and spiked hard, but was split across four small
+# 0.25s deltas at 4 fps, flattening into the background until an unrelated
+# later event won candidate selection. Denser sampling produced worse impact
+# timing than sparse sampling.
+#
+# Each frame is now differenced against the buffered frame closest to
+# BASELINE_SEC earlier, instead of its immediate predecessor. The measured
+# interval is then ~1.0s regardless of mode, so:
+#   - 1 fps is unchanged (its predecessor already is the 1.0s-old frame),
+#   - 2/4 fps measure the same 1.0s change as 1 fps but evaluate it 2x/4x more
+#     often, giving strictly finer localisation of the peak at equal magnitude.
+# No scaling constant is needed; the signal is made comparable by construction.
+MOTION_BASELINE_SEC = 1.0
+
+# A reference frame must be at least this fraction of the baseline old to be
+# used, so the opening moments of a clip do not emit weak, short-interval
+# deltas that would not be comparable to the rest.
+MOTION_BASELINE_MIN_RATIO = 0.75
+
+# How much history to retain, as a multiple of the baseline.
+MOTION_HISTORY_SPAN = 2.0
+
+
+def _baseline_reference(history: list[tuple[float, Any]], current_time: float) -> tuple[float, Any] | None:
+    """Buffered frame closest to one baseline before ``current_time``."""
+
+    if not history:
+        return None
+    target = current_time - MOTION_BASELINE_SEC
+    reference = min(history, key=lambda item: abs(item[0] - target))
+    if current_time - reference[0] < MOTION_BASELINE_SEC * MOTION_BASELINE_MIN_RATIO:
+        return None
+    return reference
+
+
 def analyze_motion(
     samples: list[dict],
     *,
@@ -25,7 +64,9 @@ def analyze_motion(
     if cv2 is None or len(samples) < 2:
         return empty_metrics()
 
-    previous_gray = None
+    # (time_sec, gray) for recent frames, so each frame can be differenced
+    # against one a fixed ~1.0s earlier rather than its immediate predecessor.
+    history: list[tuple[float, Any]] = []
     motion_scores: list[tuple[float, float, float, float]] = []
     motion_samples: list[dict] = []
     for sample in samples:
@@ -38,8 +79,10 @@ def analyze_motion(
             gray = cv2.GaussianBlur(gray, (5, 5), 0)
         except Exception:
             continue
-        if previous_gray is not None:
-            diff = cv2.absdiff(previous_gray, gray)
+        current_time = safe_float(sample.get("time_sec"), 0.0)
+        reference = _baseline_reference(history, current_time)
+        if reference is not None:
+            diff = cv2.absdiff(reference[1], gray)
             global_score = min(float(diff.mean()) / 55.0, 1.0)
             tile_scores = diff_tile_scores(diff)
             localized_score = max(tile_scores, default=global_score)
@@ -87,7 +130,9 @@ def analyze_motion(
             sample["ego_zone_motion_score"] = motion_sample["ego_zone_motion_score"]
             sample["visual_contact_score"] = motion_sample["visual_contact_score"]
             sample["camera_shake_score"] = motion_sample["camera_shake_score"]
-        previous_gray = gray
+        history.append((current_time, gray))
+        span = MOTION_BASELINE_SEC * MOTION_HISTORY_SPAN
+        history = [entry for entry in history if current_time - entry[0] <= span]
 
     if not motion_scores:
         return empty_metrics()
