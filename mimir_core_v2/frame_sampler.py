@@ -69,8 +69,18 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
                 step = max(1, int(round(fps / sample_fps)))
                 indexes = list(range(0, frame_count, step))
                 if len(indexes) > max_frames:
-                    stride = len(indexes) / max_frames
-                    indexes = [indexes[int(index * stride)] for index in range(max_frames)]
+                    # Evenly spaced. int(index * stride) truncation dropped
+                    # scattered indexes, leaving occasional double-length gaps;
+                    # motion is a frame difference, so those gaps read as
+                    # spurious spikes.
+                    if max_frames == 1:
+                        indexes = [indexes[0]]
+                    else:
+                        last = len(indexes) - 1
+                        indexes = sorted({
+                            indexes[round(position * last / (max_frames - 1))]
+                            for position in range(max_frames)
+                        })
             elif frame_count > 0:
                 indexes = [0]
 
@@ -100,7 +110,12 @@ def sample_event_group(event_group: dict, mode: str = "balanced") -> tuple[dict,
                     "duration_sec": round(duration_sec, 3),
                     "frame_count": frame_count,
                     "fps": round(fps, 3) if fps > 0 else 0.0,
-                    "sample_fps": sample_fps,
+                    # The rate actually achieved. Reporting the *requested*
+                    # rate made diagnostics lie whenever max_frames bound --
+                    # on a clip longer than ~60s every mode is capped, so
+                    # thorough silently samples at balanced's rate.
+                    "sample_fps": round(sampled / duration_sec, 3) if duration_sec > 0 else sample_fps,
+                    "requested_sample_fps": sample_fps,
                     "source_video": str(path),
                 }
             )
