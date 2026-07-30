@@ -11,19 +11,6 @@ const severityRank: Record<SeverityGroup, number> = {
   IGNORE: 2,
 }
 
-export function errorMessage(error: unknown) {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-  ) {
-    return (error as { message: string }).message
-  }
-
-  return error instanceof Error ? error.message : String(error)
-}
-
 export function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return count === 1 ? singular : plural
 }

@@ -626,6 +626,62 @@ fn file_modified_time(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+// Source clips legitimately live anywhere the user imported from -- a USB
+// drive, an external disk -- so containment to one root is not available here
+// the way it is for session files. What we can insist on is that the path is
+// absolute, is a real file, and carries an extension we actually handle. That
+// is what stops a crafted or corrupted session file from talking a command
+// into reading something unrelated (a key, a document) and copying it into a
+// feedback package or embedding it in an exported report.
+fn validated_media_path(
+    requested: &str,
+    allowed_extensions: &[&str],
+    what: &str,
+) -> Result<PathBuf, ScanFailure> {
+    let trimmed = requested.trim();
+    if trimmed.is_empty() {
+        return Err(ScanFailure::new(format!("No {what} path was provided.")));
+    }
+
+    let path = PathBuf::from(trimmed);
+    if !path.is_absolute() {
+        return Err(ScanFailure::new(format!(
+            "The {what} path must be a full path."
+        )));
+    }
+
+    // Reject traversal segments before touching the filesystem: `is_file`
+    // would happily follow `..\..\..\` back out of anywhere.
+    if path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(ScanFailure::new(format!(
+            "The {what} path is not a direct path to a file."
+        )));
+    }
+
+    if !path.is_file() {
+        return Err(ScanFailure::new(format!("That {what} file was not found.")));
+    }
+
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if !allowed_extensions.contains(&extension.as_str()) {
+        return Err(ScanFailure::new(format!(
+            "That file is not a supported {what} format."
+        )));
+    }
+
+    Ok(path)
+}
+
+const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mov", "m4v", "avi", "mkv"];
+const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp"];
+
 fn validated_session_path(
     app: &tauri::AppHandle,
     requested: Option<String>,
@@ -1068,25 +1124,61 @@ fn append_app_crash_log_sync(
     let log_dir = default_documents_root()?.join("Mimir Logs");
     fs::create_dir_all(&log_dir).map_err(|error| ScanFailure::new(error.to_string()))?;
     let log_path = log_dir.join("app_crash_log.txt");
+    rotate_crash_log_if_large(&log_path);
+
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_path)
         .map_err(|error| ScanFailure::new(error.to_string()))?;
 
+    // Newlines are escaped so one entry cannot forge extra records: a stack
+    // trace is multi-line, and "---" alone on a line is the record separator.
     writeln!(file, "timestamp: {}", chrono_like_now())
         .map_err(|error| ScanFailure::new(error.to_string()))?;
-    writeln!(file, "incident id: {}", incident_id)
+    writeln!(file, "incident id: {}", single_log_line(&incident_id))
         .map_err(|error| ScanFailure::new(error.to_string()))?;
-    writeln!(file, "attempted video path: {}", attempted_video_path)
+    writeln!(
+        file,
+        "attempted video path: {}",
+        single_log_line(&attempted_video_path)
+    )
+    .map_err(|error| ScanFailure::new(error.to_string()))?;
+    writeln!(file, "error message: {}", single_log_line(&error_message))
         .map_err(|error| ScanFailure::new(error.to_string()))?;
-    writeln!(file, "error message: {}", error_message)
-        .map_err(|error| ScanFailure::new(error.to_string()))?;
-    writeln!(file, "stack trace: {}", stack_trace)
+    writeln!(file, "stack trace: {}", single_log_line(&stack_trace))
         .map_err(|error| ScanFailure::new(error.to_string()))?;
     writeln!(file, "---").map_err(|error| ScanFailure::new(error.to_string()))?;
 
     Ok(())
+}
+
+const MAX_CRASH_LOG_BYTES: u64 = 2 * 1024 * 1024;
+
+/// Keeps one previous generation and starts fresh. Without this the log grows
+/// without bound on a machine that hits a repeating error, and it lives in the
+/// user's Documents folder.
+fn rotate_crash_log_if_large(log_path: &Path) {
+    let too_large = fs::metadata(log_path)
+        .map(|meta| meta.len() >= MAX_CRASH_LOG_BYTES)
+        .unwrap_or(false);
+    if !too_large {
+        return;
+    }
+
+    // Best effort: if rotation fails the append below still works, and losing
+    // a diagnostic log is never worth failing the caller's action over.
+    let _ = fs::rename(log_path, log_path.with_extension("txt.1"));
+}
+
+fn single_log_line(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('\r', "")
+        .replace('\n', "\\n")
+        .chars()
+        .take(4000)
+        .collect()
 }
 
 fn safe_filename(value: &str) -> String {
@@ -1147,12 +1239,10 @@ fn save_incident_feedback_sync(
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .map(PathBuf::from)
                 .ok_or_else(|| "Video path is not available for this incident.".to_string())?;
 
-            if !source.exists() || !source.is_file() {
-                return Err("Video file was not found.".to_string());
-            }
+            let source = validated_media_path(&source, VIDEO_EXTENSIONS, "video")
+                .map_err(|failure| failure.message)?;
 
             let file_name = source
                 .file_name()
@@ -1891,7 +1981,16 @@ fn run_scan_sync(
     })
 }
 
+// TeslaCam layouts are shallow (drive / TeslaCam / SavedClips / <event> /
+// clips), so a generous cap costs nothing on real footage while stopping a
+// directory junction that points back at an ancestor from recursing forever.
+const MAX_SCAN_DEPTH: usize = 12;
+
 fn count_mp4_files(folder: &Path) -> Result<usize, ScanFailure> {
+    count_mp4_files_to_depth(folder, MAX_SCAN_DEPTH)
+}
+
+fn count_mp4_files_to_depth(folder: &Path, remaining_depth: usize) -> Result<usize, ScanFailure> {
     let mut count = 0;
 
     for entry in fs::read_dir(folder).map_err(|error| ScanFailure::new(error.to_string()))? {
@@ -1899,7 +1998,17 @@ fn count_mp4_files(folder: &Path) -> Result<usize, ScanFailure> {
         let path = entry.path();
 
         if path.is_dir() {
-            count += count_mp4_files(&path)?;
+            // Symlinks and junctions are the cycle risk; `file_type` reports
+            // the link itself rather than following it, unlike `path.is_dir`.
+            let is_link = entry
+                .file_type()
+                .map(|file_type| file_type.is_symlink())
+                .unwrap_or(true);
+            if is_link || remaining_depth == 0 {
+                continue;
+            }
+
+            count += count_mp4_files_to_depth(&path, remaining_depth - 1)?;
             continue;
         }
 
@@ -2109,7 +2218,11 @@ fn save_incident_note_sync(
     let contents = fs::read_to_string(&session_path)
         .map_err(|_| ScanFailure::new("Could not read this Mimir session file."))?;
     let mut session: Value =
-        serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
+        serde_json::from_str(&contents).map_err(|error| {
+            ScanFailure::new(format!(
+                "This Mimir session file could not be read -- it may be incomplete or corrupted. ({error})"
+            ))
+        })?;
     let incidents = session
         .get_mut("incidents")
         .and_then(Value::as_array_mut)
@@ -2197,7 +2310,11 @@ fn save_manual_status_sync(
     let contents = fs::read_to_string(&session_path)
         .map_err(|_| ScanFailure::new("Could not read this Mimir session file."))?;
     let mut session: Value =
-        serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
+        serde_json::from_str(&contents).map_err(|error| {
+            ScanFailure::new(format!(
+                "This Mimir session file could not be read -- it may be incomplete or corrupted. ({error})"
+            ))
+        })?;
     let incidents = session
         .get_mut("incidents")
         .and_then(Value::as_array_mut)
@@ -2279,7 +2396,11 @@ fn save_key_moment_correction_sync(
     let contents = fs::read_to_string(&session_path)
         .map_err(|_| ScanFailure::new("Could not read this Mimir session file."))?;
     let mut session: Value =
-        serde_json::from_str(&contents).map_err(|error| ScanFailure::new(error.to_string()))?;
+        serde_json::from_str(&contents).map_err(|error| {
+            ScanFailure::new(format!(
+                "This Mimir session file could not be read -- it may be incomplete or corrupted. ({error})"
+            ))
+        })?;
     let incidents = session
         .get_mut("incidents")
         .and_then(Value::as_array_mut)
@@ -2849,10 +2970,12 @@ async fn export_incident_report(
 
         let mut embedded_images = Vec::new();
         for image in &images {
-            let path = PathBuf::from(&image.path);
-            if !path.is_file() {
+            // Anything that is not a real image file on disk is skipped rather
+            // than embedded: the report is shared, so a path that resolves to
+            // something else must not end up base64'd into it.
+            let Ok(path) = validated_media_path(&image.path, IMAGE_EXTENSIONS, "image") else {
                 continue;
-            }
+            };
             let bytes = match fs::read(&path) {
                 Ok(bytes) => bytes,
                 Err(_) => continue,
@@ -2884,7 +3007,13 @@ async fn export_incident_report(
 #[tauri::command]
 async fn open_containing_folder(path: String) -> Result<(), ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
-        let path = PathBuf::from(path);
+        let path = PathBuf::from(path.trim());
+
+        // A relative path would resolve against the app's working directory,
+        // which is not a location the user asked about.
+        if !path.is_absolute() {
+            return Err(ScanFailure::new("That folder path is not a full path."));
+        }
 
         if path.exists() && path.is_dir() {
             return open_folder_with_explorer(&path);
@@ -2958,6 +3087,62 @@ async fn log_incident_diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn media_paths_reject_relative_traversal_and_wrong_types() {
+        let dir = std::env::temp_dir().join("mimir_media_path_test");
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("clip.mp4");
+        let secret = dir.join("id_rsa");
+        fs::write(&video, b"x").unwrap();
+        fs::write(&secret, b"x").unwrap();
+
+        assert!(validated_media_path(video.to_str().unwrap(), VIDEO_EXTENSIONS, "video").is_ok());
+
+        // A file that exists but is not footage must not be copied into a
+        // feedback package just because a session file named it.
+        assert!(validated_media_path(secret.to_str().unwrap(), VIDEO_EXTENSIONS, "video").is_err());
+
+        assert!(validated_media_path("clip.mp4", VIDEO_EXTENSIONS, "video").is_err());
+        assert!(validated_media_path("", VIDEO_EXTENSIONS, "video").is_err());
+
+        let traversal = format!("{}\\..\\clip.mp4", dir.to_str().unwrap());
+        assert!(validated_media_path(&traversal, VIDEO_EXTENSIONS, "video").is_err());
+
+        // Extension matching is case-insensitive: TeslaCam writes .MP4.
+        let upper = dir.join("clip2.MP4");
+        fs::write(&upper, b"x").unwrap();
+        assert!(validated_media_path(upper.to_str().unwrap(), VIDEO_EXTENSIONS, "video").is_ok());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn crash_log_entries_cannot_forge_record_separators() {
+        let forged = single_log_line("boom\n---\ntimestamp: fake");
+        assert!(!forged.contains('\n'), "newlines must be escaped");
+        assert!(forged.contains("\\n"));
+    }
+
+    #[test]
+    fn crash_log_rotates_once_past_the_size_cap() {
+        let dir = std::env::temp_dir().join("mimir_log_rotate_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("app_crash_log.txt");
+
+        fs::write(&log, vec![b'x'; (MAX_CRASH_LOG_BYTES + 1) as usize]).unwrap();
+        rotate_crash_log_if_large(&log);
+        assert!(!log.exists(), "oversized log is moved aside");
+        assert!(log.with_extension("txt.1").exists());
+
+        // A small log is left alone.
+        fs::write(&log, b"short").unwrap();
+        rotate_crash_log_if_large(&log);
+        assert_eq!(fs::read(&log).unwrap(), b"short");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     // These values are forwarded into child-process argument lists, so a
     // leading '-' would be parsed as a flag by the receiving CLI.

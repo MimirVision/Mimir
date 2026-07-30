@@ -198,18 +198,7 @@ export function actionButtonTone(status: string, active: boolean) {
     : 'border-white/[0.075] bg-white/[0.025] text-[var(--mimir-text-muted)] hover:bg-white/[0.05] hover:text-[var(--mimir-text)]'
 }
 
-export function actionErrorMessage(error: unknown) {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-  ) {
-    return (error as { message: string }).message
-  }
 
-  return error instanceof Error ? error.message : String(error)
-}
 
 export function parseStorageActionReport(value: string): StorageActionReport {
   if (!value.trim()) {

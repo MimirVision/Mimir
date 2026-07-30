@@ -12,9 +12,9 @@ import {
 } from '../lib/contributionIdentity'
 import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import { type SeverityGroup } from '../lib/incidentStatus'
+import { describeError, friendlyMessage } from '../lib/errorMessages'
 import {
   actionButtonTone,
-  actionErrorMessage,
   currentVideoPath,
   feedbackChoices,
   findIncident,
@@ -1551,9 +1551,13 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
   }, [incident.id])
 
   const choosePermissionRecord = async () => {
-    const selected = await openDialog({ multiple: false, directory: false, title: 'Choose permission record' })
-    if (typeof selected === 'string') {
-      setPermissionRecord(selected)
+    try {
+      const selected = await openDialog({ multiple: false, directory: false, title: 'Choose permission record' })
+      if (typeof selected === 'string') {
+        setPermissionRecord(selected)
+      }
+    } catch (value) {
+      setError(friendlyMessage(value, 'The file picker could not be opened.'))
     }
   }
 
@@ -1576,15 +1580,21 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\'
         outputPath = `${folder}${separator}${suggestedName}`
       } catch (value) {
-        setError(actionErrorMessage(value))
+        setError(friendlyMessage(value, 'The Contributions folder could not be located.'))
         return
       }
     } else {
-      const destination = await saveDialog({
-        title: 'Export encrypted Mimir training package',
-        defaultPath: suggestedName,
-        filters: [{ name: 'Mimir encrypted dataset', extensions: ['age'] }],
-      })
+      let destination: string | null = null
+      try {
+        destination = await saveDialog({
+          title: 'Export encrypted Mimir training package',
+          defaultPath: suggestedName,
+          filters: [{ name: 'Mimir encrypted dataset', extensions: ['age'] }],
+        })
+      } catch (value) {
+        setError(friendlyMessage(value, 'The save dialog could not be opened.'))
+        return
+      }
       if (!destination) {
         return
       }
@@ -1613,7 +1623,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
       setRightsConfirmed(false)
     } catch (value) {
       setMessage('')
-      setError(actionErrorMessage(value))
+      setError(friendlyMessage(value, 'That contribution package could not be written.'))
     } finally {
       setBusy(false)
     }
@@ -2112,8 +2122,9 @@ export function IncidentViewerScreen({
       }
     } catch (error) {
       setActionMessage('')
-      setActionError(actionErrorMessage(error))
-      setActionDetails('')
+      const described = describeError(error, 'Those clips could not be moved. Nothing was changed.')
+      setActionError(described.message)
+      setActionDetails(described.detail)
     } finally {
       setBusyAction(null)
     }
@@ -2175,8 +2186,9 @@ export function IncidentViewerScreen({
       setActionMessage(`Report saved and opened: ${reportPath}`)
     } catch (error) {
       setActionMessage('')
-      setActionError(actionErrorMessage(error))
-      setActionDetails('')
+      const described = describeError(error, 'The report could not be saved.')
+      setActionError(described.message)
+      setActionDetails(described.detail)
     } finally {
       setBusyAction(null)
     }
@@ -2198,7 +2210,9 @@ export function IncidentViewerScreen({
       await refreshCurrentIncident(result.message || 'Note saved.')
       setIsEditingNote(false)
     } catch (error) {
-      setActionError(actionErrorMessage(error))
+      const described = describeError(error, 'That note could not be saved to the session file.')
+      setActionError(described.message)
+      setActionDetails(described.detail)
     } finally {
       setBusyAction(null)
     }
@@ -2217,7 +2231,9 @@ export function IncidentViewerScreen({
       await refreshCurrentIncident(result.message || 'Actual moment saved.')
     } catch (error) {
       setActionMessage('')
-      setActionError(actionErrorMessage(error))
+      const described = describeError(error, 'The corrected moment could not be saved to the session file.')
+      setActionError(described.message)
+      setActionDetails(described.detail)
     } finally {
       setBusyAction(null)
     }
@@ -2288,7 +2304,7 @@ export function IncidentViewerScreen({
       setFeedbackNotes('')
       setFeedbackIncludeVideo(false)
     } catch (error) {
-      setFeedbackError(actionErrorMessage(error))
+      setFeedbackError(friendlyMessage(error, 'That feedback could not be saved.'))
     } finally {
       setBusyAction(null)
     }
@@ -2335,7 +2351,9 @@ export function IncidentViewerScreen({
     try {
       await invoke<void>('open_containing_folder', { path })
     } catch (error) {
-      setActionError(actionErrorMessage(error))
+      const described = describeError(error, 'That folder could not be opened.')
+      setActionError(described.message)
+      setActionDetails(described.detail)
     }
   }
 
@@ -2350,7 +2368,9 @@ export function IncidentViewerScreen({
 
       await invoke<void>('open_mimir_storage_folder', { kind })
     } catch (error) {
-      setActionError(actionErrorMessage(error))
+      const described = describeError(error, 'That Mimir folder could not be opened.')
+      setActionError(described.message)
+      setActionDetails(described.detail)
     }
   }
 
@@ -2437,9 +2457,14 @@ export function IncidentViewerScreen({
       className="flex min-h-screen w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_48%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)] outline-none"
     >
       <header className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-7">
+        {/* Leaving mid-action re-opened the viewer when the action finished
+            and refreshed the incident. Blocking the exit while a write is in
+            flight is also the safer half: the session file is being rewritten. */}
         <button
           onClick={onBack}
-          className="h-9 rounded-lg bg-white/[0.03] px-3.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)]"
+          disabled={busyAction !== null}
+          title={busyAction !== null ? 'Finishing the current action first...' : undefined}
+          className="h-9 rounded-lg bg-white/[0.03] px-3.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.03] disabled:hover:text-[var(--mimir-text-muted)]"
         >
           Back to Library
         </button>
