@@ -98,6 +98,7 @@ def analyze_motion(
     history: list[tuple[float, Any]] = []
     motion_scores: list[tuple[float, float, float, float]] = []
     motion_samples: list[dict] = []
+    skipped_frames = 0
     for sample in samples:
         frame = sample.get("frame")
         if frame is None:
@@ -106,7 +107,11 @@ def analyze_motion(
             resized = cv2.resize(frame, (240, 135))
             gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
             gray = cv2.GaussianBlur(gray, (5, 5), 0)
-        except Exception:
+        except (cv2.error, AttributeError, IndexError, TypeError, ValueError):
+            # Skipping also skips history.append below, so the next usable
+            # frame differences against one further back than intended. That
+            # is unavoidable without a frame, but it must not be invisible.
+            skipped_frames += 1
             continue
         current_time = safe_float(sample.get("time_sec"), 0.0)
         reference = _baseline_reference(history, current_time)
@@ -248,4 +253,5 @@ def analyze_motion(
         "scene_change_score": round(max_score, 4),
         "impact_evidence_reasons": reasons,
         "motion_samples": motion_samples,
+        "skipped_frames": skipped_frames,
     }
