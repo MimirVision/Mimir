@@ -13,6 +13,7 @@ import {
 import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import { type SeverityGroup } from '../lib/incidentStatus'
 import { describeError, friendlyMessage } from '../lib/errorMessages'
+import { ModalOverlay } from './ModalOverlay'
 import {
   actionButtonTone,
   currentVideoPath,
@@ -187,7 +188,7 @@ function ViewerFilesDrawer({
   const originalPath = originalVideoPath(incident)
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/62 backdrop-blur-sm">
+    <ModalOverlay label="Incident files" onClose={onClose} className="justify-end bg-black/62 backdrop-blur-sm">
       <button
         type="button"
         className="absolute inset-0 cursor-default"
@@ -262,7 +263,7 @@ function ViewerFilesDrawer({
           </div>
         </div>
       </aside>
-    </div>
+    </ModalOverlay>
   )
 }
 
@@ -1063,6 +1064,36 @@ function IncidentTimelineMarkers({
     onSeek(seekTime)
   }
 
+  // The rail was click-only, so seeking was unreachable without a mouse.
+  // stopPropagation keeps the arrow keys here rather than letting the viewer's
+  // global handler move to the previous/next incident instead.
+  const handleRailKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!canSeekRail) {
+      return
+    }
+
+    const step = event.shiftKey ? 5 : 1
+    let target: number | null = null
+
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+      target = currentTime - step
+    } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+      target = currentTime + step
+    } else if (event.key === 'Home') {
+      target = 0
+    } else if (event.key === 'End') {
+      target = knownDuration
+    }
+
+    if (target === null) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    onSeek(Math.max(0, Math.min(knownDuration, target)))
+  }
+
   return (
     <div className="rounded-2xl bg-black/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1106,9 +1137,18 @@ function IncidentTimelineMarkers({
       </div>
 
       <div
-        role="presentation"
+        role={canSeekRail ? 'slider' : 'presentation'}
+        tabIndex={canSeekRail ? 0 : undefined}
+        aria-label={canSeekRail ? 'Seek within the clip' : undefined}
+        aria-valuemin={canSeekRail ? 0 : undefined}
+        aria-valuemax={canSeekRail ? Math.round(knownDuration) : undefined}
+        aria-valuenow={canSeekRail ? Math.round(currentTime) : undefined}
+        aria-valuetext={canSeekRail ? `${formatTime(currentTime)} of ${formatTime(knownDuration)}` : undefined}
         onClick={handleRailClick}
-        className={`relative mx-2 h-[138px] ${canSeekRail ? 'cursor-pointer' : 'cursor-default'}`}
+        onKeyDown={handleRailKeyDown}
+        className={`relative mx-2 h-[138px] rounded-lg outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mimir-accent)] ${
+          canSeekRail ? 'cursor-pointer' : 'cursor-default'
+        }`}
       >
         <div className="absolute left-0 right-0 top-[48px] h-px bg-white/[0.08]" />
         <div className="absolute left-0 right-0 top-[46px] h-3 rounded-full bg-black/28 shadow-[inset_0_1px_1px_rgba(0,0,0,0.34)]" />
@@ -2620,7 +2660,7 @@ export function IncidentViewerScreen({
       )}
 
       {showLibraryConfirm && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+        <ModalOverlay label="Move this incident to Mimir Library?" onClose={() => setShowLibraryConfirm(false)}>
           <section className="w-full max-w-[480px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
             <div className="text-[18px] font-semibold text-[var(--mimir-text)]">
               Move this incident to Mimir Library?
@@ -2648,11 +2688,11 @@ export function IncidentViewerScreen({
               </button>
             </div>
           </section>
-        </div>
+        </ModalOverlay>
       )}
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+        <ModalOverlay label="Move this incident to Mimir Trash?" onClose={() => setShowDeleteConfirm(false)}>
           <section className="w-full max-w-[460px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
             <div className="text-[18px] font-semibold text-[var(--mimir-text)]">
               Move this incident to Mimir Trash?
@@ -2683,7 +2723,7 @@ export function IncidentViewerScreen({
               </button>
             </div>
           </section>
-        </div>
+        </ModalOverlay>
       )}
     </main>
   )

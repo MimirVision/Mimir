@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { documentDir } from '@tauri-apps/api/path'
 import mimirLockup from '../assets/mimir-lockup.png'
 import { CrashSafeBoundary } from './CrashSafeBoundary'
+import { ModalOverlay } from './ModalOverlay'
 import { ErrorNotice } from './ErrorNotice'
 import { describeError, describeFailures, type DescribedError } from '../lib/errorMessages'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
@@ -179,20 +180,6 @@ function IncidentCard({
         <div className="relative">
           <IncidentImage incident={incident} />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/82 via-black/28 to-transparent opacity-75 transition group-hover:opacity-95" />
-          {selectionMode && (
-            <label
-              className="absolute left-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-full border border-white/16 bg-black/50 backdrop-blur"
-              onClick={event => event.stopPropagation()}
-            >
-              <span className="sr-only">Select incident</span>
-              <input
-                type="checkbox"
-                checked={selected}
-                onChange={() => onToggleSelected(incident)}
-                className="h-4 w-4 accent-white"
-              />
-            </label>
-          )}
           <span
             className={`absolute right-2.5 top-2.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md ${severityClass(
               severityResolution.displaySeverity,
@@ -233,6 +220,21 @@ function IncidentCard({
           </div>
         </div>
       </button>
+
+      {/* A sibling of the card button, not a child of it: a label wrapping a
+          checkbox inside a <button> is invalid, and a screen reader reaching
+          the checkbox had no way to operate it independently of the card. */}
+      {selectionMode && (
+        <label className="absolute left-2.5 top-2.5 z-20 grid h-7 w-7 place-items-center rounded-full border border-white/16 bg-black/50 backdrop-blur">
+          <span className="sr-only">Select this incident</span>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelected(incident)}
+            className="h-4 w-4 accent-white"
+          />
+        </label>
+      )}
     </article>
   )
 }
@@ -367,7 +369,7 @@ function FilesDrawer({
   const folderPath = incidentFolderPath(incident)
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/55 backdrop-blur-sm" onClick={onClose}>
+    <ModalOverlay label="Incident files" onClose={onClose} closeOnBackdrop className="justify-end bg-black/55 backdrop-blur-sm">
       <aside
         className="h-full w-full max-w-[420px] overflow-y-auto border-l border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
         onClick={event => event.stopPropagation()}
@@ -430,7 +432,7 @@ function FilesDrawer({
 
         <ErrorNotice error={error} className="mt-3" />
       </aside>
-    </div>
+    </ModalOverlay>
   )
 }
 
@@ -554,6 +556,33 @@ export function IncidentLibraryView({
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement | null>(null)
+
+  // The menu stayed open until its own trigger was pressed again -- clicking
+  // anywhere else left it floating over the content, and Escape did nothing.
+  useEffect(() => {
+    if (!moreOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) {
+        setMoreOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMoreOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [moreOpen])
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState('')
   const [storageOpenError, setStorageOpenError] = useState<DescribedError | null>(null)
@@ -930,7 +959,14 @@ export function IncidentLibraryView({
 
   return (
     <CrashSafeBoundary title="Incident library error" onBack={onImportNew}>
-    <main className="flex min-h-screen w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)]">
+    {/* The gradient stack is a background-image; with no background-color
+        underneath it there is no base colour for contrast to resolve against,
+        which is both a blind spot for accessibility tooling and a real
+        fragility if the gradient does not paint. */}
+    <main
+      style={{ backgroundColor: 'var(--mimir-bg-depth)' }}
+      className="flex min-h-screen w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_-10%,rgba(157,183,170,0.085),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012)),var(--mimir-bg-depth)]"
+    >
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.04] px-5 py-4 lg:px-7">
         <div className="flex min-w-0 items-center gap-4">
           <img src={mimirLockup} alt="Mimir" className="h-7 w-auto shrink-0 opacity-95" />
@@ -966,16 +1002,22 @@ export function IncidentLibraryView({
               {selectionMode ? 'Cancel' : 'Select'}
             </button>
           )}
-          <div className="relative">
+          <div className="relative" ref={moreMenuRef}>
             <button
               type="button"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
               onClick={() => setMoreOpen(open => !open)}
               className="h-9 rounded-lg border border-transparent bg-transparent px-3 text-[12px] font-medium text-[var(--mimir-text-subtle)] transition hover:border-white/[0.055] hover:bg-white/[0.035] hover:text-[var(--mimir-text)]"
             >
               More
             </button>
             {moreOpen && (
-              <div className="absolute right-0 top-12 z-30 w-56 overflow-hidden rounded-xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-1.5 shadow-[0_18px_60px_rgba(0,0,0,0.48)]">
+              <div
+                role="menu"
+                aria-label="More actions"
+                className="absolute right-0 top-12 z-30 w-56 overflow-hidden rounded-xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-1.5 shadow-[0_18px_60px_rgba(0,0,0,0.48)]"
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -1230,7 +1272,7 @@ export function IncidentLibraryView({
       )}
 
       {showFreeUpModal && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+        <ModalOverlay label="Move reviewed clips to Mimir Library?" onClose={() => setShowFreeUpModal(false)}>
           <section className="w-full max-w-[520px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
             <div className="text-[19px] font-semibold text-[var(--mimir-text)]">Move reviewed clips to Mimir Library?</div>
             <p className="mt-3 text-[14px] leading-6 text-[var(--mimir-text-muted)]">
@@ -1280,11 +1322,11 @@ export function IncidentLibraryView({
               </button>
             </div>
           </section>
-        </div>
+        </ModalOverlay>
       )}
 
       {showAboutModal && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+        <ModalOverlay label="About this free beta">
           <section className="w-full max-w-[460px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
             <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
               Free Beta
@@ -1309,7 +1351,7 @@ export function IncidentLibraryView({
               </button>
             </div>
           </section>
-        </div>
+        </ModalOverlay>
       )}
 
       {showTechnicalDetails && (
@@ -1351,7 +1393,7 @@ function TechnicalDetailsModal({
   const staleWarning = sessionMayBeStale(session)
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+    <ModalOverlay label="Technical details" onClose={onClose}>
       <section className="max-h-[86vh] w-full max-w-[760px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
         <div className="border-b border-white/[0.06] p-5">
           <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
@@ -1400,7 +1442,7 @@ function TechnicalDetailsModal({
           </button>
         </div>
       </section>
-    </div>
+    </ModalOverlay>
   )
 }
 
