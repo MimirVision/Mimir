@@ -43,8 +43,8 @@ declared licence file, sets `release_blocker: true`, or does not set
 install leaves the previous model in place.
 
 **This mechanism never touches the network.** It only validates and moves files
-that are already on disk, so the "no internet connection required" statement in
-SYSTEM_REQUIREMENTS.md and PRIVACY.md holds. Obtaining a model package is a
+that are already on disk, so the "no internet connection required to scan"
+statement in SYSTEM_REQUIREMENTS.md and PRIVACY.md holds. Obtaining a model package is a
 separate, manual, human action -- there is no automatic model download, and no
 model changes without someone explicitly installing it.
 

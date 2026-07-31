@@ -26,6 +26,15 @@
             exactly what that means before you rely on it.
           </p>
           <div class="actions">
+            <!--
+              Point this at the GitHub Release asset once the releases repo
+              exists, e.g.
+                https://github.com/OWNER/REPO/releases/latest/download/MimirSetup.exe
+              That is what makes downloads countable: GitHub reports a download
+              count per asset, and scripts/download_stats.py records it over
+              time. The relative path below works for sharing the folder
+              directly, but nothing is counted when it is used.
+            -->
             <a class="button primary" href="./MimirSetup.exe">Download for Windows</a>
             <a class="button secondary" href="#beta-guide">View beta guide</a>
           </div>
@@ -98,8 +107,9 @@
           <p class="section-kicker">Before you download</p>
           <h3>What it needs to run.</h3>
           <ul>
-            <li>Windows 10 or 11, 64-bit; ~395 MB download, ~325 MB installed</li>
-            <li>No internet needed to install or scan - everything is bundled</li>
+            <li>Windows 10 or 11, 64-bit; ~197 MB download, ~325 MB installed</li>
+            <li>Scanning is fully offline - your footage never leaves the PC</li>
+            <li>Install needs internet only if Windows is missing the WebView2 runtime, which Windows 11 already includes</li>
             <li>No GPU, no Ollama, no account required for the core app</li>
             <li>Unsigned installer: Windows will show a warning, choose the advanced option to continue</li>
           </ul>

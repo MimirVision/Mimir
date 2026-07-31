@@ -8,11 +8,10 @@ your machine.
 
 - **Windows 10 (64-bit) or Windows 11.** The installer only builds a 64-bit
   package; there is no 32-bit or ARM build.
-- **A ~395 MB download and about 325 MB installed.** Allow roughly 750 MB
+- **A ~197 MB download and about 325 MB installed.** Allow roughly 550 MB
   free while installing, since the installer and the installed files coexist
-  briefly. The installer is large because it bundles the detector model and a
-  full offline copy of the Microsoft Edge WebView2 runtime, so setup never
-  needs to download anything.
+  briefly. Most of the download is the detector model, which is bundled so
+  that scanning never needs the network.
 - **Additional free space if you use Move to Library / Move to Trash** on
   footage that lives on a different drive than your library folder (default:
   `%USERPROFILE%\Videos\Mimir Library`) -- those actions copy the file, so
@@ -20,9 +19,14 @@ your machine.
 
 ## What's explicitly NOT required
 
-- **No internet connection**, for either installing or scanning. Everything
-  Mimir needs -- the detector model, the WebView2 runtime -- ships inside the
-  installer.
+- **No internet connection to scan.** The detector model ships inside the
+  installer and runs entirely on your machine.
+
+  Setup is the one exception: Mimir uses the Microsoft Edge WebView2 runtime,
+  and the installer fetches it if Windows does not already have it. Windows 11
+  includes it, and Windows 10 receives it through Edge updates, so in practice
+  this rarely happens -- but an offline machine that lacks WebView2 cannot
+  complete setup. Nothing about your footage is transmitted either way.
 - **No account, no sign-in, no cloud storage.**
 - **No GPU.** Detection runs on CPU if no compatible GPU is found. A
   DirectX12-capable GPU (most GPUs from the last several years, including
