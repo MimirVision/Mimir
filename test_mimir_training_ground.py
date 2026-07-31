@@ -399,8 +399,46 @@ class SyncResultMarkerTest(unittest.TestCase):
         self.assertEqual(payload["new_contribution_count"], 0)
         self.assertEqual(payload["new_feedback_count"], 0)
         self.assertIsNone(payload["contribution_intake_exit_code"])
+        self.assertEqual(payload["contribution_results"], [])
         self.assertEqual(payload["feedback_results"], [])
         self.assertIn("pilot_gate_met", payload["gate_progress"])
+
+    def test_marker_line_reports_a_failed_contribution_by_name_and_reason(self) -> None:
+        # Mirrors what actually happened in production: a stray non-age file
+        # landed in the bucket, sync downloaded it, intake correctly rejected
+        # it -- and Forge needed to show *which* file and *why*, not just a
+        # bare exit code. contribution_results is what makes that possible.
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            fixture = root_path / "fixture.bin"
+            fixture.write_bytes(b"not a real age package")
+            identity = root_path / "identity.txt"
+            identity.write_text("placeholder -- decryption fails before this is read", encoding="utf-8")
+
+            args = argparse.Namespace(
+                dataset_root=str(root_path / "dataset"),
+                inbox=str(root_path / "inbox"),
+                feedback_inbox=str(root_path / "feedback_inbox"),
+                feedback_inbox_downloads=str(root_path / "feedback_inbox" / "_downloads"),
+                identity=str(identity),
+                r2_endpoint="",
+                r2_bucket="",
+                create_cvat_tasks=False,
+                cvat_url="",
+                cvat_token="",
+                cvat_token_file="",
+            )
+            client = FakeS3Client({"contributions/2026/07/bad.mimir-dataset.age": fixture})
+            with mock.patch.dict(os.environ, self._DUMMY_R2_ENV), mock.patch.object(tg, "r2_client", lambda config: client):
+                payload = _run_and_capture_json(lambda: tg.sync_command(args))
+
+        self.assertEqual(payload["new_contribution_count"], 1)
+        self.assertEqual(len(payload["contribution_results"]), 1)
+        result = payload["contribution_results"][0]
+        self.assertEqual(result["file"], "bad.mimir-dataset.age")
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("error", result)
+        self.assertTrue(result["error"])
 
 
 if __name__ == "__main__":
