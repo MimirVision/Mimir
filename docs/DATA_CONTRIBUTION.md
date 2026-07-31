@@ -1,9 +1,11 @@
 # Contributing Footage During The Free Beta
 
-Mimir never uploads footage automatically. A tester can choose **Export for Mimir
-training** on one incident, confirm their rights for that incident, and save an
-encrypted `.mimir-dataset.age` package. The tester then decides whether and how to
-transfer that file.
+Mimir never uploads footage automatically. A tester can choose **Contribute this
+incident**, confirm their rights for that incident, and Mimir encrypts it on-device
+into a `.mimir-dataset.age` package and sends it in that same action. Nothing is
+sent until that button is pressed. A **Save without sending** option is also
+available, which encrypts and stores the package locally without attempting
+delivery -- useful on a metered connection, or to send later.
 
 The package includes only the selected incident and its grouped camera angles. It
 contains a clip-by-clip consent receipt, source hashes, provenance, annotations,

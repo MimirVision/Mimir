@@ -15,10 +15,13 @@ are separate, explicit commands with a transaction journal.
 
 Training footage is never collected automatically. Dataset export requires an
 explicit incident-by-incident selection and a recorded consent statement. Export
-creates an `age`-encrypted package for a recipient key; transfer is a separate human
-action. The intake private key is never included in the app. Paths are reduced to filenames in the
-annotation record where practical, but video content may itself contain identifying
-information.
+creates an `age`-encrypted package for a recipient key that only Mimir's developer
+holds; sending it is a separate, explicit in-app action distinct from the export
+itself, and nothing is sent until that action is taken. The same applies to feedback:
+it is encrypted on-device before it ever leaves, and sending it is a deliberate,
+per-item action, never automatic or in the background. The intake private key is
+never included in the app. Paths are reduced to filenames in the annotation record
+where practical, but video content may itself contain identifying information.
 
 Diagnostics should redact source paths where practical. Users should inspect any
 export before sharing it because filenames, notes, images, or videos may still be

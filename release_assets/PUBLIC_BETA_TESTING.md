@@ -55,9 +55,9 @@ Deleted/trash incidents are hidden from normal Important, Review, and Ignored li
 
 ## How to Send Feedback
 
-Open an incident, pick an AI feedback label, add a note if you want, and click **Send feedback**. Mimir saves the feedback file, opens its folder, copies the email text to your clipboard, and tries to open your default mail app (which may not be set up -- most people don't have one). If nothing opens, just paste what's on your clipboard into whatever email you actually use, addressed to feedback.mimir@gmail.com, and attach the file. Nothing is sent automatically; the app never uploads anything on its own.
+Open an incident, pick an AI feedback label, add a note if you want, and click **Send feedback**. Mimir saves the feedback locally, then encrypts it on your device and sends it in that same action -- nothing is sent until you click that button, and Mimir's developer is the only one who can decrypt what arrives. There's no email step anymore: no clipboard copying, no mail app to configure.
 
-For each issue, it helps to mention:
+For each issue, it helps to mention in the notes field:
 
 - Original clip filename.
 - What Mimir classified it as.
@@ -67,7 +67,7 @@ For each issue, it helps to mention:
 - Whether the timeline markers made sense.
 - Any error message shown by the app.
 
-Do not share private footage over public channels (forums, social media, chat rooms) -- send it directly to feedback.mimir@gmail.com.
+If you'd rather not send footage over the network for a particular clip, Mimir also offers **Save without sending** wherever Send/Contribute appears -- it still encrypts locally, just doesn't attempt delivery, and you can send it later. For anything you don't want going through Mimir's submission flow at all, reach feedback.mimir@gmail.com directly -- but do not share footage over public channels (forums, social media, chat rooms).
 
 ## Known Limitations
 
