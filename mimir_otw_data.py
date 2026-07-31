@@ -221,7 +221,7 @@ def _balance_activities(
     for item in activities:
         grouped.setdefault(str(item["target_class"]), []).append(item)
     selected: list[dict[str, Any]] = []
-    for class_name, rows in grouped.items():
+    for rows in grouped.values():
         rows.sort(
             key=lambda item: deterministic_rank(
                 f"{item['collection']}/{item['video_id']}/{item['activity_id']}/{item['activity_label']}"

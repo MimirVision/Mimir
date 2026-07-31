@@ -9,7 +9,6 @@ production identity, which never appears in this repo.
 
 from __future__ import annotations
 
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,11 +69,14 @@ class FeedbackPackageTest(unittest.TestCase):
         output = self.root / "out.mimir-feedback.age"
         package = encrypt_feedback_collection(collection, output, self.recipient)
         self.assertTrue(output.is_file())
-        self.assertEqual(package["package_id"], package["package_id"])
 
         feedback_root = self.root / "feedback_inbox"
         result = intake_feedback_package(output, self.identity, feedback_root)
         self.assertEqual(result["status"], "imported")
+        # The package_id assigned at encryption time must be the same one
+        # intake files it under -- a real check, unlike the tautological
+        # self-comparison this replaced.
+        self.assertEqual(package["package_id"], result["package_id"])
 
         imported_feedback = (feedback_root / result["package_id"] / "feedback.json")
         self.assertTrue(imported_feedback.is_file())
@@ -90,7 +92,7 @@ class FeedbackPackageTest(unittest.TestCase):
         self.assertTrue((collection / "video" / "clip.mp4").is_file())
 
         output = self.root / "out.mimir-feedback.age"
-        package = encrypt_feedback_collection(collection, output, self.recipient)
+        encrypt_feedback_collection(collection, output, self.recipient)
 
         feedback_root = self.root / "feedback_inbox"
         result = intake_feedback_package(output, self.identity, feedback_root)

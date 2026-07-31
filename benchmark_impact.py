@@ -138,7 +138,7 @@ def find_video_sources(folder):
     if not folder or not os.path.isdir(folder):
         return sources
 
-    for root, _dirs, files in os.walk(folder):
+    for _root, _dirs, files in os.walk(folder):
         for filename in files:
             if filename.lower().endswith(".mp4"):
                 sources.add(normalize_filename(filename))

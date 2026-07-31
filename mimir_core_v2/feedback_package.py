@@ -22,7 +22,6 @@ around manifest/consent/source_session, since that shape doesn't apply here.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import tempfile
