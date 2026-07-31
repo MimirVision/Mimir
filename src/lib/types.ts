@@ -69,6 +69,12 @@ export interface FeedbackListItem {
   }
 }
 
+export interface FeedbackReview {
+  reviewed: boolean
+  note: string
+  reviewed_at: string
+}
+
 export interface FeedbackDetail {
   package_id: string
   feedback: Record<string, unknown>

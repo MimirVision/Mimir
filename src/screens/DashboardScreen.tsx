@@ -35,8 +35,53 @@ interface DashboardScreenProps {
   ready: boolean
 }
 
+function TrainingCommands({ datasetRoot }: { datasetRoot: string }) {
+  const preparedDir = `${datasetRoot}\\prepared`
+  const commands = [
+    `python mimir_core_v2_training.py prepare --dataset-root "${datasetRoot}" --output "${preparedDir}"`,
+    `python mimir_core_v2_training.py train --prepared "${preparedDir}"`,
+  ]
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(commands.join('\n'))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard access can be denied by the OS; the commands are still
+      // visible below to copy by hand, so this is not worth surfacing as
+      // an error notice.
+    }
+  }
+
+  return (
+    <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-medium text-mimir-text">Ready to train</span>
+        <button
+          type="button"
+          onClick={copy}
+          className="rounded-md border border-mimir-border-strong px-2.5 py-1 text-[10px] text-mimir-text"
+        >
+          {copied ? 'Copied' : 'Copy commands'}
+        </button>
+      </div>
+      <p className="mt-1.5 text-[11px] leading-5 text-mimir-text-subtle">
+        Syncing and reviewing here only gets the data ready -- starting a training run stays a deliberate
+        step you run yourself, in C:\Mimir_Backend, so a candidate that regresses real detection can never
+        reach testers automatically. These are the exact commands `train` will re-check this gate against:
+      </p>
+      <pre className="mt-2.5 overflow-x-auto rounded-md border border-mimir-border bg-black/25 p-2.5 text-[11px] leading-5 text-mimir-text-muted">
+        {commands.join('\n')}
+      </pre>
+    </div>
+  )
+}
+
 export function DashboardScreen({ ready }: DashboardScreenProps) {
   const [progress, setProgress] = useState<GateProgress | null>(null)
+  const [datasetRoot, setDatasetRoot] = useState('')
   const [loadError, setLoadError] = useState<DescribedError | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<DescribedError | null>(null)
@@ -45,8 +90,9 @@ export function DashboardScreen({ ready }: DashboardScreenProps) {
   const loadStatus = async () => {
     if (!ready) return
     try {
-      const result = await api.getStatus()
+      const [result, settings] = await Promise.all([api.getStatus(), api.getSettings()])
       setProgress(result)
+      setDatasetRoot(settings.dataset_root)
       setLoadError(null)
     } catch (err) {
       setLoadError(describeError(err, 'Could not load progress.'))
@@ -127,6 +173,8 @@ export function DashboardScreen({ ready }: DashboardScreenProps) {
           )}
         </div>
       )}
+
+      {progress?.pilot_gate_met && datasetRoot && <TrainingCommands datasetRoot={datasetRoot} />}
 
       {lastSync && (
         <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">

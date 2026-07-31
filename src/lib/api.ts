@@ -4,6 +4,7 @@ import type {
   CollectionListItem,
   FeedbackDetail,
   FeedbackListItem,
+  FeedbackReview,
   GateProgress,
   SecretField,
   Settings,
@@ -20,6 +21,9 @@ export const api = {
   getStatus: () => invoke<GateProgress>('get_status'),
   listFeedback: () => invoke<{ items: FeedbackListItem[] }>('list_feedback'),
   showFeedback: (packageId: string) => invoke<FeedbackDetail>('show_feedback', { packageId }),
+  getFeedbackReviews: () => invoke<Record<string, FeedbackReview>>('get_feedback_reviews'),
+  saveFeedbackReview: (packageId: string, reviewed: boolean, note: string) =>
+    invoke<void>('save_feedback_review', { packageId, reviewed, note }),
   listCollections: () => invoke<{ items: CollectionListItem[] }>('list_collections'),
   showCollection: (packageId: string) => invoke<CollectionDetail>('show_collection', { packageId }),
   openInCvat: (taskId: number) => invoke<void>('open_in_cvat', { taskId }),

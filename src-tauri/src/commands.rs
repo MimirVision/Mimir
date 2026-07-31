@@ -17,6 +17,7 @@ const BACKEND_PYTHON: &str = r"C:\Mimir_Backend\.venv\Scripts\python.exe";
 const BACKEND_SCRIPT: &str = r"C:\Mimir_Backend\mimir_training_ground.py";
 const KEYRING_SERVICE: &str = "MimirForge";
 const SETTINGS_FILE: &str = "settings.json";
+const FEEDBACK_REVIEWS_FILE: &str = "feedback_reviews.json";
 
 #[derive(Serialize)]
 pub struct ForgeError {
@@ -141,6 +142,89 @@ fn write_settings(app: &tauri::AppHandle, settings: &Settings) -> Result<(), For
     std::fs::rename(&temp_path, &path)
         .map_err(|error| ForgeError::new(format!("Could not save settings.json: {error}")))?;
     Ok(())
+}
+
+// --- Feedback review tracking --------------------------------------------
+//
+// Feedback (the AI-correction flow: Correct / Weird AI flag / Missed obvious
+// event + notes) is qualitative developer signal, not training data -- unlike
+// a Contribution, it never went through the clip-level rights confirmation
+// C:\Mimir\docs\DATA_CONTRIBUTION.md requires, so it must never be silently
+// folded into the training dataset. What Forge *can* do is stop review effort
+// from evaporating: this is a local-only "have I looked at this, what did I
+// do about it" note per feedback item, stored next to settings.json and kept
+// entirely separate from the tester's original feedback.json (never
+// mutated -- this is Forge's own bookkeeping, not a rewrite of received data).
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct FeedbackReview {
+    #[serde(default)]
+    pub reviewed: bool,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub reviewed_at: String,
+}
+
+fn feedback_reviews_path(app: &tauri::AppHandle) -> Result<PathBuf, ForgeError> {
+    let dir = tauri::Manager::path(app)
+        .app_data_dir()
+        .map_err(|error| ForgeError::new(format!("Could not resolve the app data folder: {error}")))?;
+    Ok(dir.join(FEEDBACK_REVIEWS_FILE))
+}
+
+#[tauri::command]
+pub fn get_feedback_reviews(
+    app: tauri::AppHandle,
+) -> Result<std::collections::HashMap<String, FeedbackReview>, ForgeError> {
+    let path = feedback_reviews_path(&app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|error| ForgeError::new(format!("feedback_reviews.json is not valid: {error}"))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(std::collections::HashMap::new()),
+        Err(error) => Err(ForgeError::new(format!("Could not read feedback_reviews.json: {error}"))),
+    }
+}
+
+#[tauri::command]
+pub fn save_feedback_review(
+    app: tauri::AppHandle,
+    package_id: String,
+    reviewed: bool,
+    note: String,
+) -> Result<(), ForgeError> {
+    let path = feedback_reviews_path(&app)?;
+    let mut reviews = get_feedback_reviews(app.clone())?;
+    reviews.insert(
+        package_id,
+        FeedbackReview {
+            reviewed,
+            note,
+            reviewed_at: if reviewed { unix_timestamp_now() } else { String::new() },
+        },
+    );
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| ForgeError::new(format!("Could not create the app data folder: {error}")))?;
+    }
+    let body = serde_json::to_string_pretty(&reviews)
+        .map_err(|error| ForgeError::new(format!("Could not serialize feedback reviews: {error}")))?;
+    let temp_path = path.with_extension("json.tmp");
+    std::fs::write(&temp_path, body)
+        .map_err(|error| ForgeError::new(format!("Could not write feedback_reviews.json: {error}")))?;
+    std::fs::rename(&temp_path, &path)
+        .map_err(|error| ForgeError::new(format!("Could not save feedback_reviews.json: {error}")))?;
+    Ok(())
+}
+
+/// Seconds since the Unix epoch, as a string -- avoids pulling in a full
+/// `chrono` dependency just to timestamp a review note. The frontend turns
+/// this back into a date with `new Date(Number(value) * 1000)`.
+fn unix_timestamp_now() -> String {
+    let since_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    format!("{}", since_epoch.as_secs())
 }
 
 #[tauri::command]
@@ -505,6 +589,32 @@ mod tests {
         };
         let error = require_success(output).unwrap_err();
         assert_eq!(error.message, "ValueError: bad thing");
+    }
+
+    #[test]
+    fn feedback_review_round_trips_through_json() {
+        let mut reviews = std::collections::HashMap::new();
+        reviews.insert(
+            "abc123".to_string(),
+            FeedbackReview {
+                reviewed: true,
+                note: "Filed as a threshold tuning candidate.".to_string(),
+                reviewed_at: "1234567890".to_string(),
+            },
+        );
+        let text = serde_json::to_string(&reviews).expect("serialize");
+        let parsed: std::collections::HashMap<String, FeedbackReview> =
+            serde_json::from_str(&text).expect("deserialize");
+        assert!(parsed["abc123"].reviewed);
+        assert_eq!(parsed["abc123"].note, "Filed as a threshold tuning candidate.");
+    }
+
+    #[test]
+    fn unreviewed_feedback_defaults_are_falsy_and_blank() {
+        let parsed: FeedbackReview = serde_json::from_str("{}").expect("empty object still parses");
+        assert!(!parsed.reviewed);
+        assert_eq!(parsed.note, "");
+        assert_eq!(parsed.reviewed_at, "");
     }
 
     #[test]
