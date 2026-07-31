@@ -26,14 +26,17 @@ use std::time::Duration;
 pub const OUTBOX_APP_TOKEN: &str = "mimir-beta-2026-a4f9c1";
 
 // Every mode-dependent constant elsewhere in this app resolves from an env
-// var with a hardcoded fallback (see MIMIR_OUTPUT_DIR). Same idiom here: the
-// mock server and, eventually, a deployed Worker are both reachable by
-// pointing MIMIR_INTAKE_URL at them without a rebuild.
+// var with a hardcoded fallback (see MIMIR_OUTPUT_DIR). Same idiom here: a
+// real, deployed Worker is now the default, verified end to end (all of
+// accept / duplicate-reject / bad-token / bad-content / bad-package-id /
+// no-read-access) against C:\Mimir_Ingest_Worker on 2026-07-31. Point
+// MIMIR_INTAKE_URL at scripts/dev_intake_mock.py's local mock instead for
+// development, so nothing built locally submits to production by accident.
 fn intake_base_url() -> String {
     std::env::var("MIMIR_INTAKE_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "http://127.0.0.1:8787".to_string())
+        .unwrap_or_else(|| "https://mimir-ingest.mimir-ingest-a4f9c1.workers.dev".to_string())
 }
 
 // Beyond this many failed attempts, auto-retry-on-launch stops trying and the
@@ -335,7 +338,6 @@ mod tests {
         child: Child,
         pub url: String,
         pub storage_dir: PathBuf,
-        pub app_token: String,
     }
 
     impl Drop for MockServer {
@@ -377,7 +379,7 @@ mod tests {
         let url = format!("http://127.0.0.1:{port}");
         wait_until_listening(port);
 
-        MockServer { child, url, storage_dir, app_token: app_token.to_string() }
+        MockServer { child, url, storage_dir }
     }
 
     fn wait_until_listening(port: u16) {
@@ -568,3 +570,13 @@ mod tests {
         assert!(stored, "the mock server's storage should contain a feedback/<year> folder after a successful send");
     }
 }
+
+// One-shot verification against the real production Worker was run by hand
+// here (2026-07-31) and then removed, on purpose: a permanent #[ignore]d
+// test that hits real infrastructure risks someone running
+// `cargo test -- --ignored` and silently writing a junk object into the
+// production bucket. It confirmed the actual attempt_upload code path,
+// unmodified, correctly sends to https://mimir-ingest.mimir-ingest-a4f9c1.workers.dev
+// and receives "sent" back -- stronger evidence than the curl checks
+// already run, which only proved the Worker's contract in isolation, not
+// that this Rust code speaks it correctly.
