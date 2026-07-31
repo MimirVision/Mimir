@@ -16,6 +16,9 @@ use std::{
 use std::os::windows::process::CommandExt;
 use tauri::{Emitter, Manager};
 
+mod outbox;
+use outbox::{OutboxEntry, OutboxSubmitResult, SubmissionKind};
+
 // Prevents Windows from popping a visible console window for every console-subsystem
 // child process this app spawns (the packaged scanner exe, ollama, taskkill). Without
 // this, each scan/AI-check/cancel flashes a terminal window because the child is a
@@ -54,6 +57,19 @@ const CORE_V2_DATASET_EXE_NAME: &str = "mimir-core-v2-dataset.exe";
 const CORE_V2_MODEL_UPDATE_EXE_NAME: &str = "mimir-core-v2-model-update.exe";
 const MODEL_OVERRIDE_DIR_ENV: &str = "MIMIR_MODEL_OVERRIDE_DIR";
 const AGE_EXE_NAME: &str = "age.exe";
+// Public age X25519 recipient -- shared by both contribution and feedback
+// packaging, since the developer is the sole decryption-key holder for both
+// and there is no security reason to split them. Only the public half ever
+// lives here; the matching private key is never checked into this repo.
+//
+// TODO(release blocker): this value is a placeholder. Nobody currently holds
+// the private key that matches it -- confirmed before this feature was
+// built, with zero contributions on record, so nothing is lost by replacing
+// it. Generate a real keypair with `age-keygen.exe` (run by the developer,
+// never through an assistant, so the private key never appears in a chat
+// transcript or a repo), store the private half outside both git repos, and
+// replace this constant with the printed public recipient before shipping
+// any build that real testers install.
 const TRAINING_AGE_RECIPIENT: &str = "age1ahsfxe3vh8u86cvrknya8pjg8nhydlw0jxw72h68s886qsp8lu2sxq942n";
 const DEFAULT_VISION_MODEL: &str = "qwen2.5vl:7b";
 const OLLAMA_DOWNLOAD_URL: &str = "https://ollama.com/download";
@@ -120,9 +136,38 @@ struct IncidentFeedbackResult {
 }
 
 #[derive(Serialize)]
+struct FeedbackPackageResult {
+    ok: bool,
+    package_id: String,
+    backend_runner: String,
+    backend_command: String,
+    message: String,
+}
+
+// The dataset/feedback packaging scripts generate their package_id
+// internally (it's embedded in the encrypted archive's own package.json),
+// so Rust cannot know it in advance -- it has to be read back out of the
+// script's stdout. Both `export-encrypted` and `export-feedback` print one
+// line in this exact shape for that purpose.
+#[derive(Deserialize)]
+struct PackageJsonLine {
+    package_id: String,
+}
+
+fn parse_package_json_line(stdout: &str) -> Result<PackageJsonLine, ScanFailure> {
+    let line = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("MIMIR_PACKAGE_JSON: "))
+        .ok_or_else(|| ScanFailure::new("The packaging tool did not report a package id."))?;
+    serde_json::from_str(line)
+        .map_err(|error| ScanFailure::new(format!("Could not read the packaging tool's output: {error}")))
+}
+
+#[derive(Serialize)]
 struct TrainingContributionResult {
     ok: bool,
     output_path: String,
+    package_id: String,
     backend_runner: String,
     backend_command: String,
     message: String,
@@ -146,8 +191,8 @@ struct ModelStatusResult {
     target_dir: String,
 }
 
-#[derive(Serialize)]
-struct ScanFailure {
+#[derive(Serialize, Debug)]
+pub(crate) struct ScanFailure {
     message: String,
     stdout: String,
     stderr: String,
@@ -277,7 +322,7 @@ impl BackendRuntime {
 }
 
 impl ScanFailure {
-    fn new(message: impl Into<String>) -> Self {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             stdout: String::new(),
@@ -1106,7 +1151,7 @@ fn default_mimir_library_root() -> Result<PathBuf, ScanFailure> {
     Ok(home.join("Videos").join("Mimir Library"))
 }
 
-fn default_documents_root() -> Result<PathBuf, ScanFailure> {
+pub(crate) fn default_documents_root() -> Result<PathBuf, ScanFailure> {
     let home = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from)
@@ -1181,7 +1226,7 @@ fn single_log_line(value: &str) -> String {
         .collect()
 }
 
-fn safe_filename(value: &str) -> String {
+pub(crate) fn safe_filename(value: &str) -> String {
     let mut output = String::new();
 
     for character in value.chars() {
@@ -1589,7 +1634,7 @@ fn incident_matches(incident: &Value, incident_id: &str, _index: usize) -> bool 
     false
 }
 
-fn write_json_atomically(path: &Path, value: &Value) -> Result<(), ScanFailure> {
+pub(crate) fn write_json_atomically(path: &Path, value: &Value) -> Result<(), ScanFailure> {
     let parent = path
         .parent()
         .ok_or_else(|| ScanFailure::new("JSON path has no parent folder."))?;
@@ -2273,7 +2318,7 @@ fn save_incident_note_sync(
     })
 }
 
-fn chrono_like_now() -> String {
+pub(crate) fn chrono_like_now() -> String {
     match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
         Ok(duration) => format!("unix:{}", duration.as_secs()),
         Err(_) => "unix:0".to_string(),
@@ -2675,9 +2720,11 @@ fn export_training_contribution_sync(
             stderr,
         ));
     }
+    let package_id = parse_package_json_line(&stdout)?.package_id;
     Ok(TrainingContributionResult {
         ok: true,
         output_path: output.to_string_lossy().to_string(),
+        package_id,
         backend_runner: runtime.runner_label().to_string(),
         backend_command: preview,
         message: "Encrypted package created. Nothing was uploaded; transfer it manually when ready.".to_string(),
@@ -2709,6 +2756,219 @@ async fn export_training_contribution(
     })
     .await
     .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
+// Builds the encrypted package via the existing exporter (reusing all of its
+// consent/argument validation unchanged) into a scratch location, then moves
+// it into the Outbox once the real package id is known. The package id can
+// only be learned after Python runs -- it is generated inside the packaging
+// script and embedded in the archive's own package.json -- so a temp
+// staging step is unavoidable; the move into place happens immediately
+// after, before control returns to anything that could lose the file.
+fn submit_training_contribution_sync(
+    app: tauri::AppHandle,
+    session_path: Option<String>,
+    incident_id: String,
+    recorded_by: String,
+    rights_basis: String,
+    permission_reference: String,
+    independent_permission_record: Option<String>,
+) -> Result<(TrainingContributionResult, PathBuf), ScanFailure> {
+    let staging_dir = std::env::temp_dir().join(format!("mimir-contribution-outbox-{}", next_temp_suffix()));
+    fs::create_dir_all(&staging_dir)
+        .map_err(|error| ScanFailure::new(format!("Could not prepare a staging folder: {error}")))?;
+    let staged_output = staging_dir.join("package.mimir-dataset.age");
+
+    let result = export_training_contribution_sync(
+        app,
+        session_path,
+        incident_id,
+        staged_output.to_string_lossy().to_string(),
+        recorded_by,
+        rights_basis,
+        permission_reference,
+        independent_permission_record,
+    )?;
+
+    let entry_dir = outbox::reserve_entry_dir(SubmissionKind::Contribution, &result.package_id)?;
+    let final_path = outbox::outbox_package_path(&entry_dir, SubmissionKind::Contribution);
+    if fs::rename(&staged_output, &final_path).is_err() {
+        fs::copy(&staged_output, &final_path).map_err(|error| {
+            ScanFailure::new(format!("Could not move the encrypted package into the Outbox: {error}"))
+        })?;
+        let _ = fs::remove_file(&staged_output);
+    }
+    let _ = fs::remove_dir_all(&staging_dir);
+    outbox::stage_pending_entry(&entry_dir, SubmissionKind::Contribution, &result.package_id)?;
+
+    Ok((result, entry_dir))
+}
+
+/// One in-app action, encrypt and submit -- this is what the UI calls. Local
+/// retention is not optional: the encrypted file lives in the Outbox
+/// regardless of whether `attempt_send` succeeds, so nothing is lost to a
+/// failed upload, and a caller can pass `attempt_send: false` for a
+/// "save without sending yet" action without any separate code path.
+#[tauri::command]
+async fn submit_training_contribution(
+    app: tauri::AppHandle,
+    session_path: Option<String>,
+    incident_id: String,
+    recorded_by: String,
+    rights_basis: String,
+    permission_reference: String,
+    independent_permission_record: Option<String>,
+    attempt_send: bool,
+) -> Result<OutboxSubmitResult, ScanFailure> {
+    let (result, entry_dir) = tauri::async_runtime::spawn_blocking(move || {
+        submit_training_contribution_sync(
+            app,
+            session_path,
+            incident_id,
+            recorded_by,
+            rights_basis,
+            permission_reference,
+            independent_permission_record,
+        )
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))??;
+
+    if !attempt_send {
+        return Ok(OutboxSubmitResult {
+            package_id: result.package_id,
+            status: "pending".to_string(),
+            message: "Saved locally. Not sent yet -- use Retry sending when you're ready.".to_string(),
+        });
+    }
+    outbox::attempt_upload(&entry_dir).await
+}
+
+/// Mirrors `submit_training_contribution_sync`'s shape for feedback: package,
+/// stage into the Outbox by real package id, and stop -- sending is a
+/// separate step decided by the async wrapper below.
+fn package_feedback_sync(
+    app: tauri::AppHandle,
+    feedback_json_path: String,
+    video_path: Option<String>,
+) -> Result<(FeedbackPackageResult, PathBuf), ScanFailure> {
+    let feedback_path = PathBuf::from(&feedback_json_path);
+    if !feedback_path.is_file() {
+        return Err(ScanFailure::new("The local feedback file could not be found."));
+    }
+    let video = video_path
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| validated_media_path(&value, VIDEO_EXTENSIONS, "video"))
+        .transpose()?;
+
+    let staging_dir = std::env::temp_dir().join(format!("mimir-feedback-outbox-{}", next_temp_suffix()));
+    fs::create_dir_all(&staging_dir)
+        .map_err(|error| ScanFailure::new(format!("Could not prepare a staging folder: {error}")))?;
+    let staged_output = staging_dir.join("package.mimir-feedback.age");
+
+    let runtime = resolve_core_v2_dataset_runtime(&app)?;
+    let mut command = backend_command(&runtime);
+    if runtime.is_python_fallback() {
+        command.arg(DEV_CORE_V2_DATASET_SCRIPT);
+    }
+    command
+        .arg("export-feedback")
+        .arg("--feedback-json")
+        .arg(&feedback_path)
+        .arg("--output")
+        .arg(&staged_output)
+        .arg("--recipient")
+        .arg(TRAINING_AGE_RECIPIENT);
+    if let Some(video) = &video {
+        command.arg("--video").arg(video);
+    }
+    if let Some(age_executable) = age_executable_for_runtime(&app, &runtime) {
+        command.env("MIMIR_AGE_EXE", age_executable);
+    }
+    let preview = command_preview(&command);
+    let result = command
+        .output()
+        .map_err(|error| ScanFailure::new(format!("Could not start the feedback packager: {error}")))?;
+    let stdout = String::from_utf8_lossy(&result.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+    if !result.status.success() || !staged_output.is_file() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err(ScanFailure::with_output(
+            "The encrypted feedback package could not be created.",
+            stdout,
+            stderr,
+        ));
+    }
+    let package_id = parse_package_json_line(&stdout)?.package_id;
+
+    let entry_dir = outbox::reserve_entry_dir(SubmissionKind::Feedback, &package_id)?;
+    let final_path = outbox::outbox_package_path(&entry_dir, SubmissionKind::Feedback);
+    if fs::rename(&staged_output, &final_path).is_err() {
+        fs::copy(&staged_output, &final_path).map_err(|error| {
+            ScanFailure::new(format!("Could not move the encrypted package into the Outbox: {error}"))
+        })?;
+        let _ = fs::remove_file(&staged_output);
+    }
+    let _ = fs::remove_dir_all(&staging_dir);
+    outbox::stage_pending_entry(&entry_dir, SubmissionKind::Feedback, &package_id)?;
+
+    Ok((
+        FeedbackPackageResult {
+            ok: true,
+            package_id,
+            backend_runner: runtime.runner_label().to_string(),
+            backend_command: preview,
+            message: "Encrypted feedback package created.".to_string(),
+        },
+        entry_dir,
+    ))
+}
+
+/// The command the feedback panel calls after `save_incident_feedback`
+/// (the plaintext local copy) succeeds -- encrypts what was just saved and,
+/// unless `attempt_send` is false, submits it immediately.
+#[tauri::command]
+async fn submit_incident_feedback(
+    app: tauri::AppHandle,
+    feedback_json_path: String,
+    video_path: Option<String>,
+    attempt_send: bool,
+) -> Result<OutboxSubmitResult, ScanFailure> {
+    let (result, entry_dir) =
+        tauri::async_runtime::spawn_blocking(move || package_feedback_sync(app, feedback_json_path, video_path))
+            .await
+            .map_err(|error| ScanFailure::new(error.to_string()))??;
+
+    if !attempt_send {
+        return Ok(OutboxSubmitResult {
+            package_id: result.package_id,
+            status: "pending".to_string(),
+            message: "Saved locally. Not sent yet -- use Retry sending when you're ready.".to_string(),
+        });
+    }
+    outbox::attempt_upload(&entry_dir).await
+}
+
+#[tauri::command]
+async fn retry_outbox_entry(package_id: String) -> Result<OutboxSubmitResult, ScanFailure> {
+    outbox::retry_one(&package_id).await
+}
+
+/// Called once on app launch: sweeps every still-pending Outbox entry within
+/// the auto-retry attempt cap. Entries that have already failed enough times
+/// are left for `retry_outbox_entry` (a manual "Retry sending" action)
+/// instead, so a permanently broken connection cannot retry-storm on every
+/// launch.
+#[tauri::command]
+async fn retry_pending_outbox() -> Result<Vec<OutboxSubmitResult>, ScanFailure> {
+    outbox::retry_pending().await
+}
+
+#[tauri::command]
+async fn list_outbox_entries() -> Result<Vec<OutboxEntry>, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(outbox::list_entries)
+        .await
+        .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
 fn run_model_update_command(
@@ -3349,6 +3609,11 @@ fn main() {
             load_latest_session_json,
             list_session_history,
             export_training_contribution,
+            submit_training_contribution,
+            submit_incident_feedback,
+            retry_outbox_entry,
+            retry_pending_outbox,
+            list_outbox_entries,
             export_incident_report,
             install_model_update,
             active_model_status,
