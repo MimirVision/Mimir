@@ -124,6 +124,25 @@ def _vehicle_count(evidence: dict) -> int:
     return 1 if evidence.get("vehicle_detected") else 0
 
 
+# camera_evidence and object_tracks are dense per-frame diagnostic dumps
+# (motion signals, detection boxes) used only while resolve_severity() and
+# refine_key_moment() compute this incident, both already complete by the
+# time this function runs -- nothing reads them afterward. Not the frontend
+# (grep confirms zero references), not the deferred AI enrichment pass
+# (ai_reviewer.py's AI_LOCAL_EVIDENCE_KEYS allowlist doesn't include them),
+# not Rust. Each field alone runs ~1MB per incident; persisting them anyway
+# was the direct cause of a real 679-clip session.json reaching 777MB, which
+# meant several GB of RAM and minutes to parse+render on every launch --
+# indistinguishable, to a user, from Mimir simply not working.
+_PERSISTED_EVIDENCE_EXCLUDED_KEYS = frozenset({"camera_evidence", "object_tracks"})
+
+
+def _evidence_for_storage(evidence: dict) -> dict:
+    if not isinstance(evidence, dict):
+        return {}
+    return {key: value for key, value in evidence.items() if key not in _PERSISTED_EVIDENCE_EXCLUDED_KEYS}
+
+
 def incident_from_group(index: int, event_group: dict, evidence: dict, severity: dict, ai_review: dict) -> dict:
     primary_camera = severity.get("primary_camera") or "unknown"
     primary_clip = None
@@ -173,8 +192,7 @@ def incident_from_group(index: int, event_group: dict, evidence: dict, severity:
         "primary_key_moment_sec": evidence.get("primary_key_moment_sec", 0.0),
         "primary_key_moment_label": evidence.get("primary_key_moment_label", ""),
         "key_moment_version": evidence.get("key_moment_version", ""),
-        "local_evidence": evidence,
-        "local_evidence_summary": evidence,
+        "local_evidence": _evidence_for_storage(evidence),
         "ai_evidence": ai_evidence,
         "ai_raw_response": ai_review.get("ai_raw_response", ""),
         "ai_parse_error": bool(ai_review.get("ai_parse_error")),
