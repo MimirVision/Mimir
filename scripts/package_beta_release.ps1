@@ -2,7 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $Package = Get-Content (Join-Path $Root "package.json") -Raw | ConvertFrom-Json
-$ReleaseName = "Mimir-Free-Private-Beta-v$($Package.version)"
+$PackageVersion = [string]$Package.version
+$ReleaseName = "Mimir-Free-Public-Beta-v$($Package.version)"
 $ReleaseRoot = Join-Path $Root "dist-release"
 $ReleaseDir = Join-Path $ReleaseRoot $ReleaseName
 $BundleDir = Join-Path $Root "src-tauri\target\release\bundle"
@@ -15,6 +16,7 @@ function Write-Step($Message) {
 
 function Find-Installer {
   $Nsis = Get-ChildItem -Path (Join-Path $BundleDir "nsis") -Filter "*.exe" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*$PackageVersion*" } |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 
@@ -23,6 +25,7 @@ function Find-Installer {
   }
 
   $Msi = Get-ChildItem -Path (Join-Path $BundleDir "msi") -Filter "*.msi" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*$PackageVersion*" } |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 
@@ -30,7 +33,7 @@ function Find-Installer {
     return $Msi
   }
 
-  throw "No Windows installer was found under $BundleDir"
+  throw "No Windows installer for version $PackageVersion was found under $BundleDir"
 }
 
 Write-Step "Building frontend"
@@ -102,7 +105,7 @@ $InstallerName = if ($Installer.Extension -ieq ".exe") { "MimirSetup.exe" } else
 Copy-Item -Force $Installer.FullName (Join-Path $ReleaseDir $InstallerName)
 
 Copy-Item -Force (Join-Path $AssetsDir "README_START_HERE.html") (Join-Path $ReleaseDir "README_START_HERE.html")
-Copy-Item -Force (Join-Path $AssetsDir "PRIVATE_BETA_TESTING.md") (Join-Path $ReleaseDir "PRIVATE_BETA_TESTING.md")
+Copy-Item -Force (Join-Path $AssetsDir "PUBLIC_BETA_TESTING.md") (Join-Path $ReleaseDir "PUBLIC_BETA_TESTING.md")
 Copy-Item -Force (Join-Path $AssetsDir "sbom.cdx.json") (Join-Path $ReleaseDir "sbom.cdx.json")
 Copy-Item -Recurse -Force (Join-Path $Root "docs") (Join-Path $ReleaseDir "docs")
 
@@ -121,7 +124,7 @@ foreach ($Candidate in $ScreenshotCandidates) {
 }
 
 Write-Host ""
-Write-Host "Private beta release package created:" -ForegroundColor Green
+Write-Host "Public beta release package created:" -ForegroundColor Green
 Write-Host $ReleaseDir
 Write-Host ""
 Write-Host "Contents:"

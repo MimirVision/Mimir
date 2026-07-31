@@ -42,8 +42,7 @@ clips), it scans locally, and you review what it found.
 - It can miss real events and can flag ordinary activity as noteworthy. You are
   still the one deciding what actually happened — see
   [LIMITATIONS.md](LIMITATIONS.md) for the specifics.
-- The installer is an early-beta build; Windows may show an unfamiliar-publisher
-  warning before it lets you run it.
+- The public beta installer is signed. Do not install internal or unsigned builds.
 - There's no cloud, no account, and no background upload of your footage. If you
   choose to contribute a clip toward improving the detector, that's a separate,
   explicit, opt-in action — see [DATA_CONTRIBUTION.md](DATA_CONTRIBUTION.md) and
@@ -54,10 +53,9 @@ clips), it scans locally, and you review what it found.
 
 The installer is a free public download -- no invite, no account, no signup.
 Grab it from the download page, which also carries the tester guide
-([PRIVATE_BETA_TESTING.md](../release_assets/PRIVATE_BETA_TESTING.md)) covering install steps
+([PUBLIC_BETA_TESTING.md](../release_assets/PUBLIC_BETA_TESTING.md)) covering install steps
 and where to send feedback.
 
-Note that the strict release gate
-(`mimir_core_v2_release_check.py`) is deliberately still red: the accuracy
-evidence it demands does not exist yet. That is disclosed rather than hidden --
-see [MODEL_CARD.md](MODEL_CARD.md) and [LIMITATIONS.md](LIMITATIONS.md).
+Note that the strict release gate (`mimir_core_v2_release_check.py`) must pass
+before the public beta installer is published. If it is red, the build stays
+internal until the missing evidence is complete.
