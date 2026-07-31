@@ -235,6 +235,7 @@ def sync_command(args: argparse.Namespace) -> int:
     new_contributions, new_feedback = download_phase(args)
 
     contribution_exit_code: int | None = None
+    contribution_results: list[dict[str, Any]] = []
     if new_contributions:
         pipeline_args = argparse.Namespace(
             inbox=args.inbox,
@@ -249,6 +250,20 @@ def sync_command(args: argparse.Namespace) -> int:
         )
         print(f"\nIntaking {len(new_contributions)} contribution package(s)...")
         contribution_exit_code = pipeline.process_command(pipeline_args)
+        # process_command already wrote per-package outcomes to
+        # pipeline_log.json (mimir_core_v2_pipeline.py's own `log["processed"]`
+        # list) -- read the tail back rather than duplicating that bookkeeping,
+        # so Forge can show *why* a contribution failed instead of just a
+        # pass/fail count. Safe to take the last N entries: process_command
+        # appends exactly one entry per package it just processed, in order.
+        log = pipeline.load_log(Path(args.dataset_root))
+        for entry in log["processed"][-len(new_contributions):]:
+            if not isinstance(entry, dict):
+                continue
+            item = {"file": entry.get("package", ""), "status": entry.get("status", "")}
+            if entry.get("status") == "failed":
+                item["error"] = entry.get("error", "")
+            contribution_results.append(item)
     elif not new_feedback:
         # Nothing new at all -- still show progress, matching
         # process_command's own behavior when its inbox is empty.
@@ -271,6 +286,7 @@ def sync_command(args: argparse.Namespace) -> int:
         "new_contribution_count": len(new_contributions),
         "new_feedback_count": len(new_feedback),
         "contribution_intake_exit_code": contribution_exit_code,
+        "contribution_results": contribution_results,
         "feedback_results": feedback_results,
         "gate_progress": pipeline.gate_progress(Path(args.dataset_root)),
     }
