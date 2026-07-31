@@ -60,8 +60,15 @@ export interface IncidentFeedbackResult {
 export interface TrainingContributionResult {
   ok: boolean
   output_path: string
+  package_id: string
   backend_runner: string
   backend_command: string
+  message: string
+}
+
+export interface OutboxSubmitResult {
+  package_id: string
+  status: 'sent' | 'pending'
   message: string
 }
 

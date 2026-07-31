@@ -69,15 +69,3 @@ export function rightsBasisLabel(basis: RightsBasis): string {
 
   return 'Public license'
 }
-
-// Filename a contribution package gets when the user isn't picking a path by
-// hand. The incident id is always included: the backend refuses to overwrite an
-// existing destination, so deriving the name from source_stem alone made every
-// incident after the first from the same clip fail during a batch contribute.
-export function contributionFileName(incidentId: string, sourceStem?: string): string {
-  const clean = (value: string) => value.trim().replace(/[<>:"/\\|?*]+/g, '_')
-  const id = clean(incidentId) || 'incident'
-  const stem = clean(sourceStem || '')
-  const base = stem ? `${stem}-${id}` : id
-  return `${base}.mimir-dataset.age`
-}
