@@ -1539,6 +1539,28 @@ function AiFeedbackPanel({
         Encrypted on this device before sending. Only Mimir's developer can decrypt it. Nothing is sent until you press Send.
       </p>
 
+      {(selectedFeedback === 'Weird AI flag' || selectedFeedback === 'Missed obvious event') && (
+        <div className="mt-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 text-[11px] leading-5 text-[var(--mimir-text-muted)]">
+          Feedback alone flags the problem, but doesn't teach Mimir -- footage only becomes training data
+          through a separate rights confirmation, since feedback and training data have different consent
+          requirements.{' '}
+          <button
+            type="button"
+            onClick={() => {
+              const panel = document.getElementById('mimir-contribute-panel')
+              if (panel instanceof HTMLDetailsElement) {
+                panel.open = true
+                panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+            }}
+            className="font-semibold text-[var(--mimir-text)] underline decoration-white/30 underline-offset-2 hover:decoration-white/60"
+          >
+            Contribute this incident too
+          </button>{' '}
+          to put it toward the next model update.
+        </div>
+      )}
+
       <button
         type="button"
         onClick={onSubmit}
@@ -1955,7 +1977,7 @@ function ReviewActionsPanel({
         />
       </details>
 
-      <details className="mt-3 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
+      <details id="mimir-contribute-panel" className="mt-3 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
         <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
           Export for Mimir training
         </summary>
