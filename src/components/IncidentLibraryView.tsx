@@ -8,7 +8,7 @@ import { ErrorNotice } from './ErrorNotice'
 import { describeError, describeFailures, type DescribedError } from '../lib/errorMessages'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
-import { contributionFileName, readContributorIdentity, rightsBasisLabel } from '../lib/contributionIdentity'
+import { readContributorIdentity, rightsBasisLabel } from '../lib/contributionIdentity'
 import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import {
   incidentOverrideKey,
@@ -839,7 +839,7 @@ export function IncidentLibraryView({
     const confirmed = window.confirm(
       `Contribute ${actionable.length} ${pluralize(actionable.length, 'incident')} for model training?\n\n` +
         `Rights basis: ${rightsBasisLabel(identity.rightsBasis)} (${identity.recordedBy})\n\n` +
-        'Each one is encrypted into your local Contributions folder. Nothing uploads automatically.',
+        "Each one is encrypted on this device, then sent. Nothing is sent until you confirm here.",
     )
     if (!confirmed) {
       return
@@ -849,44 +849,34 @@ export function IncidentLibraryView({
     setBulkMessage('')
     setStorageOpenError(null)
 
-    let folder = ''
-    try {
-      folder = await invoke<string>('default_contribution_folder')
-    } catch (error) {
-      setStorageOpenError(describeError(error, 'The Contributions folder could not be located.'))
-      setBulkBusy(false)
-      return
-    }
-
-    const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\'
     const failures: { label: string; error: unknown }[] = []
-    let exported = 0
+    let sent = 0
 
     for (const incident of actionable) {
       const incidentId = incidentActionId(incident)
       try {
-        await invoke('export_training_contribution', {
+        await invoke('submit_training_contribution', {
           sessionPath: session?.session_archive_path || session?.output_path || null,
           incidentId,
-          outputPath: `${folder}${separator}${contributionFileName(incidentId, String(incident.source_stem || ''))}`,
           recordedBy: identity.recordedBy,
           rightsBasis: identity.rightsBasis,
           permissionReference: identity.permissionReference,
           independentPermissionRecord: null,
+          attemptSend: true,
         })
-        exported += 1
+        sent += 1
       } catch (error) {
         failures.push({ label: incidentId, error })
       }
     }
 
     if (failures.length > 0) {
-      setBulkMessage(`${exported} contributed, ${failures.length} failed.`)
+      setBulkMessage(`${sent} contributed, ${failures.length} failed.`)
       setStorageOpenError(
         describeFailures(failures, 'Some incidents could not be contributed:', 'The contribution package could not be written.'),
       )
     } else {
-      setBulkMessage(`${exported} ${pluralize(exported, 'incident')} contributed to ${folder}.`)
+      setBulkMessage(`${sent} ${pluralize(sent, 'incident')} contributed.`)
       setSelectedIds(new Set())
     }
 

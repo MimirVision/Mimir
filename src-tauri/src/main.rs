@@ -2731,33 +2731,6 @@ fn export_training_contribution_sync(
     })
 }
 
-#[tauri::command]
-async fn export_training_contribution(
-    app: tauri::AppHandle,
-    session_path: Option<String>,
-    incident_id: String,
-    output_path: String,
-    recorded_by: String,
-    rights_basis: String,
-    permission_reference: String,
-    independent_permission_record: Option<String>,
-) -> Result<TrainingContributionResult, ScanFailure> {
-    tauri::async_runtime::spawn_blocking(move || {
-        export_training_contribution_sync(
-            app,
-            session_path,
-            incident_id,
-            output_path,
-            recorded_by,
-            rights_basis,
-            permission_reference,
-            independent_permission_record,
-        )
-    })
-    .await
-    .map_err(|error| ScanFailure::new(error.to_string()))?
-}
-
 // Builds the encrypted package via the existing exporter (reusing all of its
 // consent/argument validation unchanged) into a scratch location, then moves
 // it into the Outbox once the real package id is known. The package id can
@@ -3293,20 +3266,6 @@ async fn open_containing_folder(path: String) -> Result<(), ScanFailure> {
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
-// Destination for one-click / batch contributions, so the user isn't forced
-// through a save dialog for every incident. Consent is still explicit in the
-// UI; this only removes the "where do I put it" step.
-#[tauri::command]
-async fn default_contribution_folder() -> Result<String, ScanFailure> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let folder = default_mimir_library_root()?.join("Contributions");
-        fs::create_dir_all(&folder).map_err(|error| ScanFailure::new(error.to_string()))?;
-        Ok(folder.to_string_lossy().to_string())
-    })
-    .await
-    .map_err(|error| ScanFailure::new(error.to_string()))?
-}
-
 #[tauri::command]
 async fn open_mimir_storage_folder(kind: String) -> Result<(), ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -3608,7 +3567,6 @@ fn main() {
             open_local_ai_download_page,
             load_latest_session_json,
             list_session_history,
-            export_training_contribution,
             submit_training_contribution,
             submit_incident_feedback,
             retry_outbox_entry,
@@ -3619,7 +3577,6 @@ fn main() {
             active_model_status,
             open_containing_folder,
             open_mimir_storage_folder,
-            default_contribution_folder,
             log_incident_diagnostic
         ])
         .run(tauri::generate_context!())

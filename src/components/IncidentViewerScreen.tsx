@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type SyntheticEvent } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { CrashSafeBoundary, logIncidentDiagnostic } from './CrashSafeBoundary'
-import { FEEDBACK_EMAIL } from '../config'
 import {
-  contributionFileName,
   readContributorIdentity,
   rightsBasisLabel,
   saveContributorIdentity,
@@ -29,8 +27,8 @@ import {
   type AiFeedbackChoice,
   type IncidentAction,
   type IncidentFeedbackResult,
+  type OutboxSubmitResult,
   type StorageActionResult,
-  type TrainingContributionResult,
 } from '../lib/incidentActions'
 import {
   dedupeMarkersByPriority,
@@ -1537,6 +1535,10 @@ function AiFeedbackPanel({
         Include video clip
       </label>
 
+      <p className="mt-3 text-[11px] leading-5 text-[var(--mimir-text-subtle)]">
+        Encrypted on this device before sending. Only Mimir's developer can decrypt it. Nothing is sent until you press Send.
+      </p>
+
       <button
         type="button"
         onClick={onSubmit}
@@ -1601,7 +1603,13 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
     }
   }
 
-  const exportPackage = async (oneClick: boolean) => {
+  // Rust now owns where the encrypted package lives (the Outbox), keyed by a
+  // package id it only learns after the packaging script runs -- so the
+  // frontend no longer picks a destination at all. `attemptSend` controls
+  // only whether the "submit" step is attempted right away; the package is
+  // encrypted and staged either way, so a "save without sending yet" click
+  // costs nothing extra and cannot lose the encrypted file if declined.
+  const exportPackage = async (oneClick: boolean, attemptSend: boolean) => {
     if (!recordedBy.trim() || !permissionReference.trim()) {
       setError('Complete the consent details first.')
       return
@@ -1610,52 +1618,18 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
       setError('Confirm your rights before exporting.')
       return
     }
-    const suggestedName = contributionFileName(incidentActionId(incident), safeText(incident.source_stem, ''))
-    let outputPath = ''
-    if (oneClick) {
-      // Saved-details path: drop it in the standard Contributions folder so the
-      // user isn't picking a location for every single incident.
-      try {
-        const folder = await invoke<string>('default_contribution_folder')
-        const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\'
-        outputPath = `${folder}${separator}${suggestedName}`
-      } catch (value) {
-        setError(friendlyMessage(value, 'The Contributions folder could not be located.'))
-        return
-      }
-    } else {
-      let destination: string | null = null
-      try {
-        destination = await saveDialog({
-          title: 'Export encrypted Mimir training package',
-          defaultPath: suggestedName,
-          filters: [{ name: 'Mimir encrypted dataset', extensions: ['age'] }],
-        })
-      } catch (value) {
-        setError(friendlyMessage(value, 'The save dialog could not be opened.'))
-        return
-      }
-      if (!destination) {
-        return
-      }
-      outputPath = destination.toLowerCase().endsWith('.mimir-dataset.age')
-        ? destination
-        : destination.toLowerCase().endsWith('.age')
-          ? destination.slice(0, -4) + '.mimir-dataset.age'
-          : destination + '.mimir-dataset.age'
-    }
     setBusy(true)
     setError('')
     setMessage('Encrypting selected footage locally...')
     try {
-      const result = await invoke<TrainingContributionResult>('export_training_contribution', {
+      const result = await invoke<OutboxSubmitResult>('submit_training_contribution', {
         sessionPath: session?.session_archive_path || session?.output_path || null,
         incidentId: incidentActionId(incident),
-        outputPath,
         recordedBy: recordedBy.trim(),
         rightsBasis,
         permissionReference: permissionReference.trim(),
         independentPermissionRecord: permissionRecord || null,
+        attemptSend,
       })
       saveContributorIdentity({ recordedBy: recordedBy.trim(), rightsBasis, permissionReference: permissionReference.trim() })
       setUseSavedDetails(true)
@@ -1672,7 +1646,9 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
   return (
     <div className="mt-3 grid gap-3">
       <p className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">
-        Export this incident only after confirming you own the footage or have permission to use it for model development. Nothing uploads automatically.
+        Contribute this incident only after confirming you own the footage or have permission to use it for model
+        development. It's encrypted on this device before sending -- only Mimir's developer can decrypt it -- and
+        nothing is sent until you press Contribute.
       </p>
       <div className="rounded-lg border border-[rgba(157,183,170,0.16)] bg-[var(--mimir-accent-soft)] p-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
         <span className="font-semibold text-[var(--mimir-text)]">Where this goes:</span> contributed clips are
@@ -1693,14 +1669,25 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
               Change
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void exportPackage(true)}
-            disabled={busy}
-            className="h-10 rounded-lg bg-[var(--mimir-text)] px-3 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <span className="inline-flex items-center gap-2">{busy && <SmallSpinner />}Contribute this incident</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void exportPackage(true, true)}
+              disabled={busy}
+              className="h-10 flex-1 rounded-lg bg-[var(--mimir-text)] px-3 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="inline-flex items-center gap-2">{busy && <SmallSpinner />}Contribute this incident</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void exportPackage(true, false)}
+              disabled={busy}
+              title="Encrypt and save locally without sending yet"
+              className="h-10 rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Save without sending
+            </button>
+          </div>
           {message && <div className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">{message}</div>}
           {error && <div className="text-[12px] leading-5 text-red-100/85">{error}</div>}
         </>
@@ -1746,14 +1733,25 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         />
         I confirm these rights apply to this selected incident and its grouped camera angles.
       </label>
-      <button
-        type="button"
-        onClick={() => void exportPackage(false)}
-        disabled={busy || !rightsConfirmed}
-        className="h-10 rounded-lg bg-[var(--mimir-text)] px-3 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <span className="inline-flex items-center gap-2">{busy && <SmallSpinner />}Export encrypted package</span>
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => void exportPackage(false, true)}
+          disabled={busy || !rightsConfirmed}
+          className="h-10 flex-1 rounded-lg bg-[var(--mimir-text)] px-3 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="inline-flex items-center gap-2">{busy && <SmallSpinner />}Contribute this incident</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void exportPackage(false, false)}
+          disabled={busy || !rightsConfirmed}
+          title="Encrypt and save locally without sending yet"
+          className="h-10 rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.05] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Save without sending
+        </button>
+      </div>
       {message && <div className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">{message}</div>}
       {error && <div className="text-[12px] leading-5 text-red-100/85">{error}</div>}
       </>
@@ -2293,54 +2291,26 @@ export function IncidentViewerScreen({
 
     try {
       const videoPath = currentVideoPath(incident)
-      const result = await invoke<IncidentFeedbackResult>('save_incident_feedback', {
+      // Step one: the plaintext local copy. This has always been the safety
+      // net -- it still happens first and unconditionally, so a failure to
+      // reach the network never means the feedback itself was lost.
+      const saved = await invoke<IncidentFeedbackResult>('save_incident_feedback', {
         feedback: incidentFeedbackPayload(incident, feedbackChoice, feedbackNotes, feedbackIncludeVideo, session),
         includeVideo: feedbackIncludeVideo,
         videoPath: feedbackIncludeVideo ? videoPath : null,
       })
 
-      const subject = `Mimir feedback: ${feedbackChoice} - ${eventDisplayTitle(incident)}`
-      const attachmentNote = feedbackIncludeVideo
-        ? 'A copy of the video clip was saved alongside the feedback file - please attach both.'
-        : 'Please attach the feedback file below (no video was included).'
-      const body = [
-        `Feedback: ${feedbackChoice}`,
-        feedbackNotes.trim() ? `Notes: ${feedbackNotes.trim()}` : '',
-        `Incident: ${eventDisplayTitle(incident)} (${incidentActionId(incident)})`,
-        '',
-        attachmentNote,
-        `File location: ${result.feedback_file || result.feedback_folder}`,
-      ].filter(Boolean).join('\n')
+      // Step two: encrypt what was just saved and submit it. Replaces the
+      // former "copy an email body to the clipboard and hope mailto works"
+      // flow -- this is the one in-app action, and it still only happens
+      // because the user pressed the button.
+      const submitted = await invoke<OutboxSubmitResult>('submit_incident_feedback', {
+        feedbackJsonPath: saved.feedback_file,
+        videoPath: feedbackIncludeVideo ? videoPath : null,
+        attemptSend: true,
+      })
 
-      // mailto: only works if the OS has a configured desktop mail client, which
-      // most people don't have anymore (webmail in a browser is the norm). Clipboard
-      // copy is the one step here that works regardless of what email the user
-      // actually uses, so it's the primary path -- mailto is just a bonus if it works.
-      let copiedToClipboard = false
-      try {
-        await navigator.clipboard.writeText(`To: ${FEEDBACK_EMAIL}\nSubject: ${subject}\n\n${body}`)
-        copiedToClipboard = true
-      } catch {
-        // Clipboard access can be denied in some contexts; not fatal.
-      }
-
-      try {
-        await invoke<void>('open_containing_folder', { path: result.feedback_file || result.feedback_folder })
-      } catch {
-        // Non-fatal: the feedback was already saved successfully.
-      }
-
-      try {
-        window.location.href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      } catch {
-        // Non-fatal: no default mail app configured is common and expected.
-      }
-
-      setFeedbackMessage(
-        copiedToClipboard
-          ? `${result.message || 'Feedback saved.'} Copied the email text to your clipboard and opened the file's folder -- paste into an email to ${FEEDBACK_EMAIL} and attach the file.`
-          : `${result.message || 'Feedback saved.'} Opened the file's folder -- email it to ${FEEDBACK_EMAIL}.`,
-      )
+      setFeedbackMessage(submitted.message)
       setFeedbackNotes('')
       setFeedbackIncludeVideo(false)
     } catch (error) {
