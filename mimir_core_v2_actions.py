@@ -312,6 +312,78 @@ def safe_move_file(source: Path, destination: Path, dry_run: bool) -> dict[str, 
         return record
 
 
+# TeslaCam gives each Sentry/Saved event its own uniquely-timestamped folder
+# holding only that event's camera clips -- safe to remove entirely once its
+# clips are in Trash. RecentClips is a flat, continuously-recorded folder
+# shared by many unrelated moments, and any other category is unrecognized
+# structure -- removing the whole folder there could destroy footage that has
+# nothing to do with this incident, so those are deliberately excluded.
+FOLDER_PER_EVENT_CATEGORIES = {"SentryClips", "SavedClips"}
+
+
+def source_folder_removal_eligibility(session: dict[str, Any], incident: dict[str, Any]) -> tuple[Path | None, str]:
+    """Decides whether it's safe to delete an incident's whole source event
+    folder from removable media after its clips are safely in Trash.
+
+    Returns (folder, "") if it's safe to remove, or (None, reason) if not --
+    callers should skip removal (not fail the action) when reason is set.
+    """
+    category = clean_text(incident.get("source_category"))
+    if category not in FOLDER_PER_EVENT_CATEGORIES:
+        return None, f"source category '{category or 'unknown'}' is not a folder-per-event layout"
+
+    folder = as_path(clean_text(incident.get("event_folder")))
+    if folder is None:
+        return None, "incident has no recorded source folder"
+    try:
+        resolved = folder.resolve()
+    except OSError as exc:
+        return None, f"could not resolve source folder: {exc}"
+    if not resolved.is_dir():
+        return None, "source folder no longer exists"
+    if resolved.parent == resolved:
+        return None, "refusing to remove a drive root"
+
+    library_root = LIBRARY_ROOT.resolve()
+    if resolved == library_root or library_root in resolved.parents or resolved in library_root.parents:
+        return None, "refusing to remove a folder inside Mimir's own library"
+
+    this_id = normalize_id(incident.get("id")) or normalize_id(incident.get("event_group_id"))
+    for other in session.get("incidents") or []:
+        if not isinstance(other, dict):
+            continue
+        other_id = normalize_id(other.get("id")) or normalize_id(other.get("event_group_id"))
+        if other_id == this_id:
+            continue
+        other_folder = as_path(clean_text(other.get("event_folder")))
+        if other_folder is not None and path_key(str(other_folder)) == path_key(str(resolved)):
+            return None, "another incident's clips share this source folder"
+
+    return resolved, ""
+
+
+def remove_incident_source_folder(session: dict[str, Any], incident: dict[str, Any], dry_run: bool) -> dict[str, Any]:
+    folder, reason = source_folder_removal_eligibility(session, incident)
+    result = {
+        "incident_id": incident.get("id"),
+        "event_group_id": incident.get("event_group_id"),
+        "folder": str(folder) if folder else clean_text(incident.get("event_folder")),
+        "removed": False,
+        "reason": reason,
+    }
+    if folder is None:
+        return result
+    if dry_run:
+        result["would_remove"] = True
+        return result
+    try:
+        shutil.rmtree(folder)
+        result["removed"] = True
+    except OSError as exc:
+        result["reason"] = f"could not remove folder: {exc}"
+    return result
+
+
 def destination_folder_for_incident(incident: dict[str, Any], action: str) -> Path:
     if action == "restore_from_trash":
         original = as_path(incident.get("original_source_video"))
@@ -485,6 +557,7 @@ def build_report(action: str, dry_run: bool, selected: list[dict[str, Any]]) -> 
         "library_folder": str(LIBRARY_ROOT),
         "trash_folder": str(TRASH_ROOT),
         "failures": [],
+        "source_folders_removed": [],
     }
 
 
@@ -669,6 +742,20 @@ def perform_action(
         for incident_key, results in incident_results.items():
             incident = selected_keys[incident_key]
             update_incident_storage(incident, action, destination_folder_for_incident(incident, action), results, failures)
+
+        # Only once every clip for every selected incident is confirmed safely
+        # in Trash (no failures anywhere in this batch -- perform_action rolls
+        # the whole batch back above if any file failed) does it become safe
+        # to also clear the now-redundant source folder off the USB, so a
+        # trashed incident leaves nothing behind on the card. Clips already
+        # live on in Trash regardless; this only ever removes the source
+        # location, per source_folder_removal_eligibility's guards.
+        if action == "move_to_trash" and not failures:
+            for incident_key, results in incident_results.items():
+                incident = selected_keys[incident_key]
+                if not results or not all(item.get("ok") for item in results):
+                    continue
+                report["source_folders_removed"].append(remove_incident_source_folder(session, incident, dry_run))
 
     report["ok"] = len(report["failures"]) == 0
     report["transaction_state"] = "dry_run" if dry_run else "committed"
