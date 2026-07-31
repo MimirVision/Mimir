@@ -39,5 +39,7 @@ your machine.
   since moved from 384px to 512px input, which raises per-frame cost, and this
   figure has not been re-measured against it. Treat it as an estimate, not a
   benchmark result.
-- **The public beta installer must be signed.** Internal unsigned builds are
-  for dogfood only and must not be distributed.
+- **The beta installer is not code-signed yet.** Windows SmartScreen will show
+  an "unrecognized app" warning on first run -- choose the advanced option to
+  continue. This is expected, not a sign anything is wrong. A certificate is
+  deferred until there is real data on how many people the warning turns away.

@@ -1,6 +1,7 @@
 # Free Beta Release Evidence
 
-Public beta distribution is fail-closed. The release check requires:
+The strict release check is what gates *promotion out of beta* and any accuracy
+claim made about Mimir. It requires:
 
 - trusted Authenticode signatures for every sidecar, application, and installer;
 - signed Tauri updater artifacts plus update, rollback, and session-preservation evidence;
@@ -10,9 +11,17 @@ Public beta distribution is fail-closed. The release check requires:
 - 500 real-fixture reliability runs with source integrity and media availability results;
 - a locked candidate evaluation report that passes every promotion gate.
 
-Missing evidence is a blocker, not a warning. The current unsigned installer remains
-for internal dogfood only. The beta is free; whatever distribution model is used,
-there is no runtime activation, accounts, billing, or expiration switch.
+Missing evidence is a blocker for those claims, not a warning: nothing here may
+be marked satisfied on the strength of an assurance rather than a report.
+
+The free beta itself ships before this gate is green, unsigned, with the gaps
+stated plainly in [MODEL_CARD.md](MODEL_CARD.md) and
+[LIMITATIONS.md](LIMITATIONS.md) rather than hidden. That is a deliberate
+decision: the gate's accuracy evidence depends on consented real-world footage,
+and the beta is how that footage is gathered, so requiring the gate first would
+be circular. What it does *not* license is claiming the numbers already exist.
+The beta is free; whatever distribution model is used, there is no runtime
+activation, accounts, billing, or expiration switch.
 
 External builds require `MIMIR_SIGNING_CERT_THUMBPRINT` and an HTTPS
 `MIMIR_UPDATE_ENDPOINT`. The release script signs every packaged executable,
