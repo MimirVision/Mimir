@@ -124,6 +124,31 @@ def compile_checks() -> None:
         run([sys.executable, "-m", "py_compile", str(target)], f"compile {target.name}")
 
 
+# Modules PyInstaller can reach but that no sidecar uses at runtime.
+#
+# sympy is the expensive one: onnxruntime imports it for symbolic shape
+# inference when optimising a model, which is not something inference against a
+# fixed-shape ONNX graph does. It and mpmath are ~78 MB unpacked. The rest are
+# build- and test-time only and have no business inside a shipped binary.
+#
+# Anything added here must be justified by the sidecars actually still working
+# -- see the smoke check in build_backend_exe's caller. An exclusion that
+# breaks at runtime fails on the user's machine, not here.
+EXCLUDED_MODULES = [
+    "sympy",
+    "mpmath",
+    "PyInstaller",
+    "pip",
+    "setuptools",
+    "pygments",
+    "cyclonedx",
+    "unittest",
+    "pydoc",
+    "doctest",
+    "tkinter",
+]
+
+
 def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
     command = [
         sys.executable,
@@ -142,6 +167,8 @@ def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
         str(SPEC_DIR),
         str(entrypoint),
     ]
+    for module in EXCLUDED_MODULES:
+        command[-1:-1] = ["--exclude-module", module]
     manifest_data: dict[str, object] = {}
     if name in {"mimir-core-v2-scan", "mimir-core-v2-release-check"}:
         manifest = ROOT / "mimir_core_v2" / "model_manifest.json"
