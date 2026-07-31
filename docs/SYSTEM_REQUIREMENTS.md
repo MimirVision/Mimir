@@ -1,8 +1,11 @@
 # System Requirements
 
-Mimir runs entirely on your PC. There is no cloud component today, so
-everything it needs has to be either bundled in the installer or already on
-your machine.
+Scanning and reviewing footage runs entirely on your PC and never needs the
+network. The one exception is optional: if you choose to send feedback or
+contribute an incident, that specific action needs internet access to deliver
+the encrypted package. Nothing is sent unless you explicitly choose to send it
+-- see DATA_CONTRIBUTION.md and PRIVACY.md for exactly what that does and
+doesn't involve.
 
 ## What's required
 
@@ -19,14 +22,18 @@ your machine.
 
 ## What's explicitly NOT required
 
-- **No internet connection to scan.** The detector model ships inside the
-  installer and runs entirely on your machine.
+- **No internet connection to scan or review.** The detector model ships
+  inside the installer and runs entirely on your machine. Two things do use
+  the network, both optional and both requiring your explicit action each
+  time: sending feedback, and contributing an incident. Neither happens
+  automatically or in the background, and both are encrypted on your device
+  before anything is sent -- see DATA_CONTRIBUTION.md.
 
-  Setup is the one exception: Mimir uses the Microsoft Edge WebView2 runtime,
-  and the installer fetches it if Windows does not already have it. Windows 11
-  includes it, and Windows 10 receives it through Edge updates, so in practice
-  this rarely happens -- but an offline machine that lacks WebView2 cannot
-  complete setup. Nothing about your footage is transmitted either way.
+  Setup is the other exception: Mimir uses the Microsoft Edge WebView2
+  runtime, and the installer fetches it if Windows does not already have it.
+  Windows 11 includes it, and Windows 10 receives it through Edge updates, so
+  in practice this rarely happens -- but an offline machine that lacks
+  WebView2 cannot complete setup.
 - **No account, no sign-in, no cloud storage.**
 - **No GPU.** Detection runs on CPU if no compatible GPU is found. A
   DirectX12-capable GPU (most GPUs from the last several years, including
