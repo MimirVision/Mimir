@@ -1,6 +1,6 @@
 # Free Beta Release Evidence
 
-External invitations are fail-closed. The release check requires:
+Public beta distribution is fail-closed. The release check requires:
 
 - trusted Authenticode signatures for every sidecar, application, and installer;
 - signed Tauri updater artifacts plus update, rollback, and session-preservation evidence;
@@ -30,3 +30,14 @@ test:
 The recorder rejects platform mismatches, Python-enabled machines, unsigned
 artifacts, and missing artifact hashes. Repeat for every required stage on both
 Windows versions; a boolean-only report cannot satisfy the gate.
+
+After `npm run test:accessibility` passes, record the manual screen-reader and
+desktop scaling pass with:
+
+```powershell
+.\scripts\record_accessibility_manual_check.ps1 `
+  -Tester "Name" `
+  -ScreenReader "NVDA 2026.1 on Windows 11" `
+  -Scaling "125%, 150%, and 200%" `
+  -Notes "Import, scan setup, incident library, and incident viewer checked."
+```

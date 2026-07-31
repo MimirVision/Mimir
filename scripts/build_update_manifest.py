@@ -15,7 +15,7 @@ def main() -> int:
     parser.add_argument("--bundle", required=True)
     parser.add_argument("--signature", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--notes", default="Mimir free invite-only beta update")
+    parser.add_argument("--notes", default="Mimir free public beta update")
     args = parser.parse_args()
     bundle = Path(args.bundle).resolve()
     signature = Path(args.signature).resolve()

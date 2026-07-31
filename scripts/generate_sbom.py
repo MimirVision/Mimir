@@ -111,6 +111,8 @@ def main() -> int:
     frontend = Path(args.frontend_root).resolve()
     backend = Path(args.backend_root).resolve()
     output = Path(args.output).resolve() if args.output else frontend / "release_assets" / "sbom.cdx.json"
+    package = read_json(frontend / "package.json")
+    application_version = str(package.get("version") or "unknown")
     components = npm_components(frontend / "package-lock.json")
     components += cargo_components(frontend / "src-tauri" / "Cargo.lock")
     requirements = backend / "requirements-core-v2.txt"
@@ -136,7 +138,7 @@ def main() -> int:
         "version": 1,
         "metadata": {
             "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-            "component": {"type": "application", "name": "Mimir", "version": "0.5.0-beta.1"},
+            "component": {"type": "application", "name": "Mimir", "version": application_version},
             "properties": [{"name": "mimir:release_channel", "value": "free-beta"}],
         },
         "components": sorted(unique.values(), key=lambda item: (item["type"], item["name"], item["version"])),

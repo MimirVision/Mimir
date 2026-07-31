@@ -27,10 +27,9 @@ The normal `npm run desktop:build` remains the trusted release path and requires
 the updater private key. An internal build must never be distributed as an
 external beta release.
 
-The strict command must fail until every blocking item is complete. It is red
-today and the free public beta ships anyway, with the gaps disclosed in
-MODEL_CARD.md and LIMITATIONS.md; do not silence or override the gate to make
-that look otherwise. Required evidence includes locked dataset metrics,
+The strict command must fail until every blocking item is complete. A free
+public beta must not be published while this gate is red; do not silence or
+override the gate to make the release look ready. Required evidence includes locked dataset metrics,
 clean repositories, signed artifacts, SBOM/security reports,
 clean Windows 10/11 VM results, accessibility evidence, and update/rollback evidence.
 
@@ -48,7 +47,6 @@ For a short developer smoke run, add `--iterations 5 --allow-missing-required`
 and write to a non-canonical report path. Smoke reports are deliberately unable
 to pass the release gate, even when all executed runs succeed.
 
-Rollout is internal dogfood, then a free public beta. The public beta is the
-mechanism for gathering the consented footage the accuracy gates require, so it
-necessarily precedes them. Promotion beyond beta still requires accuracy,
-crash-free, data-safety, support-volume, and usability review.
+Rollout is internal dogfood, then a free public beta only after the strict gate
+passes. Promotion beyond beta still requires accuracy, crash-free, data-safety,
+support-volume, and usability review.

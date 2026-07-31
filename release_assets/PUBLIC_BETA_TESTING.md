@@ -1,10 +1,10 @@
-# Mimir Beta Testing
+# Mimir Public Beta Testing
 
 ## Install
 
 1. Open `README_START_HERE.html`.
 2. Run `MimirSetup.exe`.
-3. If Windows shows an unrecognized-app warning, choose the advanced option to continue.
+3. Use only the signed public beta installer from the official download page. Do not install internal or unsigned builds.
 4. Open Mimir from the Start menu or desktop shortcut if one was created.
 
 ## How to select a USB drive or footage folder
@@ -72,7 +72,7 @@ Do not share private footage over public channels (forums, social media, chat ro
 ## Known Limitations
 
 - Mimir ships with a stock, general-purpose detector, not yet fine-tuned on real Sentry footage. It can miss real events and can flag ordinary activity as noteworthy.
-- The installer is unsigned for this early beta, so Windows may show a warning.
+- Public beta installers must be signed. Internal unsigned builds are not for distribution.
 - Some media formats may not preview in the viewer even if the scan output is valid.
 - Move to Mimir Trash is recoverable, but there is no in-app restore button yet.
 - Cloud sync and account features are not part of this beta.
