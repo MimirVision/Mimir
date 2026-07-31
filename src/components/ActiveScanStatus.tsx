@@ -22,7 +22,7 @@ export const scanStages = [
   { label: 'Reading event metadata', keys: ['reading_event_metadata', 'event_metadata'] },
   { label: 'Grouping camera angles', keys: ['grouping_camera_angles', 'camera_grouping'] },
   { label: 'Detecting activity', keys: ['detecting_activity', 'scanning_video', 'scanning', 'yolo'] },
-  { label: 'Reviewing suspicious moments', keys: ['reviewing_suspicious_moments', 'ai_review', 'reviewing_event'] },
+  { label: 'Reviewing suspicious moments', keys: ['reviewing_suspicious_moments', 'ai_review', 'reviewing_event', 'ai_enrichment'] },
   { label: 'Building incident timeline', keys: ['building_incident_timeline', 'building_timeline', 'finalizing_event'] },
   { label: 'Writing results', keys: ['writing_output', 'writing_results', 'writing_session'] },
 ]

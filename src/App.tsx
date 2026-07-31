@@ -33,7 +33,19 @@ const experimentalAiModelKey = 'experimental_ai_model'
 const experimentalAiTimeoutSecKey = 'experimental_ai_timeout_sec'
 const defaultVisionModel = 'qwen2.5vl:7b'
 const defaultAiTimeoutSec = 60
-const internalAiReviewBudget = 999
+// Mirrors mimir_core_v2/cli.py's AI_BUDGET_DEFAULTS -- the deferred "enhanced
+// AI second opinion" pass (mimir_core_v2_ai_enrich.py, run after the main
+// scan) takes its own --ai-review-budget flag and does not know the scan
+// mode, so this was previously hardcoded to 999 regardless of Fast/Balanced/
+// Thorough. On a large folder that meant every AI-eligible incident got a
+// real (slow) model call no matter which mode was picked -- the scan mode
+// selector was silently meaningless for this pass. Keep this in sync with
+// cli.py's dict if either changes.
+const AI_REVIEW_BUDGET_BY_MODE: Record<ScanMode, number> = {
+  fast: 20,
+  balanced: 50,
+  quality: 150,
+}
 
 interface LocalScanResult {
   stdout: string
@@ -579,7 +591,7 @@ export default function App() {
         scanMode,
         useEnhancedAi,
         visionModel: useEnhancedAi ? effectiveVisionModel : selectedVisionModel,
-        aiReviewBudget: useEnhancedAi ? internalAiReviewBudget : undefined,
+        aiReviewBudget: useEnhancedAi ? AI_REVIEW_BUDGET_BY_MODE[scanMode] : undefined,
         aiTimeoutSec: useEnhancedAi ? experimentalAiTimeoutSec : undefined,
       })
       const diagnostics = diagnosticsFromScanResult(result)

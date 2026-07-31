@@ -22,6 +22,17 @@ describe('ActiveScanStatus progress mapping', () => {
     })
   })
 
+  it('maps the deferred AI enrichment pass to Reviewing suspicious moments, not back to stage 0', () => {
+    // Real bug: ai_enrichment.py emits stage="ai_enrichment" for the
+    // deferred "enhanced AI second opinion" pass that runs after the main
+    // scan completes. That key wasn't in this stage's list, so
+    // activeStageIndex fell back to 0 ("Reading clips") -- making a later
+    // phase look like the scan had restarted from the beginning.
+    const reviewingIndex = scanStages.findIndex(stage => stage.label === 'Reviewing suspicious moments')
+    expect(activeStageIndex('ai_enrichment')).toBe(reviewingIndex)
+    expect(activeStageIndex('ai_enrichment')).not.toBe(0)
+  })
+
   it('marks all stages complete once local results are ready', () => {
     const completedIndex = activeStageIndex('local_results_ready')
     expect(completedIndex).toBe(scanStages.length)
