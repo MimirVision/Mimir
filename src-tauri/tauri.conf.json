@@ -18,7 +18,8 @@
         "scope": {
           "allow": [
             "$APPDATA/**",
-            "$APPLOCALDATA/**"
+            "$APPLOCALDATA/**",
+            "C:/Mimir_Backend/**"
           ],
           "deny": [
             "**/.git/**",
