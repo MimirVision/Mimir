@@ -1,4 +1,4 @@
-"""Mimir Training Ground: pull in what testers have submitted, and track progress.
+r"""Mimir Training Ground: pull in what testers have submitted, and track progress.
 
 Replaces the developer side of what used to be "wait for an email, save the
 attachment somewhere, remember to run intake, remember to check the gate."
@@ -7,9 +7,19 @@ feedback:
 
     python mimir_training_ground.py sync --dataset-root <dir> --inbox <dir> \
         --feedback-inbox <dir> --identity <key>
-    python mimir_training_ground.py status --dataset-root <dir>
-    python mimir_training_ground.py feedback list --feedback-inbox <dir>
-    python mimir_training_ground.py feedback show <package_id> --feedback-inbox <dir>
+    python mimir_training_ground.py status [--json] --dataset-root <dir>
+    python mimir_training_ground.py feedback list [--json] --feedback-inbox <dir>
+    python mimir_training_ground.py feedback show <package_id> [--json] --feedback-inbox <dir>
+    python mimir_training_ground.py collections list [--json] --dataset-root <dir>
+    python mimir_training_ground.py collections show <package_id> --dataset-root <dir> \
+        [--cvat-url <url> --cvat-token <token>]
+
+`status`/`feedback list`/`feedback show`/`collections list` accept `--json`
+for a machine-readable version of the same data (built for Mimir Forge, the
+GUI companion app -- see C:\Mimir_Forge). `sync` always prints one final
+`MIMIR_SYNC_RESULT_JSON: {...}` line alongside its normal progress output,
+for the same reason. `collections show` is always JSON -- it's a detail
+dump, there's no useful prose form of it.
 
 `sync` has two phases, kept deliberately separate so a failure in one does
 not corrupt the other:
@@ -50,6 +60,8 @@ from typing import Any
 import mimir_core_v2_pipeline as pipeline
 from mimir_core_v2.dataset_package import DatasetPackageError
 from mimir_core_v2.feedback_package import intake_feedback_package
+
+INTAKE_REGISTRY = "intake_registry.json"
 
 SYNC_LOG = "sync_log.json"
 CONTRIBUTION_PREFIX = "contributions/"
@@ -193,29 +205,36 @@ def download_phase(args: argparse.Namespace) -> tuple[list[Path], list[Path]]:
     return new_contributions, new_feedback
 
 
-def intake_feedback_phase(feedback_downloads: Path, feedback_inbox: Path, identity: Path) -> None:
+def intake_feedback_phase(feedback_downloads: Path, feedback_inbox: Path, identity: Path) -> list[dict[str, Any]]:
     """Phase 2, feedback half: decrypt and file each downloaded feedback
     package. Mirrors process_command's per-item try/except shape, but
     against the much smaller feedback intake path -- no CVAT, no splits.
+    Returns per-item results so callers (sync_command's JSON summary) don't
+    have to re-derive what happened from stdout.
     """
     packages = sorted(
         path for path in feedback_downloads.iterdir() if path.is_file() and path.name.endswith(".mimir-feedback.age")
     )
     if not packages:
-        return
+        return []
 
     print(f"\nIntaking {len(packages)} feedback package(s)...")
+    results: list[dict[str, Any]] = []
     for package in packages:
         try:
             result = intake_feedback_package(package, identity, feedback_inbox)
             print(f"  {package.name}: {result['status']} ({result['package_id']})")
+            results.append({"file": package.name, "status": result["status"], "package_id": result["package_id"]})
         except DatasetPackageError as exc:
             print(f"  {package.name}: FAILED -- {exc}", file=sys.stderr)
+            results.append({"file": package.name, "status": "failed", "error": str(exc)})
+    return results
 
 
 def sync_command(args: argparse.Namespace) -> int:
     new_contributions, new_feedback = download_phase(args)
 
+    contribution_exit_code: int | None = None
     if new_contributions:
         pipeline_args = argparse.Namespace(
             inbox=args.inbox,
@@ -229,48 +248,71 @@ def sync_command(args: argparse.Namespace) -> int:
             report="",
         )
         print(f"\nIntaking {len(new_contributions)} contribution package(s)...")
-        pipeline.process_command(pipeline_args)
+        contribution_exit_code = pipeline.process_command(pipeline_args)
     elif not new_feedback:
         # Nothing new at all -- still show progress, matching
         # process_command's own behavior when its inbox is empty.
         pipeline.print_progress(pipeline.gate_progress(Path(args.dataset_root)))
 
+    feedback_results: list[dict[str, Any]] = []
     if new_feedback:
-        intake_feedback_phase(Path(args.feedback_inbox_downloads), Path(args.feedback_inbox), Path(args.identity))
+        feedback_results = intake_feedback_phase(
+            Path(args.feedback_inbox_downloads), Path(args.feedback_inbox), Path(args.identity)
+        )
+
+    # One final structured line, on top of the human-readable progress
+    # already printed above -- mirrors the MIMIR_PACKAGE_JSON: marker added
+    # to mimir_core_v2_dataset.py's export-encrypted/export-feedback this
+    # session, for a caller (Mimir Forge's Rust layer) that needs the
+    # outcome without scraping prose.
+    result = {
+        "schema_version": "mimir_sync_result_v1",
+        "synced_at": utc_now(),
+        "new_contribution_count": len(new_contributions),
+        "new_feedback_count": len(new_feedback),
+        "contribution_intake_exit_code": contribution_exit_code,
+        "feedback_results": feedback_results,
+        "gate_progress": pipeline.gate_progress(Path(args.dataset_root)),
+    }
+    print("MIMIR_SYNC_RESULT_JSON: " + json.dumps(result))
 
     return 0
 
 
 def status_command(args: argparse.Namespace) -> int:
     progress = pipeline.gate_progress(Path(args.dataset_root))
-    pipeline.print_progress(progress)
+    if args.json:
+        print(json.dumps(progress, indent=2))
+    else:
+        pipeline.print_progress(progress)
     return 0
 
 
 def feedback_list_command(args: argparse.Namespace) -> int:
     feedback_inbox = Path(args.feedback_inbox)
-    if not feedback_inbox.is_dir():
-        print("No feedback received yet.")
-        return 0
+    entries: list[dict[str, Any]] = []
+    if feedback_inbox.is_dir():
+        for folder in sorted(feedback_inbox.iterdir()):
+            feedback_file = folder / "feedback.json"
+            if not folder.is_dir() or not feedback_file.is_file():
+                continue
+            entries.append({"package_id": folder.name, "feedback": read_json(feedback_file)})
 
-    entries = []
-    for folder in sorted(feedback_inbox.iterdir()):
-        feedback_file = folder / "feedback.json"
-        if not folder.is_dir() or not feedback_file.is_file():
-            continue
-        feedback = read_json(feedback_file)
-        entries.append((folder.name, feedback))
+    if args.json:
+        print(json.dumps({"items": entries}, indent=2))
+        return 0
 
     if not entries:
         print("No feedback received yet.")
         return 0
 
     print(f"{len(entries)} feedback item(s):\n")
-    for package_id, feedback in entries:
+    for entry in entries:
+        feedback = entry["feedback"]
         choice = feedback.get("user_selected_feedback", "?")
         incident = feedback.get("incident_id", "?")
         timestamp = feedback.get("timestamp", feedback.get("saved_at", "?"))
-        print(f"  {package_id[:12]}...  {timestamp}  [{choice}]  incident {incident}")
+        print(f"  {entry['package_id'][:12]}...  {timestamp}  [{choice}]  incident {incident}")
     print("\nUse `feedback show <package_id>` for the full record.")
     return 0
 
@@ -285,14 +327,126 @@ def feedback_show_command(args: argparse.Namespace) -> int:
         print(f"Ambiguous id prefix {args.package_id!r} matches {len(matches)} entries.", file=sys.stderr)
         return 1
 
-    feedback = read_json(matches[0] / "feedback.json")
-    print(json.dumps(feedback, indent=2))
-
-    video_dir = matches[0] / "video"
+    folder = matches[0]
+    feedback = read_json(folder / "feedback.json")
+    video_path = ""
+    video_dir = folder / "video"
     if video_dir.is_dir():
         videos = sorted(item.name for item in video_dir.iterdir())
         if videos:
-            print(f"\nAttached video: {video_dir / videos[0]}")
+            video_path = str(video_dir / videos[0])
+
+    if args.json:
+        print(json.dumps({"package_id": folder.name, "feedback": feedback, "video_path": video_path}, indent=2))
+        return 0
+
+    print(json.dumps(feedback, indent=2))
+    if video_path:
+        print(f"\nAttached video: {video_path}")
+    return 0
+
+
+def _collection_summary(package_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "package_id": package_id,
+        "imported_at": record.get("imported_at", ""),
+        "split": record.get("split", ""),
+        "cvat_status": record.get("cvat_status", "not_requested"),
+        "cvat_task_count": len(record.get("cvat_tasks") or []),
+        "duplicate_media_rejected": record.get("duplicate_media_rejected", 0),
+    }
+
+
+def collections_list_command(args: argparse.Namespace) -> int:
+    registry = read_json(Path(args.dataset_root) / INTAKE_REGISTRY)
+    packages = registry.get("packages") if isinstance(registry.get("packages"), dict) else {}
+    items = [
+        _collection_summary(package_id, record)
+        for package_id, record in sorted(packages.items())
+        if isinstance(record, dict)
+    ]
+
+    if args.json:
+        print(json.dumps({"items": items}, indent=2))
+        return 0
+
+    if not items:
+        print("No contributions received yet.")
+        return 0
+
+    print(f"{len(items)} collection(s):\n")
+    for item in items:
+        print(
+            f"  {item['package_id'][:12]}...  {item['imported_at']}  split={item['split']}  "
+            f"cvat={item['cvat_status']} ({item['cvat_task_count']} task(s))"
+        )
+    print("\nUse `collections show <package_id>` for detail.")
+    return 0
+
+
+def collections_show_command(args: argparse.Namespace) -> int:
+    dataset_root = Path(args.dataset_root)
+    registry = read_json(dataset_root / INTAKE_REGISTRY)
+    packages = registry.get("packages") if isinstance(registry.get("packages"), dict) else {}
+    matches = [package_id for package_id in packages if package_id.startswith(args.package_id)]
+    if not matches:
+        print(f"No collection found matching id {args.package_id!r}.", file=sys.stderr)
+        return 1
+    if len(matches) > 1:
+        print(f"Ambiguous id prefix {args.package_id!r} matches {len(matches)} entries.", file=sys.stderr)
+        return 1
+
+    package_id = matches[0]
+    record = packages[package_id]
+    collection_dir = dataset_root / "collections" / package_id
+    consent = read_json(collection_dir / "consent.json")
+    manifest = read_json(collection_dir / "manifest.json")
+    items = manifest.get("items")
+    item_count = len(items) if isinstance(items, list) else 0
+
+    # Live CVAT status is the one genuinely new network call here -- every
+    # other field in `result` is already sitting on disk. Only attempted if
+    # a CVAT URL was given; a CVAT outage degrades this one field, not the
+    # whole command, since CvatClient.request() only ever raises CvatError
+    # (it wraps every urllib failure), never a bare network exception.
+    live_tasks: list[dict[str, Any]] = []
+    if args.cvat_url:
+        from mimir_core_v2.cvat_client import CvatClient, CvatError, configured_token
+
+        try:
+            client = CvatClient(args.cvat_url, configured_token(args.cvat_token, args.cvat_token_file))
+        except CvatError as exc:
+            live_tasks = [{"error": str(exc)}]
+        else:
+            for task in record.get("cvat_tasks") or []:
+                task_id = task.get("task_id")
+                if task_id is None:
+                    continue
+                try:
+                    live = client.task(int(task_id))
+                    live_tasks.append(
+                        {
+                            "task_id": task_id,
+                            "name": task.get("name", ""),
+                            "status": live.get("status") or live.get("state") or "",
+                            "size": live.get("size"),
+                        }
+                    )
+                except CvatError as exc:
+                    live_tasks.append({"task_id": task_id, "name": task.get("name", ""), "error": str(exc)})
+
+    result = {
+        "package_id": package_id,
+        "record": record,
+        "consent": {
+            "recorded_by": consent.get("recorded_by", ""),
+            "rights_basis": consent.get("rights_basis", ""),
+            "permission_reference": consent.get("permission_reference", ""),
+        },
+        "item_count": item_count,
+        "live_cvat_tasks": live_tasks,
+    }
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -320,14 +474,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = commands.add_parser("status", help="Report progress toward the pilot gate.")
     status.add_argument("--dataset-root", required=True)
+    status.add_argument("--json", action="store_true")
 
     feedback = commands.add_parser("feedback", help="Browse received feedback.")
     feedback_commands = feedback.add_subparsers(dest="feedback_command", required=True)
     feedback_list = feedback_commands.add_parser("list", help="List received feedback.")
     feedback_list.add_argument("--feedback-inbox", required=True)
+    feedback_list.add_argument("--json", action="store_true")
     feedback_show = feedback_commands.add_parser("show", help="Show one feedback item in full.")
     feedback_show.add_argument("package_id")
     feedback_show.add_argument("--feedback-inbox", required=True)
+    feedback_show.add_argument("--json", action="store_true")
+
+    collections = commands.add_parser("collections", help="Browse received contributions.")
+    collections_commands = collections.add_subparsers(dest="collections_command", required=True)
+    collections_list = collections_commands.add_parser("list", help="List received contribution collections.")
+    collections_list.add_argument("--dataset-root", required=True)
+    collections_list.add_argument("--json", action="store_true")
+    collections_show = collections_commands.add_parser("show", help="Show one collection in full, always as JSON.")
+    collections_show.add_argument("package_id")
+    collections_show.add_argument("--dataset-root", required=True)
+    collections_show.add_argument("--cvat-url", default="", help="If given, also fetch live CVAT task status")
+    collections_show.add_argument("--cvat-token", default="")
+    collections_show.add_argument("--cvat-token-file", default="")
 
     return parser
 
@@ -346,6 +515,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.feedback_command == "list":
                 return feedback_list_command(args)
             return feedback_show_command(args)
+        if args.command == "collections":
+            if args.collections_command == "list":
+                return collections_list_command(args)
+            return collections_show_command(args)
     except (DatasetPackageError, OSError, ValueError) as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
