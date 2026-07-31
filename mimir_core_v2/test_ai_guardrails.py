@@ -178,6 +178,56 @@ def test_missing_ai_model_skips_safely() -> tuple[bool, str]:
     )
 
 
+def test_ai_low_confidence_visible_contact_does_not_force_review() -> tuple[bool, str]:
+    # This is the actual bug found from real-world use: thorough mode calls
+    # the AI 7.5x more than fast (150 vs 20, see cli.py's AI_BUDGET_DEFAULTS),
+    # and every call was an unguarded chance for a low-confidence guess to
+    # floor severity at REVIEW regardless of how unsure the model was.
+    result = resolve_severity(
+        {"has_video": True, "normal_traffic": True},
+        {"visible_contact": True, "recommended_severity": "REVIEW", "confidence": 0.2},
+    )
+    final = result.get("final_severity")
+    floored = bool(result.get("classification_debug", {}).get("severity_floor_applied"))
+    return _case(
+        "Low-confidence AI visible_contact does not floor severity",
+        final == "IGNORE" and not floored,
+        f"final={final}, floor_applied={floored}",
+    )
+
+
+def test_ai_high_confidence_visible_contact_still_floors_review() -> tuple[bool, str]:
+    # The other half of the same fix: a confident AI call must still work
+    # exactly as before -- the gate only removes noise, it must not silently
+    # disable the guardrail for calls that deserve to be trusted.
+    result = resolve_severity(
+        {"has_video": True, "normal_traffic": True},
+        {"visible_contact": True, "recommended_severity": "REVIEW", "confidence": 0.9},
+    )
+    final = result.get("final_severity")
+    return _case(
+        "High-confidence AI visible_contact still floors at REVIEW",
+        final == "REVIEW",
+        f"final={final}",
+    )
+
+
+def test_ai_missing_confidence_defaults_to_not_trusted() -> tuple[bool, str]:
+    # Real ai_reviewer.py output always includes a confidence field, but this
+    # guards the case where it's absent or malformed -- absence must not be
+    # silently treated as full confidence.
+    result = resolve_severity(
+        {"has_video": True, "normal_traffic": True},
+        {"visible_contact": True, "recommended_severity": "REVIEW"},
+    )
+    final = result.get("final_severity")
+    return _case(
+        "Missing AI confidence is treated as zero, not full trust",
+        final == "IGNORE",
+        f"final={final}",
+    )
+
+
 def test_obvious_passby_not_ai_candidate() -> tuple[bool, str]:
     should_review, reason = should_review_with_ai(
         {
@@ -206,6 +256,9 @@ def main() -> int:
         test_ai_normal_traffic_quality_flag_for_hard_impact(),
         test_ai_visible_contact_floors_review(),
         test_ai_important_with_visible_contact_can_escalate(),
+        test_ai_low_confidence_visible_contact_does_not_force_review(),
+        test_ai_high_confidence_visible_contact_still_floors_review(),
+        test_ai_missing_confidence_defaults_to_not_trusted(),
         test_invalid_ai_json_is_safe(),
         test_ai_unavailable_scan_completes(),
         test_missing_ai_model_skips_safely(),
