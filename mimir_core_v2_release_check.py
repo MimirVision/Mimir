@@ -151,6 +151,10 @@ def read_json(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def frontend_package_version(frontend_root: Path) -> str:
+    return str(read_json(frontend_root / "package.json").get("version") or "")
+
+
 def command_text(args: list[str]) -> str:
     return " ".join(f'"{arg}"' if " " in str(arg) else str(arg) for arg in args)
 
@@ -225,8 +229,11 @@ def authenticode_status(path: Path) -> str:
 def locate_installer(frontend_root: Path, explicit: str) -> Path | None:
     if explicit:
         return Path(explicit)
+    package_version = frontend_package_version(frontend_root)
     bundle_root = frontend_root / "src-tauri" / "target" / "release" / "bundle"
     candidates = list(bundle_root.glob("nsis/*.exe")) + list(bundle_root.glob("msi/*.msi"))
+    if package_version:
+        candidates = [candidate for candidate in candidates if package_version in candidate.name]
     return max(candidates, key=lambda item: item.stat().st_mtime) if candidates else None
 
 
@@ -304,6 +311,9 @@ def evaluate_external_gates(frontend_root: Path, installer: str) -> list[dict[st
     installer_path = locate_installer(frontend_root, installer)
     if installer_path is not None:
         executables.append(installer_path)
+    elif not installer:
+        package_version = frontend_package_version(frontend_root) or "current package version"
+        executables.append(frontend_root / "src-tauri" / "target" / "release" / "bundle" / "nsis" / f"Mimir_{package_version}_x64-setup.exe")
     signature_results = {str(path): authenticode_status(path) for path in executables}
     signed = bool(installer_path) and all(status == "Valid" for status in signature_results.values())
     add_check(checks, "signed_release_artifacts", signed, json.dumps(signature_results, sort_keys=True))
