@@ -1703,12 +1703,11 @@ fn incident_json_path(incident: &Value) -> Option<PathBuf> {
             .get(*field)
             .and_then(Value::as_str)
             .filter(|value| !value.trim().is_empty())
-            .map(|value| {
+            .and_then(|value| {
                 PathBuf::from(value)
                     .parent()
                     .map(|parent| parent.join("incident.json"))
             })
-            .flatten()
     })
 }
 
@@ -1829,7 +1828,13 @@ fn spawn_ai_enrichment(
             stderr
         });
         if let Some(stdout) = child.stdout.take() {
-            for line in BufReader::new(stdout).lines().flatten() {
+            // map_while(Result::ok), not .flatten(): a read error on this
+            // pipe can recur on every subsequent poll, and .flatten() only
+            // skips Err values rather than stopping -- that reads as an
+            // infinite loop that never reaches child.wait() below, which
+            // looks to the user like the AI enrichment step hanging forever
+            // instead of completing or failing visibly.
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                 let progress_line = line.trim_start();
                 if progress_line.starts_with("MIMIR_PROGRESS") {
                     let _ = window.emit(
