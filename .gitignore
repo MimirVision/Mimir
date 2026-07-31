@@ -27,3 +27,7 @@ training_runs/
 *.onnx
 # Local logs
 *.log
+
+# age private identity key -- decrypts everything testers submit, must never
+# be committed. Lives here for mimir_training_ground.py's --identity flag.
+mimir_intake_identity.txt

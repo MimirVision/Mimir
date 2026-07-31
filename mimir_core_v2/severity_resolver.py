@@ -8,6 +8,21 @@ from .validators import CAMERA_PRIORITY
 RESOLVER_VERSION = "safe_resolver_v2"
 SEVERITY_RANK = {"IGNORE": 0, "REVIEW": 1, "IMPORTANT": 2}
 
+# ai_reviewer.py's prompt is deliberately biased toward flagging when unsure
+# ("If uncertain, choose REVIEW, not IGNORE"), and the AI is called far more
+# often in thorough mode (150x per scan) than fast (20x) -- see
+# cli.py's AI_BUDGET_DEFAULTS. Before this floor existed, every one of those
+# calls was an unguarded chance for the model's own noise to force a hard
+# escalation via ai_hard_evidence_reasons() below, regardless of how
+# confident it claimed to be, which is exactly why thorough mode was
+# measurably producing *more* false positives than fast despite reviewing
+# more evidence -- more AI calls just meant more exposure to ungated noise.
+# 0.5 is a starting point (the model gets no calibration guidance for what
+# its own confidence number should mean), not a value tuned against a
+# labeled evaluation set -- worth revisiting with real before/after
+# comparisons once there's data to tune it against.
+AI_HARD_EVIDENCE_MIN_CONFIDENCE = 0.5
+
 
 def _bool(data: dict, field: str) -> bool:
     return bool(data.get(field))
@@ -80,9 +95,20 @@ def important_evidence_reasons(local_evidence: dict) -> list[str]:
     return reasons
 
 
+def _ai_confidence_sufficient(ai_evidence: dict) -> bool:
+    try:
+        confidence = float(ai_evidence.get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return confidence >= AI_HARD_EVIDENCE_MIN_CONFIDENCE
+
+
 def ai_hard_evidence_reasons(ai_evidence: dict | None) -> list[str]:
     evidence = _extract_ai_evidence(ai_evidence)
     reasons: list[str] = []
+
+    if not _ai_confidence_sufficient(evidence):
+        return reasons
 
     for field in (
         "visible_contact",
@@ -299,19 +325,25 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         reasons.append("Uncertain local evidence.")
 
     ai_floor_reasons: list[str] = []
-    if _bool(ai, "visible_contact"):
-        severity = _max_severity(severity, "REVIEW")
-        ai_floor_reasons.append("AI visible_contact requires at least REVIEW")
-        if event_type in {"normal_traffic", "person_passby", "person_near_vehicle", "single_camera_event", "multi_camera_event"}:
-            event_type = "possible_contact"
-    if _bool(ai, "visible_impact"):
-        severity = _max_severity(severity, "REVIEW")
-        ai_floor_reasons.append("AI visible_impact requires at least REVIEW")
-        if event_type in {"normal_traffic", "person_passby", "person_near_vehicle", "single_camera_event", "multi_camera_event"}:
-            event_type = "possible_impact"
-    if _bool(ai, "tampering") or _bool(ai, "door_handle_attempt"):
-        severity = _max_severity(severity, "REVIEW")
-        ai_floor_reasons.append("AI tampering/door-handle evidence requires at least REVIEW")
+    # Gated by the same confidence floor as ai_hard_evidence_reasons() above --
+    # this is a second, independent path from raw AI booleans to an elevated
+    # severity, and it was previously ungated too, which meant it shared the
+    # same failure mode: every AI call was an unguarded chance to floor an
+    # event at REVIEW regardless of how (un)confident the model was.
+    if _ai_confidence_sufficient(ai):
+        if _bool(ai, "visible_contact"):
+            severity = _max_severity(severity, "REVIEW")
+            ai_floor_reasons.append("AI visible_contact requires at least REVIEW")
+            if event_type in {"normal_traffic", "person_passby", "person_near_vehicle", "single_camera_event", "multi_camera_event"}:
+                event_type = "possible_contact"
+        if _bool(ai, "visible_impact"):
+            severity = _max_severity(severity, "REVIEW")
+            ai_floor_reasons.append("AI visible_impact requires at least REVIEW")
+            if event_type in {"normal_traffic", "person_passby", "person_near_vehicle", "single_camera_event", "multi_camera_event"}:
+                event_type = "possible_impact"
+        if _bool(ai, "tampering") or _bool(ai, "door_handle_attempt"):
+            severity = _max_severity(severity, "REVIEW")
+            ai_floor_reasons.append("AI tampering/door-handle evidence requires at least REVIEW")
     if ai_floor_reasons:
         debug["severity_floor_applied"] = True
         debug["severity_floor_reason"] = "; ".join(
