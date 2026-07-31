@@ -20,6 +20,7 @@ from mimir_core_v2.dataset_package import (
     exclusion_hashes,
     intake_package,
 )
+from mimir_core_v2.feedback_package import build_feedback_package, encrypt_feedback_collection
 
 
 DATASET_SCHEMA = "mimir_contact_dataset_v1"
@@ -290,6 +291,39 @@ def export_encrypted_dataset(args: argparse.Namespace) -> int:
     print(f"package id: {package['package_id']}")
     print(f"sha256: {package['sha256']}")
     print("No data was uploaded. Transfer the encrypted package manually.")
+    # The package id is generated in here, not known to the caller in
+    # advance. This line is how the Rust side learns it (to name the Outbox
+    # entry and set the upload header) without parsing the prose above.
+    print("MIMIR_PACKAGE_JSON: " + json.dumps(package))
+    return 0
+
+
+def export_feedback_package(args: argparse.Namespace) -> int:
+    """Package feedback (+ optional video) into an age-encrypted, self-contained
+    file. This function only builds the file -- it never sends it anywhere;
+    the caller (the Mimir app's Outbox) decides whether and when to upload it.
+    """
+
+    recipient = str(args.recipient or "").strip()
+    if args.recipient_file:
+        recipient = Path(args.recipient_file).read_text(encoding="utf-8").strip()
+    if not recipient:
+        raise ValueError("An age recipient or --recipient-file is required.")
+
+    feedback = json.loads(Path(args.feedback_json).read_text(encoding="utf-8"))
+    video_path = Path(args.video) if args.video else None
+    output = Path(args.output)
+
+    with tempfile.TemporaryDirectory(prefix="mimir-feedback-") as temporary:
+        collection = build_feedback_package(feedback, video_path, Path(temporary))
+        package = encrypt_feedback_collection(collection, output, recipient)
+
+    print(f"Encrypted feedback package: {package['output']}")
+    print(f"package id: {package['package_id']}")
+    print(f"sha256: {package['sha256']}")
+    print("No data was uploaded. Submission is a separate, explicit action.")
+    print("MIMIR_PACKAGE_JSON: " + json.dumps(package))
+    return 0
     return 0
 
 
@@ -638,6 +672,12 @@ def build_parser() -> argparse.ArgumentParser:
     encrypted.add_argument("--source-group", default="")
     encrypted.add_argument("--recipient", default="")
     encrypted.add_argument("--recipient-file", default="")
+    feedback = subparsers.add_parser("export-feedback", help="Create an age-encrypted feedback package (no video required).")
+    feedback.add_argument("--feedback-json", required=True, help="Path to the feedback JSON to package")
+    feedback.add_argument("--video", default="", help="Optional path to a video clip to include")
+    feedback.add_argument("--output", required=True, help="Destination ending in .mimir-feedback.age")
+    feedback.add_argument("--recipient", default="")
+    feedback.add_argument("--recipient-file", default="")
     intake = subparsers.add_parser("intake", help="Decrypt, validate, deduplicate, split, and optionally send a package to local CVAT.")
     intake.add_argument("--package", required=True)
     intake.add_argument("--identity", required=True)
@@ -702,6 +742,8 @@ def main(argv: list[str] | None = None) -> int:
             return export_dataset(args)
         if args.command == "export-encrypted":
             return export_encrypted_dataset(args)
+        if args.command == "export-feedback":
+            return export_feedback_package(args)
         if args.command == "intake":
             return intake_encrypted_dataset(args)
         if args.command == "blind-relabel":
