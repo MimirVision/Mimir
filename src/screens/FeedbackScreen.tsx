@@ -12,11 +12,22 @@ interface FeedbackScreenProps {
 // Reviewing feedback here does not by itself change the model -- unlike a
 // Contribution, feedback never went through clip-level rights confirmation
 // (see C:\Mimir\docs\DATA_CONTRIBUTION.md), so it can't be folded into the
-// training dataset automatically. What review tracking below buys is that
-// the effort of reading each item and deciding what to do about it doesn't
-// evaporate between sessions.
-const PROMOTION_NOTE =
-  'Feedback is developer signal, not training data -- it skipped the rights confirmation a Contribution requires. If this item deserves to be in the dataset, ask the tester to resubmit it as a Contribution.'
+// training dataset automatically. Mimir itself now nudges testers to also
+// hit Contribute when they pick a choice that flags a real detector error
+// (see AiFeedbackPanel in IncidentViewerScreen.tsx), so the developer's job
+// on those items is mainly to check whether a matching contribution showed
+// up in Collections -- and to reach out directly if it didn't, since that
+// nudge only exists for feedback submitted after it shipped. Review tracking
+// below just makes sure that judgment call doesn't evaporate between
+// sessions.
+const PROMOTABLE_CHOICES = new Set(['Weird AI flag', 'Missed obvious event'])
+
+function promotionNote(choice: string): string {
+  if (PROMOTABLE_CHOICES.has(choice)) {
+    return 'This choice flags a real detector error -- Mimir already nudged the tester to also Contribute the incident. Check Collections for a matching contribution; if none turns up, reach out and ask them to submit one.'
+  }
+  return 'Feedback is developer signal, not training data -- it skipped the rights confirmation a Contribution requires, so it stays out of the dataset regardless of what you decide here.'
+}
 
 export function FeedbackScreen({ ready }: FeedbackScreenProps) {
   const [items, setItems] = useState<FeedbackListItem[]>([])
@@ -208,7 +219,9 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
                 rows={3}
                 className="mt-2.5 w-full resize-none rounded-md border border-mimir-border bg-mimir-bg-depth px-2.5 py-1.5 text-[12px] text-mimir-text outline-none focus-visible:border-mimir-accent"
               />
-              <p className="mt-2 text-[10px] leading-4 text-mimir-text-subtle">{PROMOTION_NOTE}</p>
+              <p className="mt-2 text-[10px] leading-4 text-mimir-text-subtle">
+                {promotionNote(String(detail.feedback.user_selected_feedback ?? ''))}
+              </p>
             </div>
           </div>
         )}
