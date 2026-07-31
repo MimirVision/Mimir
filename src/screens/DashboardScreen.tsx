@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { describeError, type DescribedError } from '../lib/errorMessages'
+import { explainSyncFailure } from '../lib/syncErrors'
 import { ErrorNotice } from '../components/ErrorNotice'
-import type { GateProgress, SyncOutcome } from '../lib/types'
+import { Spinner } from '../components/Spinner'
+import type { GateProgress, SyncItemResult, SyncOutcome } from '../lib/types'
 
 interface ProgressBarProps {
   label: string
@@ -79,6 +81,97 @@ function TrainingCommands({ datasetRoot }: { datasetRoot: string }) {
   )
 }
 
+interface FailedItemRowProps {
+  kind: 'contribution' | 'feedback'
+  item: SyncItemResult
+}
+
+function FailedItemRow({ kind, item }: FailedItemRowProps) {
+  const explained = explainSyncFailure(item.error ?? '')
+  return (
+    <div
+      className={`rounded-md border p-2.5 ${
+        explained.benign ? 'border-mimir-border bg-mimir-bg-depth/60' : 'border-mimir-status-red/25 bg-mimir-status-red/[0.06]'
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[11px] font-medium text-mimir-text">{item.file}</span>
+        <span className="shrink-0 text-[10px] uppercase tracking-wide text-mimir-text-subtle">{kind}</span>
+      </div>
+      <p className={`mt-1 text-[11px] leading-5 ${explained.benign ? 'text-mimir-text-subtle' : 'text-mimir-red'}`}>
+        {explained.headline}
+      </p>
+      {item.error && (
+        <details className="mt-1.5">
+          <summary className="cursor-pointer text-[10px] text-mimir-text-subtle">Raw error</summary>
+          <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-[10px] leading-4 text-mimir-text-subtle">
+            {item.error}
+          </pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
+interface SyncSummaryProps {
+  outcome: SyncOutcome
+}
+
+function SyncSummary({ outcome }: SyncSummaryProps) {
+  const { result, progress_log } = outcome
+  const contributionFailures = result.contribution_results.filter(item => item.status === 'failed')
+  const feedbackFailures = result.feedback_results.filter(item => item.status === 'failed')
+  const totalDownloaded = result.new_contribution_count + result.new_feedback_count
+  const totalFailed = contributionFailures.length + feedbackFailures.length
+  const totalSucceeded = totalDownloaded - totalFailed
+
+  return (
+    <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
+      <div className="text-[12px] font-medium text-mimir-text">Last sync</div>
+
+      {totalDownloaded === 0 ? (
+        <p className="mt-1.5 text-[11px] text-mimir-text-subtle">Nothing new -- you're caught up.</p>
+      ) : (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-mimir-text-muted">
+            {totalDownloaded} downloaded
+          </span>
+          {totalSucceeded > 0 && (
+            <span className="rounded-full bg-mimir-accent-soft px-2.5 py-1 text-[11px] text-mimir-green">
+              {totalSucceeded} taken in
+            </span>
+          )}
+          {totalFailed > 0 && (
+            <span className="rounded-full bg-mimir-status-red/[0.1] px-2.5 py-1 text-[11px] text-mimir-red">
+              {totalFailed} failed
+            </span>
+          )}
+        </div>
+      )}
+
+      {totalFailed > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {contributionFailures.map(item => (
+            <FailedItemRow key={`c-${item.file}`} kind="contribution" item={item} />
+          ))}
+          {feedbackFailures.map(item => (
+            <FailedItemRow key={`f-${item.file}`} kind="feedback" item={item} />
+          ))}
+        </div>
+      )}
+
+      {progress_log.trim() && (
+        <details className="mt-3 rounded-md border border-mimir-border bg-black/20 p-2.5">
+          <summary className="cursor-pointer text-[11px] font-medium text-mimir-text-muted">Raw sync log</summary>
+          <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-mimir-text-subtle">
+            {progress_log}
+          </pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
 export function DashboardScreen({ ready }: DashboardScreenProps) {
   const [progress, setProgress] = useState<GateProgress | null>(null)
   const [datasetRoot, setDatasetRoot] = useState('')
@@ -136,9 +229,12 @@ export function DashboardScreen({ ready }: DashboardScreenProps) {
           type="button"
           disabled={syncing}
           onClick={sync}
-          className="rounded-md border border-mimir-accent/40 bg-mimir-accent-soft px-4 py-2 text-[12px] font-medium text-mimir-accent disabled:opacity-40"
+          className="rounded-md border border-mimir-accent/40 bg-mimir-accent-soft px-4 py-2 text-[12px] font-medium text-mimir-accent disabled:opacity-60"
         >
-          {syncing ? 'Syncing...' : 'Sync now'}
+          <span className="inline-flex items-center gap-2">
+            {syncing && <Spinner />}
+            {syncing ? 'Syncing...' : 'Sync now'}
+          </span>
         </button>
       </div>
 
@@ -176,25 +272,7 @@ export function DashboardScreen({ ready }: DashboardScreenProps) {
 
       {progress?.pilot_gate_met && datasetRoot && <TrainingCommands datasetRoot={datasetRoot} />}
 
-      {lastSync && (
-        <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
-          <div className="text-[12px] font-medium text-mimir-text">Last sync</div>
-          <div className="mt-1 text-[11px] text-mimir-text-subtle">
-            {lastSync.result.new_contribution_count} new contribution(s), {lastSync.result.new_feedback_count} new
-            feedback item(s).
-          </div>
-          {lastSync.progress_log.trim() && (
-            <details className="mt-2.5 rounded-md border border-mimir-border bg-black/20 p-2.5">
-              <summary className="cursor-pointer text-[11px] font-medium text-mimir-text-muted">
-                Sync log
-              </summary>
-              <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-mimir-text-subtle">
-                {lastSync.progress_log}
-              </pre>
-            </details>
-          )}
-        </div>
-      )}
+      {lastSync && <SyncSummary outcome={lastSync} />}
     </div>
   )
 }

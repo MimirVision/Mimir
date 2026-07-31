@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { api } from '../lib/api'
 import { describeError, type DescribedError } from '../lib/errorMessages'
 import { ErrorNotice } from '../components/ErrorNotice'
+import { Spinner } from '../components/Spinner'
 import type { SecretField, Settings, SettingsView } from '../lib/types'
 
 const EMPTY_SETTINGS: Settings = {
@@ -189,6 +190,7 @@ export function SettingsScreen({ onSaved }: SettingsScreenProps) {
       setSecrets(EMPTY_SECRETS)
       await load()
       setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
       onSaved?.()
     } catch (err) {
       setSaveError(describeError(err, 'Could not save settings.'))
@@ -326,11 +328,18 @@ export function SettingsScreen({ onSaved }: SettingsScreenProps) {
           type="button"
           disabled={saving}
           onClick={save}
-          className="rounded-md border border-mimir-accent/40 bg-mimir-accent-soft px-4 py-2 text-[12px] font-medium text-mimir-accent disabled:opacity-40"
+          className="rounded-md border border-mimir-accent/40 bg-mimir-accent-soft px-4 py-2 text-[12px] font-medium text-mimir-accent disabled:opacity-60"
         >
-          {saving ? 'Saving...' : 'Save settings'}
+          <span className="inline-flex items-center gap-2">
+            {saving && <Spinner />}
+            {saving ? 'Saving...' : 'Save settings'}
+          </span>
         </button>
-        {saved && <span className="text-[11px] text-mimir-text-subtle">Saved.</span>}
+        <span
+          className={`text-[11px] text-mimir-green transition-opacity duration-300 ${saved ? 'opacity-100' : 'opacity-0'}`}
+        >
+          Saved
+        </span>
       </div>
       <ErrorNotice error={saveError} className="mt-3" />
     </div>

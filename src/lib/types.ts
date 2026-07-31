@@ -43,12 +43,19 @@ export interface SyncFeedbackResult {
   error?: string
 }
 
+export interface SyncItemResult {
+  file: string
+  status: string
+  error?: string
+}
+
 export interface SyncResult {
   schema_version: string
   synced_at: string
   new_contribution_count: number
   new_feedback_count: number
   contribution_intake_exit_code: number | null
+  contribution_results: SyncItemResult[]
   feedback_results: SyncFeedbackResult[]
   gate_progress: GateProgress
 }
