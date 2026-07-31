@@ -21,34 +21,28 @@ interface SecretRowProps {
   hint: string
   field: SecretField
   isSet: boolean
-  onSaved: () => void
+  value: string
+  onChange: (value: string) => void
+  onCleared: () => void
 }
 
-function SecretRow({ label, hint, field, isSet, onSaved }: SecretRowProps) {
-  const [value, setValue] = useState('')
+// A credential row's Save button used to fire its own request immediately,
+// separately from the rest of the form -- which meant filling in Endpoint
+// and a credential, clicking only the credential's Save, and never hitting
+// the bottom button silently dropped the Endpoint. Now every field here is
+// just part of the same form state and goes out together with one Save
+// settings click. Clear still acts immediately: there's nothing to batch,
+// and instant feedback matters more for a destructive action.
+function SecretRow({ label, hint, field, isSet, value, onChange, onCleared }: SecretRowProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<DescribedError | null>(null)
-
-  const save = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      await api.saveSecret(field, value)
-      setValue('')
-      onSaved()
-    } catch (err) {
-      setError(describeError(err, `Could not save ${label}.`))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const clear = async () => {
     setBusy(true)
     setError(null)
     try {
       await api.clearSecret(field)
-      onSaved()
+      onCleared()
     } catch (err) {
       setError(describeError(err, `Could not clear ${label}.`))
     } finally {
@@ -75,24 +69,16 @@ function SecretRow({ label, hint, field, isSet, onSaved }: SecretRowProps) {
         <input
           type="password"
           value={value}
-          onChange={event => setValue(event.target.value)}
-          placeholder={isSet ? 'Replace saved value...' : 'Paste value...'}
+          onChange={event => onChange(event.target.value)}
+          placeholder={isSet ? 'Replace saved value, then Save settings below...' : 'Paste value, then Save settings below...'}
           className="min-w-0 flex-1 rounded-md border border-mimir-border bg-mimir-bg-depth px-2.5 py-1.5 text-[12px] text-mimir-text outline-none focus-visible:border-mimir-accent"
         />
-        <button
-          type="button"
-          disabled={busy || !value.trim()}
-          onClick={save}
-          className="rounded-md border border-mimir-border-strong bg-mimir-surface-muted px-3 py-1.5 text-[12px] text-mimir-text disabled:opacity-40"
-        >
-          Save
-        </button>
         {isSet && (
           <button
             type="button"
             disabled={busy}
             onClick={clear}
-            className="rounded-md border border-mimir-border px-3 py-1.5 text-[12px] text-mimir-text-muted disabled:opacity-40"
+            className="shrink-0 rounded-md border border-mimir-border px-3 py-1.5 text-[12px] text-mimir-text-muted disabled:opacity-40"
           >
             Clear
           </button>
@@ -145,9 +131,16 @@ interface SettingsScreenProps {
   onSaved?: () => void
 }
 
+const EMPTY_SECRETS: Record<SecretField, string> = {
+  r2_access_key_id: '',
+  r2_secret_access_key: '',
+  cvat_token: '',
+}
+
 export function SettingsScreen({ onSaved }: SettingsScreenProps) {
   const [view, setView] = useState<SettingsView | null>(null)
   const [form, setForm] = useState<Settings>(EMPTY_SETTINGS)
+  const [secrets, setSecrets] = useState<Record<SecretField, string>>(EMPTY_SECRETS)
   const [loadError, setLoadError] = useState<DescribedError | null>(null)
   const [saveError, setSaveError] = useState<DescribedError | null>(null)
   const [saving, setSaving] = useState(false)
@@ -187,6 +180,14 @@ export function SettingsScreen({ onSaved }: SettingsScreenProps) {
     setSaveError(null)
     try {
       await api.saveSettings(form)
+      const pending = (Object.entries(secrets) as Array<[SecretField, string]>).filter(([, value]) =>
+        value.trim(),
+      )
+      for (const [field, value] of pending) {
+        await api.saveSecret(field, value)
+      }
+      setSecrets(EMPTY_SECRETS)
+      await load()
       setSaved(true)
       onSaved?.()
     } catch (err) {
@@ -269,14 +270,18 @@ export function SettingsScreen({ onSaved }: SettingsScreenProps) {
               hint="Developer-only S3 API token with read+list access to the intake bucket."
               field="r2_access_key_id"
               isSet={view.has_r2_access_key_id}
-              onSaved={load}
+              value={secrets.r2_access_key_id}
+              onChange={value => setSecrets(current => ({ ...current, r2_access_key_id: value }))}
+              onCleared={load}
             />
             <SecretRow
               label="R2 secret access key"
               hint="Paired with the access key ID above."
               field="r2_secret_access_key"
               isSet={view.has_r2_secret_access_key}
-              onSaved={load}
+              value={secrets.r2_secret_access_key}
+              onChange={value => setSecrets(current => ({ ...current, r2_secret_access_key: value }))}
+              onCleared={load}
             />
           </>
         )}
@@ -309,7 +314,9 @@ export function SettingsScreen({ onSaved }: SettingsScreenProps) {
             hint="Used for creating tasks during sync and fetching live task status in Collections."
             field="cvat_token"
             isSet={view.has_cvat_token}
-            onSaved={load}
+            value={secrets.cvat_token}
+            onChange={value => setSecrets(current => ({ ...current, cvat_token: value }))}
+            onCleared={load}
           />
         )}
       </section>
