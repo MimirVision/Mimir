@@ -83,6 +83,7 @@ export interface FeedbackReview {
   note: string
   reviewed_at: string
   category: FeedbackCategory
+  reported_at: string
 }
 
 export interface FeedbackReport {

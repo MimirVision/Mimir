@@ -171,6 +171,13 @@ pub struct FeedbackReview {
     /// sends so the two never need to be kept in lockstep on every change.
     #[serde(default)]
     pub category: String,
+    /// Set the moment an item is included in a generated report. Lets
+    /// generate_feedback_report skip anything already handed off instead of
+    /// repeating it on every report -- the actual problem this field exists
+    /// to solve: without it, reviewing 2 new items and re-generating meant
+    /// re-sending the same 3 already-acted-on items every time too.
+    #[serde(default)]
+    pub reported_at: String,
 }
 
 fn feedback_reviews_path(app: &tauri::AppHandle) -> Result<PathBuf, ForgeError> {
@@ -201,12 +208,21 @@ pub fn save_feedback_review(
     note: String,
     category: String,
 ) -> Result<(), ForgeError> {
-    let path = feedback_reviews_path(&app)?;
     let mut reviews = get_feedback_reviews(app.clone())?;
-    let reviewed_at = match reviews.get(&package_id) {
+    let existing = reviews.get(&package_id).cloned();
+    let reviewed_at = match &existing {
         Some(existing) if !existing.reviewed_at.is_empty() && reviewed => existing.reviewed_at.clone(),
         _ if reviewed => unix_timestamp_now(),
         _ => String::new(),
+    };
+    // Changing the category after a report already went out should put the
+    // item back in front of the developer next time, not bury a correction
+    // inside a report that's already been sent.
+    let category_changed = existing.as_ref().map(|item| item.category.as_str()) != Some(category.as_str());
+    let reported_at = if category_changed {
+        String::new()
+    } else {
+        existing.map(|item| item.reported_at).unwrap_or_default()
     };
     reviews.insert(
         package_id,
@@ -215,13 +231,22 @@ pub fn save_feedback_review(
             note,
             reviewed_at,
             category,
+            reported_at,
         },
     );
+    write_feedback_reviews(&app, &reviews)
+}
+
+fn write_feedback_reviews(
+    app: &tauri::AppHandle,
+    reviews: &std::collections::HashMap<String, FeedbackReview>,
+) -> Result<(), ForgeError> {
+    let path = feedback_reviews_path(app)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|error| ForgeError::new(format!("Could not create the app data folder: {error}")))?;
     }
-    let body = serde_json::to_string_pretty(&reviews)
+    let body = serde_json::to_string_pretty(reviews)
         .map_err(|error| ForgeError::new(format!("Could not serialize feedback reviews: {error}")))?;
     let temp_path = path.with_extension("json.tmp");
     std::fs::write(&temp_path, body)
@@ -295,16 +320,37 @@ fn feedback_item_entry(item: &Value, review: &FeedbackReview) -> String {
     entry
 }
 
-fn build_feedback_report_markdown(items: &[Value], reviews: &std::collections::HashMap<String, FeedbackReview>) -> String {
+pub struct FeedbackReportContent {
+    pub markdown: String,
+    /// package_ids actually written into a category section below -- what
+    /// generate_feedback_report should stamp reported_at onto so they don't
+    /// show up again next time. Deliberately excludes "not yet reviewed" and
+    /// already-reported items: neither was just handed off.
+    pub newly_reported_ids: Vec<String>,
+}
+
+fn build_feedback_report_markdown(
+    items: &[Value],
+    reviews: &std::collections::HashMap<String, FeedbackReview>,
+) -> FeedbackReportContent {
     let mut by_category: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
     let mut unreviewed: Vec<String> = Vec::new();
+    let mut already_reported_count = 0usize;
+    let mut newly_reported_ids: Vec<String> = Vec::new();
 
     for item in items {
         let package_id = item.get("package_id").and_then(Value::as_str).unwrap_or("").to_string();
         let review = reviews.get(&package_id).cloned().unwrap_or_default();
+        if review.reviewed && !review.category.is_empty() && !review.reported_at.is_empty() {
+            // Already handed off in an earlier report -- the whole point of
+            // this field is to stop it from being repeated here.
+            already_reported_count += 1;
+            continue;
+        }
         let entry = feedback_item_entry(item, &review);
         if review.reviewed && !review.category.is_empty() {
             by_category.entry(review.category.clone()).or_default().push(entry);
+            newly_reported_ids.push(package_id);
         } else {
             unreviewed.push(entry);
         }
@@ -313,10 +359,11 @@ fn build_feedback_report_markdown(items: &[Value], reviews: &std::collections::H
     let mut markdown = String::new();
     markdown.push_str("# Mimir Forge feedback report\n\n");
     markdown.push_str(&format!(
-        "{} item(s) total, {} reviewed and categorized, {} still need a look.\n\n",
+        "{} item(s) total: {} new since the last report, {} still need a look, {} already reported previously (not repeated below).\n\n",
         items.len(),
-        items.len() - unreviewed.len(),
+        newly_reported_ids.len(),
         unreviewed.len(),
+        already_reported_count,
     ));
 
     for &(key, label) in CATEGORY_ORDER {
@@ -336,7 +383,7 @@ fn build_feedback_report_markdown(items: &[Value], reviews: &std::collections::H
         }
     }
 
-    markdown
+    FeedbackReportContent { markdown, newly_reported_ids }
 }
 
 #[tauri::command]
@@ -353,9 +400,20 @@ pub async fn generate_feedback_report(app: tauri::AppHandle) -> Result<FeedbackR
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        let reviews = get_feedback_reviews(app.clone())?;
+        let mut reviews = get_feedback_reviews(app.clone())?;
 
-        let markdown = build_feedback_report_markdown(&items, &reviews);
+        let content = build_feedback_report_markdown(&items, &reviews);
+        let markdown = content.markdown;
+
+        if !content.newly_reported_ids.is_empty() {
+            let stamp = unix_timestamp_now();
+            for package_id in &content.newly_reported_ids {
+                if let Some(review) = reviews.get_mut(package_id) {
+                    review.reported_at = stamp.clone();
+                }
+            }
+            write_feedback_reviews(&app, &reviews)?;
+        }
 
         let reports_dir = tauri::Manager::path(&app)
             .document_dir()
@@ -712,22 +770,25 @@ mod tests {
                 note: "threshold issue".to_string(),
                 reviewed_at: "1".to_string(),
                 category: "bug".to_string(),
+                reported_at: String::new(),
             },
         );
-        let markdown = build_feedback_report_markdown(&items, &reviews);
-        assert!(markdown.contains("Likely a code or logic fix"));
-        assert!(markdown.contains("Weird AI flag"));
-        assert!(markdown.contains("threshold issue"));
-        assert!(!markdown.contains("Not yet reviewed"));
+        let content = build_feedback_report_markdown(&items, &reviews);
+        assert!(content.markdown.contains("Likely a code or logic fix"));
+        assert!(content.markdown.contains("Weird AI flag"));
+        assert!(content.markdown.contains("threshold issue"));
+        assert!(!content.markdown.contains("Not yet reviewed"));
+        assert_eq!(content.newly_reported_ids, vec!["aaaa1111".to_string()]);
     }
 
     #[test]
     fn uncategorized_items_land_in_the_not_yet_reviewed_section() {
         let items = vec![feedback_item("bbbb2222", "Correct")];
         let reviews = std::collections::HashMap::new();
-        let markdown = build_feedback_report_markdown(&items, &reviews);
-        assert!(markdown.contains("Not yet reviewed or categorized"));
-        assert!(!markdown.contains("Likely a code or logic fix"));
+        let content = build_feedback_report_markdown(&items, &reviews);
+        assert!(content.markdown.contains("Not yet reviewed or categorized"));
+        assert!(!content.markdown.contains("Likely a code or logic fix"));
+        assert!(content.newly_reported_ids.is_empty());
     }
 
     #[test]
@@ -744,10 +805,49 @@ mod tests {
                 note: "".to_string(),
                 reviewed_at: "1".to_string(),
                 category: "".to_string(),
+                reported_at: String::new(),
             },
         );
-        let markdown = build_feedback_report_markdown(&items, &reviews);
-        assert!(markdown.contains("Not yet reviewed or categorized (1)"));
+        let content = build_feedback_report_markdown(&items, &reviews);
+        assert!(content.markdown.contains("Not yet reviewed or categorized (1)"));
+    }
+
+    #[test]
+    fn already_reported_items_are_excluded_from_the_next_report() {
+        // The actual bug report this fixes: generating a second report after
+        // reviewing new items re-sent everything already handed off in the
+        // first one. reported_at is what makes a report additive instead of
+        // cumulative.
+        let items = vec![
+            feedback_item("dddd4444", "Should be Ignore"),
+            feedback_item("eeee5555", "Weird AI flag"),
+        ];
+        let mut reviews = std::collections::HashMap::new();
+        reviews.insert(
+            "dddd4444".to_string(),
+            FeedbackReview {
+                reviewed: true,
+                note: "already sent last time".to_string(),
+                reviewed_at: "1".to_string(),
+                category: "bug".to_string(),
+                reported_at: "1".to_string(),
+            },
+        );
+        reviews.insert(
+            "eeee5555".to_string(),
+            FeedbackReview {
+                reviewed: true,
+                note: "new this time".to_string(),
+                reviewed_at: "2".to_string(),
+                category: "bug".to_string(),
+                reported_at: String::new(),
+            },
+        );
+        let content = build_feedback_report_markdown(&items, &reviews);
+        assert!(!content.markdown.contains("already sent last time"));
+        assert!(content.markdown.contains("new this time"));
+        assert!(content.markdown.contains("1 already reported previously"));
+        assert_eq!(content.newly_reported_ids, vec!["eeee5555".to_string()]);
     }
 
     #[test]
@@ -811,6 +911,7 @@ mod tests {
                 note: "Filed as a threshold tuning candidate.".to_string(),
                 reviewed_at: "1234567890".to_string(),
                 category: "bug".to_string(),
+                reported_at: "1234567891".to_string(),
             },
         );
         let text = serde_json::to_string(&reviews).expect("serialize");
@@ -819,6 +920,7 @@ mod tests {
         assert!(parsed["abc123"].reviewed);
         assert_eq!(parsed["abc123"].note, "Filed as a threshold tuning candidate.");
         assert_eq!(parsed["abc123"].category, "bug");
+        assert_eq!(parsed["abc123"].reported_at, "1234567891");
     }
 
     #[test]
@@ -828,6 +930,7 @@ mod tests {
         assert_eq!(parsed.note, "");
         assert_eq!(parsed.reviewed_at, "");
         assert_eq!(parsed.category, "");
+        assert_eq!(parsed.reported_at, "");
     }
 
     #[test]

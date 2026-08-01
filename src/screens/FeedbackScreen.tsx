@@ -218,7 +218,11 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium">{choice}</span>
-                  {categoryLabel && <span className="text-[9px] text-mimir-green">{categoryLabel}</span>}
+                  {review?.reported_at ? (
+                    <span className="text-[9px] text-mimir-text-subtle">sent</span>
+                  ) : (
+                    categoryLabel && <span className="text-[9px] text-mimir-green">{categoryLabel}</span>
+                  )}
                 </div>
                 <div className="mt-0.5 text-[10px] text-mimir-text-subtle">
                   {item.package_id.slice(0, 12)}... {String(timestamp)}
