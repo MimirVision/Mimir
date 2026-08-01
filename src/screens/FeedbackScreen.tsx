@@ -9,6 +9,10 @@ import type { FeedbackCategory, FeedbackDetail, FeedbackListItem, FeedbackReview
 
 interface FeedbackScreenProps {
   ready: boolean
+  /** Package id to jump straight to, e.g. from Dashboard's needs-review list. */
+  focusId?: string | null
+  /** Called once focusId has been applied, so it doesn't keep overriding manual selection. */
+  onFocusConsumed?: () => void
 }
 
 // Reviewing feedback here does not by itself change the model -- unlike a
@@ -39,7 +43,7 @@ const CATEGORIES: Array<{ id: FeedbackCategory; label: string; hint: string }> =
   { id: 'no_action', label: 'No action', hint: 'Noise, duplicate, or already correct.' },
 ]
 
-export function FeedbackScreen({ ready }: FeedbackScreenProps) {
+export function FeedbackScreen({ ready, focusId, onFocusConsumed }: FeedbackScreenProps) {
   const [items, setItems] = useState<FeedbackListItem[]>([])
   const [reviews, setReviews] = useState<Record<string, FeedbackReview>>({})
   const [listError, setListError] = useState<DescribedError | null>(null)
@@ -71,6 +75,13 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
     void loadList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
+
+  useEffect(() => {
+    if (!focusId || items.length === 0) return
+    setSelectedId(focusId)
+    onFocusConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, items])
 
   useEffect(() => {
     if (!selectedId) {

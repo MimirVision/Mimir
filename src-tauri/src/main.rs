@@ -4,8 +4,8 @@ mod commands;
 
 use commands::{
     clear_secret, generate_feedback_report, get_feedback_reviews, get_settings, get_status, list_collections,
-    list_feedback, open_in_cvat, run_sync, save_feedback_review, save_secret, save_settings, show_collection,
-    show_feedback,
+    list_feedback, list_recent_reports, open_in_cvat, open_report_file, run_sync, save_feedback_review, save_secret,
+    save_settings, show_collection, show_feedback,
 };
 
 fn main() {
@@ -23,6 +23,8 @@ fn main() {
             get_feedback_reviews,
             save_feedback_review,
             generate_feedback_report,
+            list_recent_reports,
+            open_report_file,
             list_collections,
             show_collection,
             open_in_cvat,

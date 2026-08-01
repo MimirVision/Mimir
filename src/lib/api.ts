@@ -8,6 +8,7 @@ import type {
   FeedbackReport,
   FeedbackReview,
   GateProgress,
+  ReportSummary,
   SecretField,
   Settings,
   SettingsView,
@@ -27,6 +28,8 @@ export const api = {
   saveFeedbackReview: (packageId: string, reviewed: boolean, note: string, category: FeedbackCategory) =>
     invoke<void>('save_feedback_review', { packageId, reviewed, note, category }),
   generateFeedbackReport: () => invoke<FeedbackReport>('generate_feedback_report'),
+  listRecentReports: () => invoke<ReportSummary[]>('list_recent_reports'),
+  openReportFile: (path: string) => invoke<void>('open_report_file', { path }),
   listCollections: () => invoke<{ items: CollectionListItem[] }>('list_collections'),
   showCollection: (packageId: string) => invoke<CollectionDetail>('show_collection', { packageId }),
   openInCvat: (taskId: number) => invoke<void>('open_in_cvat', { taskId }),

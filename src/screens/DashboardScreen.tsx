@@ -4,7 +4,14 @@ import { describeError, type DescribedError } from '../lib/errorMessages'
 import { explainSyncFailure } from '../lib/syncErrors'
 import { ErrorNotice } from '../components/ErrorNotice'
 import { Spinner } from '../components/Spinner'
-import type { GateProgress, SyncItemResult, SyncOutcome } from '../lib/types'
+import type {
+  FeedbackListItem,
+  FeedbackReview,
+  GateProgress,
+  ReportSummary,
+  SyncItemResult,
+  SyncOutcome,
+} from '../lib/types'
 
 interface ProgressBarProps {
   label: string
@@ -35,6 +42,96 @@ function ProgressBar({ label, done, target }: ProgressBarProps) {
 
 interface DashboardScreenProps {
   ready: boolean
+  onReviewFeedback: (packageId?: string) => void
+}
+
+interface NeedsReviewProps {
+  items: FeedbackListItem[]
+  reviews: Record<string, FeedbackReview>
+  onReviewFeedback: (packageId?: string) => void
+}
+
+function NeedsReview({ items, reviews, onReviewFeedback }: NeedsReviewProps) {
+  const unreviewed = items.filter(item => !reviews[item.package_id]?.reviewed)
+  if (unreviewed.length === 0) return null
+
+  const preview = unreviewed.slice(0, 5)
+  return (
+    <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-medium text-mimir-text">Needs review</span>
+        <span className="rounded-full bg-mimir-accent-soft px-2 py-0.5 text-[10px] font-medium text-mimir-accent">
+          {unreviewed.length}
+        </span>
+      </div>
+      <div className="mt-2.5 space-y-1.5">
+        {preview.map(item => {
+          const choice = item.feedback.user_selected_feedback ?? '?'
+          const timestamp = item.feedback.timestamp ?? item.feedback.saved_at ?? ''
+          return (
+            <button
+              key={item.package_id}
+              type="button"
+              onClick={() => onReviewFeedback(item.package_id)}
+              className="flex w-full items-center justify-between rounded-md border border-mimir-border bg-mimir-bg-depth px-2.5 py-1.5 text-left text-[11px] text-mimir-text-muted hover:text-mimir-text"
+            >
+              <span className="font-medium text-mimir-text">{choice}</span>
+              <span className="text-mimir-text-subtle">{String(timestamp).slice(0, 10)}</span>
+            </button>
+          )
+        })}
+      </div>
+      {unreviewed.length > preview.length && (
+        <p className="mt-2 text-[10px] text-mimir-text-subtle">
+          +{unreviewed.length - preview.length} more
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => onReviewFeedback()}
+        className="mt-3 w-full rounded-md border border-mimir-accent/40 bg-mimir-accent-soft px-3 py-1.5 text-[11px] font-medium text-mimir-accent"
+      >
+        Review now
+      </button>
+    </div>
+  )
+}
+
+interface RecentReportsProps {
+  reports: ReportSummary[]
+}
+
+function RecentReports({ reports }: RecentReportsProps) {
+  if (reports.length === 0) return null
+
+  const open = async (path: string) => {
+    try {
+      await api.openReportFile(path)
+    } catch {
+      // Opening in Explorer is a convenience; nothing else depends on it succeeding.
+    }
+  }
+
+  return (
+    <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
+      <span className="text-[12px] font-medium text-mimir-text">Recent reports</span>
+      <div className="mt-2.5 space-y-1.5">
+        {reports.map(report => (
+          <button
+            key={report.path}
+            type="button"
+            onClick={() => open(report.path)}
+            className="flex w-full items-center justify-between rounded-md border border-mimir-border bg-mimir-bg-depth px-2.5 py-1.5 text-left text-[11px] text-mimir-text-muted hover:text-mimir-text"
+          >
+            <span className="font-medium text-mimir-text">{report.filename}</span>
+            <span className="text-mimir-text-subtle">
+              {new Date(report.modified_unix * 1000).toLocaleDateString()}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function TrainingCommands({ datasetRoot }: { datasetRoot: string }) {
@@ -172,20 +269,32 @@ function SyncSummary({ outcome }: SyncSummaryProps) {
   )
 }
 
-export function DashboardScreen({ ready }: DashboardScreenProps) {
+export function DashboardScreen({ ready, onReviewFeedback }: DashboardScreenProps) {
   const [progress, setProgress] = useState<GateProgress | null>(null)
   const [datasetRoot, setDatasetRoot] = useState('')
   const [loadError, setLoadError] = useState<DescribedError | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<DescribedError | null>(null)
   const [lastSync, setLastSync] = useState<SyncOutcome | null>(null)
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackListItem[]>([])
+  const [feedbackReviews, setFeedbackReviews] = useState<Record<string, FeedbackReview>>({})
+  const [recentReports, setRecentReports] = useState<ReportSummary[]>([])
 
   const loadStatus = async () => {
     if (!ready) return
     try {
-      const [result, settings] = await Promise.all([api.getStatus(), api.getSettings()])
+      const [result, settings, feedback, reviews, reports] = await Promise.all([
+        api.getStatus(),
+        api.getSettings(),
+        api.listFeedback(),
+        api.getFeedbackReviews(),
+        api.listRecentReports(),
+      ])
       setProgress(result)
       setDatasetRoot(settings.dataset_root)
+      setFeedbackItems(feedback.items)
+      setFeedbackReviews(reviews)
+      setRecentReports(reports)
       setLoadError(null)
     } catch (err) {
       setLoadError(describeError(err, 'Could not load progress.'))
@@ -204,6 +313,9 @@ export function DashboardScreen({ ready }: DashboardScreenProps) {
       const outcome = await api.runSync()
       setLastSync(outcome)
       setProgress(outcome.result.gate_progress)
+      const [feedback, reviews] = await Promise.all([api.listFeedback(), api.getFeedbackReviews()])
+      setFeedbackItems(feedback.items)
+      setFeedbackReviews(reviews)
     } catch (err) {
       setSyncError(describeError(err, 'Sync failed.'))
     } finally {
@@ -241,6 +353,8 @@ export function DashboardScreen({ ready }: DashboardScreenProps) {
       <ErrorNotice error={loadError} className="mt-4" />
       <ErrorNotice error={syncError} className="mt-4" />
 
+      <NeedsReview items={feedbackItems} reviews={feedbackReviews} onReviewFeedback={onReviewFeedback} />
+
       {progress && (
         <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
           <div className="flex items-center justify-between">
@@ -273,6 +387,8 @@ export function DashboardScreen({ ready }: DashboardScreenProps) {
       {progress?.pilot_gate_met && datasetRoot && <TrainingCommands datasetRoot={datasetRoot} />}
 
       {lastSync && <SyncSummary outcome={lastSync} />}
+
+      <RecentReports reports={recentReports} />
     </div>
   )
 }

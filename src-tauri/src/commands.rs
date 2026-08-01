@@ -386,6 +386,16 @@ fn build_feedback_report_markdown(
     FeedbackReportContent { markdown, newly_reported_ids }
 }
 
+fn reports_dir(app: &tauri::AppHandle) -> Result<PathBuf, ForgeError> {
+    let dir = tauri::Manager::path(app)
+        .document_dir()
+        .map_err(|error| ForgeError::new(format!("Could not resolve the Documents folder: {error}")))?
+        .join("Mimir Forge Reports");
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| ForgeError::new(format!("Could not create the reports folder: {error}")))?;
+    Ok(dir)
+}
+
 #[tauri::command]
 pub async fn generate_feedback_report(app: tauri::AppHandle) -> Result<FeedbackReport, ForgeError> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -415,13 +425,7 @@ pub async fn generate_feedback_report(app: tauri::AppHandle) -> Result<FeedbackR
             write_feedback_reviews(&app, &reviews)?;
         }
 
-        let reports_dir = tauri::Manager::path(&app)
-            .document_dir()
-            .map_err(|error| ForgeError::new(format!("Could not resolve the Documents folder: {error}")))?
-            .join("Mimir Forge Reports");
-        std::fs::create_dir_all(&reports_dir)
-            .map_err(|error| ForgeError::new(format!("Could not create the reports folder: {error}")))?;
-        let path = reports_dir.join(format!("feedback-report-{}.md", unix_timestamp_now()));
+        let path = reports_dir(&app)?.join(format!("feedback-report-{}.md", unix_timestamp_now()));
         std::fs::write(&path, &markdown)
             .map_err(|error| ForgeError::new(format!("Could not write the report file: {error}")))?;
 
@@ -432,6 +436,58 @@ pub async fn generate_feedback_report(app: tauri::AppHandle) -> Result<FeedbackR
     })
     .await
     .map_err(|error| ForgeError::new(format!("Report generation task panicked: {error}")))?
+}
+
+#[derive(Serialize)]
+pub struct ReportSummary {
+    pub path: String,
+    pub filename: String,
+    pub modified_unix: u64,
+}
+
+#[tauri::command]
+pub async fn list_recent_reports(app: tauri::AppHandle) -> Result<Vec<ReportSummary>, ForgeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = reports_dir(&app)?;
+        let mut reports: Vec<ReportSummary> = std::fs::read_dir(&dir)
+            .map_err(|error| ForgeError::new(format!("Could not read the reports folder: {error}")))?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("md"))
+            .filter_map(|entry| {
+                let modified = entry
+                    .metadata()
+                    .ok()?
+                    .modified()
+                    .ok()?
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()?
+                    .as_secs();
+                Some(ReportSummary {
+                    path: entry.path().to_string_lossy().into_owned(),
+                    filename: entry.file_name().to_string_lossy().into_owned(),
+                    modified_unix: modified,
+                })
+            })
+            .collect();
+        reports.sort_by_key(|report| std::cmp::Reverse(report.modified_unix));
+        reports.truncate(10);
+        Ok(reports)
+    })
+    .await
+    .map_err(|error| ForgeError::new(format!("Listing reports panicked: {error}")))?
+}
+
+#[tauri::command]
+pub async fn open_report_file(path: String) -> Result<(), ForgeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|error| ForgeError::new(format!("Could not open the report: {error}")))?;
+        Ok(())
+    })
+    .await
+    .map_err(|error| ForgeError::new(format!("Open-report task panicked: {error}")))?
 }
 
 #[tauri::command]

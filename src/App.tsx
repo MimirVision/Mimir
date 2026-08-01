@@ -18,6 +18,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 export default function App() {
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [feedbackFocusId, setFeedbackFocusId] = useState<string | null>(null)
 
   const checkConfigured = () => {
     api
@@ -31,6 +32,11 @@ export default function App() {
   }
 
   useEffect(checkConfigured, [])
+
+  const goToFeedback = (packageId?: string) => {
+    setFeedbackFocusId(packageId ?? null)
+    setTab('feedback')
+  }
 
   return (
     <div className="mimir-page-glow min-h-screen">
@@ -56,8 +62,14 @@ export default function App() {
       </header>
 
       <main>
-        {tab === 'dashboard' && <DashboardScreen ready={configured === true} />}
-        {tab === 'feedback' && <FeedbackScreen ready={configured === true} />}
+        {tab === 'dashboard' && <DashboardScreen ready={configured === true} onReviewFeedback={goToFeedback} />}
+        {tab === 'feedback' && (
+          <FeedbackScreen
+            ready={configured === true}
+            focusId={feedbackFocusId}
+            onFocusConsumed={() => setFeedbackFocusId(null)}
+          />
+        )}
         {tab === 'collections' && <CollectionsScreen ready={configured === true} />}
         {tab === 'settings' && <SettingsScreen onSaved={checkConfigured} />}
       </main>

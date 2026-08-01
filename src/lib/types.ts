@@ -91,6 +91,12 @@ export interface FeedbackReport {
   path: string
 }
 
+export interface ReportSummary {
+  path: string
+  filename: string
+  modified_unix: number
+}
+
 export interface FeedbackDetail {
   package_id: string
   feedback: Record<string, unknown>
