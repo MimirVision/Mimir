@@ -135,6 +135,11 @@ def run_scan(
         finally:
             performance_parts["local_evidence_sec"] += time.perf_counter() - part_started
 
+        # severity_resolver.py needs this to tell a stationary Sentry camera
+        # from one in a moving vehicle (SavedClips/RecentClips) -- ambient
+        # road vibration and passing traffic read very differently in each.
+        evidence["source_category"] = event_group.get("source_category", "")
+
         try:
             part_started = time.perf_counter()
             refinement = refine_key_moment(

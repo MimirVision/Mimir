@@ -170,6 +170,41 @@ def main() -> int:
             {},
             {"IMPORTANT"},
         ),
+        # The following four reproduce a real false-positive report: three
+        # SavedClips incidents (footage saved while driving, not parked
+        # Sentry) all landed on IMPORTANT purely from ambient road
+        # vibration/traffic, and the tester's feedback was "just normal
+        # driving" for all three.
+        run_case(
+            "impact_level HIGH on SavedClips with no other signal is only ambient driving motion",
+            {"impact_level": "HIGH", "source_category": "SavedClips"},
+            {},
+            {"REVIEW"},
+        ),
+        run_case(
+            "contact_level HIGH on RecentClips with no other signal is only ambient driving motion",
+            {"contact_level": "HIGH", "source_category": "RecentClips"},
+            {},
+            {"REVIEW"},
+        ),
+        run_case(
+            "strong_impact_like_motion on SavedClips with no other signal is only ambient driving motion",
+            {"strong_impact_like_motion": True, "source_category": "SavedClips"},
+            {},
+            {"REVIEW"},
+        ),
+        run_case(
+            "impact_level HIGH on SavedClips still escalates when corroborated by hard_contact_candidate",
+            {"impact_level": "HIGH", "source_category": "SavedClips", "hard_contact_candidate": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "impact_level HIGH on parked SentryClips is unaffected -- still IMPORTANT",
+            {"impact_level": "HIGH", "source_category": "SentryClips"},
+            {},
+            {"IMPORTANT"},
+        ),
         run_case(
             "AI recommends IMPORTANT but local evidence is person_passby only",
             {"person_passby": True},
