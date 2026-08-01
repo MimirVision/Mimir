@@ -6,7 +6,7 @@
 
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -164,6 +164,13 @@ pub struct FeedbackReview {
     pub note: String,
     #[serde(default)]
     pub reviewed_at: String,
+    /// One of "bug" (a code/logic fix -- bring to Claude), "training_gap"
+    /// (needs real footage -- chase a Contribution), "no_action", or ""
+    /// (not yet categorized). Free-form on purpose: the frontend is the
+    /// source of truth for the allowed set, this just stores whatever it
+    /// sends so the two never need to be kept in lockstep on every change.
+    #[serde(default)]
+    pub category: String,
 }
 
 fn feedback_reviews_path(app: &tauri::AppHandle) -> Result<PathBuf, ForgeError> {
@@ -192,15 +199,22 @@ pub fn save_feedback_review(
     package_id: String,
     reviewed: bool,
     note: String,
+    category: String,
 ) -> Result<(), ForgeError> {
     let path = feedback_reviews_path(&app)?;
     let mut reviews = get_feedback_reviews(app.clone())?;
+    let reviewed_at = match reviews.get(&package_id) {
+        Some(existing) if !existing.reviewed_at.is_empty() && reviewed => existing.reviewed_at.clone(),
+        _ if reviewed => unix_timestamp_now(),
+        _ => String::new(),
+    };
     reviews.insert(
         package_id,
         FeedbackReview {
             reviewed,
             note,
-            reviewed_at: if reviewed { unix_timestamp_now() } else { String::new() },
+            reviewed_at,
+            category,
         },
     );
     if let Some(parent) = path.parent() {
@@ -225,6 +239,141 @@ fn unix_timestamp_now() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
     format!("{}", since_epoch.as_secs())
+}
+
+// --- Feedback report ------------------------------------------------------
+//
+// The actual gap this closes: reviewing feedback (mark reviewed, jot a note)
+// had no destination -- nothing turned that work into something you could
+// hand off. A category per item plus one compiled document is that
+// destination: pick "bug" / "needs training data" / "no action" per item,
+// hit Generate report, and paste the result straight into a chat -- the
+// document IS the thing you were asking for, not a new abstraction layered
+// on top of it.
+
+const CATEGORY_ORDER: &[(&str, &str)] = &[
+    ("bug", "Likely a code or logic fix -- bring these to Claude"),
+    ("training_gap", "Needs more training data -- chase a Contribution"),
+    ("no_action", "No action needed"),
+];
+
+#[derive(Serialize)]
+pub struct FeedbackReport {
+    pub markdown: String,
+    pub path: String,
+}
+
+fn feedback_item_entry(item: &Value, review: &FeedbackReview) -> String {
+    let package_id = item.get("package_id").and_then(Value::as_str).unwrap_or("");
+    let short_id: String = package_id.chars().take(12).collect();
+    let feedback = item.get("feedback").cloned().unwrap_or_else(|| json!({}));
+    let choice = feedback
+        .get("user_selected_feedback")
+        .and_then(Value::as_str)
+        .unwrap_or("?");
+    let incident_id = feedback.get("incident_id").and_then(Value::as_str).unwrap_or("");
+    let timestamp = feedback
+        .get("timestamp")
+        .and_then(Value::as_str)
+        .or_else(|| feedback.get("saved_at").and_then(Value::as_str))
+        .unwrap_or("");
+    let tester_notes = feedback.get("notes").and_then(Value::as_str).unwrap_or("").trim();
+
+    let mut entry = format!("### {choice} -- `{short_id}...`\n");
+    if !incident_id.is_empty() {
+        entry.push_str(&format!("- Incident: {incident_id}\n"));
+    }
+    if !timestamp.is_empty() {
+        entry.push_str(&format!("- Submitted: {timestamp}\n"));
+    }
+    if !tester_notes.is_empty() {
+        entry.push_str(&format!("- Tester's notes: {tester_notes}\n"));
+    }
+    if !review.note.is_empty() {
+        entry.push_str(&format!("- Your note: {}\n", review.note));
+    }
+    entry
+}
+
+fn build_feedback_report_markdown(items: &[Value], reviews: &std::collections::HashMap<String, FeedbackReview>) -> String {
+    let mut by_category: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+    let mut unreviewed: Vec<String> = Vec::new();
+
+    for item in items {
+        let package_id = item.get("package_id").and_then(Value::as_str).unwrap_or("").to_string();
+        let review = reviews.get(&package_id).cloned().unwrap_or_default();
+        let entry = feedback_item_entry(item, &review);
+        if review.reviewed && !review.category.is_empty() {
+            by_category.entry(review.category.clone()).or_default().push(entry);
+        } else {
+            unreviewed.push(entry);
+        }
+    }
+
+    let mut markdown = String::new();
+    markdown.push_str("# Mimir Forge feedback report\n\n");
+    markdown.push_str(&format!(
+        "{} item(s) total, {} reviewed and categorized, {} still need a look.\n\n",
+        items.len(),
+        items.len() - unreviewed.len(),
+        unreviewed.len(),
+    ));
+
+    for &(key, label) in CATEGORY_ORDER {
+        let Some(entries) = by_category.get(key) else { continue };
+        markdown.push_str(&format!("## {label} ({})\n\n", entries.len()));
+        for entry in entries {
+            markdown.push_str(entry);
+            markdown.push('\n');
+        }
+    }
+
+    if !unreviewed.is_empty() {
+        markdown.push_str(&format!("## Not yet reviewed or categorized ({})\n\n", unreviewed.len()));
+        for entry in &unreviewed {
+            markdown.push_str(entry);
+            markdown.push('\n');
+        }
+    }
+
+    markdown
+}
+
+#[tauri::command]
+pub async fn generate_feedback_report(app: tauri::AppHandle) -> Result<FeedbackReport, ForgeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let settings = read_settings(&app)?;
+        let output = require_success(run_backend(
+            &["feedback", "list", "--json", "--feedback-inbox", &settings.feedback_inbox],
+            &[],
+        )?)?;
+        let payload = parse_json_stdout(&output)?;
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let reviews = get_feedback_reviews(app.clone())?;
+
+        let markdown = build_feedback_report_markdown(&items, &reviews);
+
+        let reports_dir = tauri::Manager::path(&app)
+            .document_dir()
+            .map_err(|error| ForgeError::new(format!("Could not resolve the Documents folder: {error}")))?
+            .join("Mimir Forge Reports");
+        std::fs::create_dir_all(&reports_dir)
+            .map_err(|error| ForgeError::new(format!("Could not create the reports folder: {error}")))?;
+        let path = reports_dir.join(format!("feedback-report-{}.md", unix_timestamp_now()));
+        std::fs::write(&path, &markdown)
+            .map_err(|error| ForgeError::new(format!("Could not write the report file: {error}")))?;
+
+        Ok(FeedbackReport {
+            markdown,
+            path: path.to_string_lossy().into_owned(),
+        })
+    })
+    .await
+    .map_err(|error| ForgeError::new(format!("Report generation task panicked: {error}")))?
 }
 
 #[tauri::command]
@@ -540,6 +689,67 @@ pub async fn open_in_cvat(app: tauri::AppHandle, task_id: i64) -> Result<(), For
 mod tests {
     use super::*;
 
+    fn feedback_item(package_id: &str, choice: &str) -> Value {
+        json!({
+            "package_id": package_id,
+            "feedback": {
+                "user_selected_feedback": choice,
+                "incident_id": "incident_1",
+                "timestamp": "2026-07-31T00:00:00Z",
+                "notes": "tester note",
+            },
+        })
+    }
+
+    #[test]
+    fn categorized_items_land_under_their_category_heading() {
+        let items = vec![feedback_item("aaaa1111", "Weird AI flag")];
+        let mut reviews = std::collections::HashMap::new();
+        reviews.insert(
+            "aaaa1111".to_string(),
+            FeedbackReview {
+                reviewed: true,
+                note: "threshold issue".to_string(),
+                reviewed_at: "1".to_string(),
+                category: "bug".to_string(),
+            },
+        );
+        let markdown = build_feedback_report_markdown(&items, &reviews);
+        assert!(markdown.contains("Likely a code or logic fix"));
+        assert!(markdown.contains("Weird AI flag"));
+        assert!(markdown.contains("threshold issue"));
+        assert!(!markdown.contains("Not yet reviewed"));
+    }
+
+    #[test]
+    fn uncategorized_items_land_in_the_not_yet_reviewed_section() {
+        let items = vec![feedback_item("bbbb2222", "Correct")];
+        let reviews = std::collections::HashMap::new();
+        let markdown = build_feedback_report_markdown(&items, &reviews);
+        assert!(markdown.contains("Not yet reviewed or categorized"));
+        assert!(!markdown.contains("Likely a code or logic fix"));
+    }
+
+    #[test]
+    fn reviewed_without_a_category_still_counts_as_not_yet_reviewed() {
+        // A category is what makes an item actionable in the report -- just
+        // toggling "reviewed" without picking one shouldn't silently drop it
+        // into a bucket the reader never asked for.
+        let items = vec![feedback_item("cccc3333", "Correct")];
+        let mut reviews = std::collections::HashMap::new();
+        reviews.insert(
+            "cccc3333".to_string(),
+            FeedbackReview {
+                reviewed: true,
+                note: "".to_string(),
+                reviewed_at: "1".to_string(),
+                category: "".to_string(),
+            },
+        );
+        let markdown = build_feedback_report_markdown(&items, &reviews);
+        assert!(markdown.contains("Not yet reviewed or categorized (1)"));
+    }
+
     #[test]
     fn marker_line_is_found_after_interleaved_progress_output() {
         let stdout = "downloaded contribution: contributions/2026/07/a.age\n\
@@ -600,6 +810,7 @@ mod tests {
                 reviewed: true,
                 note: "Filed as a threshold tuning candidate.".to_string(),
                 reviewed_at: "1234567890".to_string(),
+                category: "bug".to_string(),
             },
         );
         let text = serde_json::to_string(&reviews).expect("serialize");
@@ -607,6 +818,7 @@ mod tests {
             serde_json::from_str(&text).expect("deserialize");
         assert!(parsed["abc123"].reviewed);
         assert_eq!(parsed["abc123"].note, "Filed as a threshold tuning candidate.");
+        assert_eq!(parsed["abc123"].category, "bug");
     }
 
     #[test]
@@ -615,6 +827,7 @@ mod tests {
         assert!(!parsed.reviewed);
         assert_eq!(parsed.note, "");
         assert_eq!(parsed.reviewed_at, "");
+        assert_eq!(parsed.category, "");
     }
 
     #[test]

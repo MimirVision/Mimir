@@ -76,10 +76,18 @@ export interface FeedbackListItem {
   }
 }
 
+export type FeedbackCategory = 'bug' | 'training_gap' | 'no_action' | ''
+
 export interface FeedbackReview {
   reviewed: boolean
   note: string
   reviewed_at: string
+  category: FeedbackCategory
+}
+
+export interface FeedbackReport {
+  markdown: string
+  path: string
 }
 
 export interface FeedbackDetail {

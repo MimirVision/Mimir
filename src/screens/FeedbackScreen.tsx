@@ -3,7 +3,9 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { api } from '../lib/api'
 import { describeError, type DescribedError } from '../lib/errorMessages'
 import { ErrorNotice } from '../components/ErrorNotice'
-import type { FeedbackDetail, FeedbackListItem, FeedbackReview } from '../lib/types'
+import { ModalOverlay } from '../components/ModalOverlay'
+import { Spinner } from '../components/Spinner'
+import type { FeedbackCategory, FeedbackDetail, FeedbackListItem, FeedbackReview } from '../lib/types'
 
 interface FeedbackScreenProps {
   ready: boolean
@@ -17,9 +19,7 @@ interface FeedbackScreenProps {
 // (see AiFeedbackPanel in IncidentViewerScreen.tsx), so the developer's job
 // on those items is mainly to check whether a matching contribution showed
 // up in Collections -- and to reach out directly if it didn't, since that
-// nudge only exists for feedback submitted after it shipped. Review tracking
-// below just makes sure that judgment call doesn't evaporate between
-// sessions.
+// nudge only exists for feedback submitted after it shipped.
 const PROMOTABLE_CHOICES = new Set(['Weird AI flag', 'Missed obvious event'])
 
 function promotionNote(choice: string): string {
@@ -28,6 +28,16 @@ function promotionNote(choice: string): string {
   }
   return 'Feedback is developer signal, not training data -- it skipped the rights confirmation a Contribution requires, so it stays out of the dataset regardless of what you decide here.'
 }
+
+// The category is what makes review work into something that goes
+// somewhere: it's what Generate report groups by, so picking one is the
+// actual hand-off point between "I looked at this" and "here's what to do
+// about it."
+const CATEGORIES: Array<{ id: FeedbackCategory; label: string; hint: string }> = [
+  { id: 'bug', label: 'Bug / logic fix', hint: 'A code or threshold issue -- bring it to Claude.' },
+  { id: 'training_gap', label: 'Needs training data', hint: 'A real detection gap -- chase a Contribution.' },
+  { id: 'no_action', label: 'No action', hint: 'Noise, duplicate, or already correct.' },
+]
 
 export function FeedbackScreen({ ready }: FeedbackScreenProps) {
   const [items, setItems] = useState<FeedbackListItem[]>([])
@@ -38,6 +48,12 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
   const [detailError, setDetailError] = useState<DescribedError | null>(null)
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportMarkdown, setReportMarkdown] = useState('')
+  const [reportPath, setReportPath] = useState('')
+  const [reportCopied, setReportCopied] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [reportError, setReportError] = useState<DescribedError | null>(null)
 
   const loadList = async () => {
     if (!ready) return
@@ -92,11 +108,11 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
     [items, reviews],
   )
 
-  const setReviewed = async (reviewed: boolean) => {
+  const persistReview = async (reviewed: boolean, category: FeedbackCategory) => {
     if (!selectedId) return
     setSaving(true)
     try {
-      await api.saveFeedbackReview(selectedId, reviewed, note)
+      await api.saveFeedbackReview(selectedId, reviewed, note, category)
       const updated = await api.getFeedbackReviews()
       setReviews(updated)
     } catch (err) {
@@ -106,18 +122,41 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
     }
   }
 
+  const pickCategory = (category: FeedbackCategory) => {
+    const current = selectedId ? reviews[selectedId] : undefined
+    const next = current?.category === category ? '' : category
+    void persistReview(Boolean(next), next)
+  }
+
   const saveNote = async () => {
     if (!selectedId) return
-    setSaving(true)
+    const current = reviews[selectedId]
+    await persistReview(current?.reviewed ?? false, current?.category ?? '')
+  }
+
+  const generateReport = async () => {
+    setGenerating(true)
+    setReportError(null)
     try {
-      const alreadyReviewed = reviews[selectedId]?.reviewed ?? false
-      await api.saveFeedbackReview(selectedId, alreadyReviewed, note)
-      const updated = await api.getFeedbackReviews()
-      setReviews(updated)
+      const report = await api.generateFeedbackReport()
+      setReportMarkdown(report.markdown)
+      setReportPath(report.path)
+      setReportOpen(true)
     } catch (err) {
-      setDetailError(describeError(err, 'Could not save that note.'))
+      setReportError(describeError(err, 'Could not generate the report.'))
     } finally {
-      setSaving(false)
+      setGenerating(false)
+    }
+  }
+
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(reportMarkdown)
+      setReportCopied(true)
+      setTimeout(() => setReportCopied(false), 1500)
+    } catch {
+      // Clipboard access can be denied by the OS; the report is still on
+      // disk and visible in the modal to copy by hand.
     }
   }
 
@@ -143,6 +182,18 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
             </span>
           )}
         </div>
+
+        <button
+          type="button"
+          disabled={generating || items.length === 0}
+          onClick={generateReport}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-mimir-accent/40 bg-mimir-accent-soft px-3 py-2 text-[12px] font-medium text-mimir-accent disabled:opacity-40"
+        >
+          {generating && <Spinner />}
+          Generate report
+        </button>
+        <ErrorNotice error={reportError} className="mt-2" />
+
         <ErrorNotice error={listError} className="mt-3" />
         {items.length === 0 && !listError && (
           <p className="mt-3 text-[12px] text-mimir-text-subtle">No feedback received yet.</p>
@@ -152,7 +203,8 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
             const choice = item.feedback.user_selected_feedback ?? '?'
             const timestamp = item.feedback.timestamp ?? item.feedback.saved_at ?? ''
             const active = item.package_id === selectedId
-            const reviewed = reviews[item.package_id]?.reviewed ?? false
+            const review = reviews[item.package_id]
+            const categoryLabel = CATEGORIES.find(c => c.id === review?.category)?.label
             return (
               <button
                 key={item.package_id}
@@ -162,11 +214,11 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
                   active
                     ? 'border-mimir-accent/40 bg-mimir-accent-soft text-mimir-text'
                     : 'border-mimir-border bg-mimir-surface-soft/60 text-mimir-text-muted'
-                } ${reviewed ? 'opacity-60' : ''}`}
+                } ${review?.reviewed ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium">{choice}</span>
-                  {reviewed && <span className="text-[9px] text-mimir-green">reviewed</span>}
+                  {categoryLabel && <span className="text-[9px] text-mimir-green">{categoryLabel}</span>}
                 </div>
                 <div className="mt-0.5 text-[10px] text-mimir-text-subtle">
                   {item.package_id.slice(0, 12)}... {String(timestamp)}
@@ -196,20 +248,24 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
             </div>
 
             <div className="rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[12px] font-medium text-mimir-text">Review</span>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => setReviewed(!(selectedReview?.reviewed ?? false))}
-                  className={`rounded-md border px-3 py-1.5 text-[11px] font-medium disabled:opacity-40 ${
-                    selectedReview?.reviewed
-                      ? 'border-mimir-border text-mimir-text-muted'
-                      : 'border-mimir-accent/40 bg-mimir-accent-soft text-mimir-accent'
-                  }`}
-                >
-                  {selectedReview?.reviewed ? 'Mark unreviewed' : 'Mark reviewed'}
-                </button>
+              <span className="text-[12px] font-medium text-mimir-text">What is this?</span>
+              <div className="mt-2.5 grid grid-cols-3 gap-2">
+                {CATEGORIES.map(category => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => pickCategory(category.id)}
+                    title={category.hint}
+                    className={`rounded-md border px-2 py-2 text-[11px] font-medium disabled:opacity-40 ${
+                      selectedReview?.category === category.id
+                        ? 'border-mimir-accent/40 bg-mimir-accent-soft text-mimir-accent'
+                        : 'border-mimir-border text-mimir-text-muted'
+                    }`}
+                  >
+                    {category.label}
+                  </button>
+                ))}
               </div>
               <textarea
                 value={note}
@@ -217,7 +273,7 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
                 onBlur={saveNote}
                 placeholder="What did you do about this? (e.g. filed a bug, adjusted a threshold, asked for a resubmit as a Contribution)"
                 rows={3}
-                className="mt-2.5 w-full resize-none rounded-md border border-mimir-border bg-mimir-bg-depth px-2.5 py-1.5 text-[12px] text-mimir-text outline-none focus-visible:border-mimir-accent"
+                className="mt-3 w-full resize-none rounded-md border border-mimir-border bg-mimir-bg-depth px-2.5 py-1.5 text-[12px] text-mimir-text outline-none focus-visible:border-mimir-accent"
               />
               <p className="mt-2 text-[10px] leading-4 text-mimir-text-subtle">
                 {promotionNote(String(detail.feedback.user_selected_feedback ?? ''))}
@@ -226,6 +282,36 @@ export function FeedbackScreen({ ready }: FeedbackScreenProps) {
           </div>
         )}
       </div>
+
+      {reportOpen && (
+        <ModalOverlay label="Feedback report" onClose={() => setReportOpen(false)} closeOnBackdrop>
+          <div className="max-h-[80vh] w-[min(90vw,720px)] overflow-hidden rounded-xl border border-mimir-border bg-mimir-surface p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[14px] font-medium text-mimir-text">Feedback report</h2>
+              <button
+                type="button"
+                onClick={() => setReportOpen(false)}
+                className="rounded-md border border-mimir-border px-2.5 py-1 text-[11px] text-mimir-text-muted"
+              >
+                Close
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] text-mimir-text-subtle">
+              Saved to {reportPath}. Copy this and paste it into a chat to hand it off.
+            </p>
+            <pre className="mt-3 max-h-[55vh] overflow-auto whitespace-pre-wrap rounded-md border border-mimir-border bg-black/25 p-3 text-[11px] leading-5 text-mimir-text-muted">
+              {reportMarkdown}
+            </pre>
+            <button
+              type="button"
+              onClick={copyReport}
+              className="mt-3 rounded-md border border-mimir-accent/40 bg-mimir-accent-soft px-3 py-1.5 text-[12px] font-medium text-mimir-accent"
+            >
+              {reportCopied ? 'Copied' : 'Copy to clipboard'}
+            </button>
+          </div>
+        </ModalOverlay>
+      )}
     </div>
   )
 }

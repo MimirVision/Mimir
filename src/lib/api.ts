@@ -2,8 +2,10 @@ import { invoke } from '@tauri-apps/api/core'
 import type {
   CollectionDetail,
   CollectionListItem,
+  FeedbackCategory,
   FeedbackDetail,
   FeedbackListItem,
+  FeedbackReport,
   FeedbackReview,
   GateProgress,
   SecretField,
@@ -22,8 +24,9 @@ export const api = {
   listFeedback: () => invoke<{ items: FeedbackListItem[] }>('list_feedback'),
   showFeedback: (packageId: string) => invoke<FeedbackDetail>('show_feedback', { packageId }),
   getFeedbackReviews: () => invoke<Record<string, FeedbackReview>>('get_feedback_reviews'),
-  saveFeedbackReview: (packageId: string, reviewed: boolean, note: string) =>
-    invoke<void>('save_feedback_review', { packageId, reviewed, note }),
+  saveFeedbackReview: (packageId: string, reviewed: boolean, note: string, category: FeedbackCategory) =>
+    invoke<void>('save_feedback_review', { packageId, reviewed, note, category }),
+  generateFeedbackReport: () => invoke<FeedbackReport>('generate_feedback_report'),
   listCollections: () => invoke<{ items: CollectionListItem[] }>('list_collections'),
   showCollection: (packageId: string) => invoke<CollectionDetail>('show_collection', { packageId }),
   openInCvat: (taskId: number) => invoke<void>('open_in_cvat', { taskId }),
