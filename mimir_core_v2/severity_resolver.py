@@ -23,6 +23,43 @@ SEVERITY_RANK = {"IGNORE": 0, "REVIEW": 1, "IMPORTANT": 2}
 # comparisons once there's data to tune it against.
 AI_HARD_EVIDENCE_MIN_CONFIDENCE = 0.5
 
+# TeslaCam's SavedClips (a driver manually saves footage while ON THE ROAD)
+# and RecentClips (continuous driving footage) have very different physical
+# dynamics from SentryClips (a stationary, parked camera): road vibration,
+# other vehicles passing close in adjacent lanes, and lane-change scene cuts
+# are the ordinary baseline while driving, not evidence of contact. Nothing
+# in this file used to know the difference. Confirmed against three real
+# false positives -- all SavedClips, all "just normal driving" per tester
+# feedback, all escalated straight to IMPORTANT purely by impact_level=HIGH /
+# contact_level=HIGH / strong_impact_like_motion (fields computed from
+# camera_shake_score, motion_spike_ratio, and vehicle_close_to_camera) with
+# zero corroboration from any more specific signal -- hard_contact_candidate,
+# rear_impact_candidate, and crash_safety_triggered were all False in every
+# case, and the AI review pipeline was not involved (ai_confidence: 0 in all
+# three).
+_MOVING_VEHICLE_CATEGORIES = frozenset({"SavedClips", "RecentClips"})
+
+
+def _trust_ambient_motion(evidence: dict) -> bool:
+    """False only when the footage is known to come from a moving vehicle
+    AND nothing more specific than ambient shake/motion/nearby-traffic
+    corroborates a real contact. In that narrow case, impact_level=HIGH /
+    contact_level=HIGH / strong_impact_like_motion are downgraded from an
+    IMPORTANT floor to a REVIEW floor elsewhere in this file -- still
+    surfaced for a human to look at, never silently dropped to IGNORE."""
+    category = str(evidence.get("source_category") or "")
+    if category not in _MOVING_VEHICLE_CATEGORIES:
+        return True
+    return (
+        _bool(evidence, "hard_contact_candidate")
+        or _bool(evidence, "rear_impact_candidate")
+        or _bool(evidence, "no_yolo_motion_impact_candidate")
+        or _bool(evidence, "crash_safety_triggered")
+        or _bool(evidence, "person_interaction_evidence")
+        or _bool(evidence, "tampering_evidence")
+        or _bool(evidence, "door_handle_attempt")
+    )
+
 
 def _bool(data: dict, field: str) -> bool:
     return bool(data.get(field))
@@ -66,14 +103,15 @@ def _has_contact_impact_or_tampering(evidence: dict) -> bool:
 def important_evidence_reasons(local_evidence: dict) -> list[str]:
     evidence = local_evidence if isinstance(local_evidence, dict) else {}
     reasons: list[str] = []
+    trust_ambient = _trust_ambient_motion(evidence)
 
     if _bool(evidence, "crash_safety_triggered"):
         reasons.append("crash_safety_triggered")
     if _bool(evidence, "no_yolo_motion_impact_candidate"):
         reasons.append("no_yolo_motion_impact_candidate")
-    if _level(evidence, "impact_level") == "HIGH":
+    if trust_ambient and _level(evidence, "impact_level") == "HIGH":
         reasons.append("impact_level=HIGH")
-    if _level(evidence, "contact_level") == "HIGH":
+    if trust_ambient and _level(evidence, "contact_level") == "HIGH":
         reasons.append("contact_level=HIGH")
     if _bool(evidence, "visible_contact"):
         reasons.append("visible_contact")
@@ -85,7 +123,7 @@ def important_evidence_reasons(local_evidence: dict) -> list[str]:
         reasons.append("tampering_evidence")
     if _bool(evidence, "door_handle_attempt"):
         reasons.append("door_handle_attempt")
-    if _bool(evidence, "strong_impact_like_motion"):
+    if trust_ambient and _bool(evidence, "strong_impact_like_motion"):
         reasons.append("strong_impact_like_motion")
     if _bool(evidence, "hard_contact_candidate"):
         reasons.append("hard_contact_candidate")
@@ -287,10 +325,19 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         severity = _max_severity(severity, "REVIEW")
         reasons.append("Possible impact evidence.")
 
+    trust_ambient = _trust_ambient_motion(evidence)
+
     floor_reasons: list[str] = []
     if _bool(evidence, "strong_impact_like_motion"):
-        floor_reasons.append("strong_impact_like_motion requires IMPORTANT")
-        severity = "IMPORTANT"
+        if trust_ambient:
+            floor_reasons.append("strong_impact_like_motion requires IMPORTANT")
+            severity = "IMPORTANT"
+        else:
+            floor_reasons.append(
+                "strong_impact_like_motion downgraded to REVIEW -- SavedClips/RecentClips reflect a moving "
+                "vehicle, where camera shake and close traffic are the normal baseline, not contact evidence"
+            )
+            severity = _max_severity(severity, "REVIEW")
     if _bool(evidence, "hard_contact_candidate"):
         floor_reasons.append("hard_contact_candidate requires IMPORTANT")
         severity = "IMPORTANT"
@@ -304,11 +351,19 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         floor_reasons.append("crash_safety_triggered requires IMPORTANT")
         severity = "IMPORTANT"
     if _level(evidence, "impact_level") == "HIGH":
-        floor_reasons.append("impact_level HIGH requires IMPORTANT")
-        severity = "IMPORTANT"
+        if trust_ambient:
+            floor_reasons.append("impact_level HIGH requires IMPORTANT")
+            severity = "IMPORTANT"
+        else:
+            floor_reasons.append("impact_level HIGH downgraded to REVIEW -- ambient motion on SavedClips/RecentClips")
+            severity = _max_severity(severity, "REVIEW")
     if _level(evidence, "contact_level") == "HIGH":
-        floor_reasons.append("contact_level HIGH requires IMPORTANT")
-        severity = "IMPORTANT"
+        if trust_ambient:
+            floor_reasons.append("contact_level HIGH requires IMPORTANT")
+            severity = "IMPORTANT"
+        else:
+            floor_reasons.append("contact_level HIGH downgraded to REVIEW -- ambient motion on SavedClips/RecentClips")
+            severity = _max_severity(severity, "REVIEW")
     if _level(evidence, "impact_level") == "MEDIUM":
         floor_reasons.append("impact_level MEDIUM requires at least REVIEW")
         severity = _max_severity(severity, "REVIEW")
