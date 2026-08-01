@@ -83,7 +83,7 @@ class GroupContactSemanticsTests(unittest.TestCase):
     def test_synchronized_second_camera_preserves_hard_contact(self) -> None:
         side = _side_door_evidence()
         cameras = {
-            "back": {"motion_samples": [_motion_sample(10.95, 0.23)]},
+            "back": {"motion_samples": [_motion_sample(10.95, 0.6)]},
             "right_repeater": side,
         }
 
@@ -148,6 +148,25 @@ class GroupContactSemanticsTests(unittest.TestCase):
         self.assertFalse(side["rear_impact_candidate"])
         self.assertTrue(rear["hard_contact_candidate"])
         self.assertTrue(rear["rear_impact_candidate"])
+
+    def test_weak_background_motion_on_another_camera_does_not_corroborate(self) -> None:
+        # A person walking around a parked car, wind, or road vibration can
+        # easily nudge a neighboring camera's motion/shake scores above zero
+        # without that camera seeing anything resembling contact. Only a
+        # genuinely elevated reading on the other camera (see the sibling
+        # test_synchronized_second_camera_preserves_hard_contact, which uses
+        # 0.6) should count as corroboration.
+        side = _side_door_evidence()
+        cameras = {
+            "back": {"motion_samples": [_motion_sample(10.95, 0.23)]},
+            "right_repeater": side,
+        }
+
+        _apply_group_contact_context(cameras)
+
+        self.assertFalse(side["multi_camera_impact_corroborated"])
+        self.assertEqual([], side["multi_camera_impact_support_cameras"])
+        self.assertFalse(side["hard_contact_candidate"])
 
     def test_uncorroborated_close_activity_with_high_generic_motion_is_not_hard_contact(self) -> None:
         # A passerby moving briskly in front of an otherwise-static camera can

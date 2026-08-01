@@ -933,9 +933,24 @@ def _nearest_motion_sample(evidence: dict, time_sec: float) -> dict:
 
 
 def _sample_supports_impact(sample: dict) -> bool:
+    # HARD_CLOSE_GLOBAL_MOTION_THRESHOLD/IMPACT_CANDIDATE_SHAKE_THRESHOLD are
+    # deliberately low because they're only ever one ANDed ingredient among
+    # several (vehicle_detected, possible_contact, contact_level, spike_ratio
+    # -- see _hard_close_contact_like_motion/_impact_candidate_details) for
+    # the PRIMARY camera that already has its own contact candidate. Reusing
+    # them here as the sole bar for whether a SECOND, otherwise-uninvolved
+    # camera "corroborates" that contact let ordinary background motion --
+    # someone walking around a parked car, wind, road vibration -- satisfy
+    # corroboration on its own, since 0.18 max-motion / 0.12 shake is below
+    # even the generic LOW tier. Confirmed against seven real tester false
+    # positives (all "Should be Review"/"Should be Ignore") that all showed
+    # multi_camera_impact_corroborated=True purely from this. The medium-tier
+    # thresholds are already calibrated elsewhere in this file as "this is a
+    # real amount of generic motion", which is a much more defensible bar for
+    # an independent camera's own reading to actually mean something.
     return bool(
-        _safe_float(sample.get("motion_score")) >= HARD_CLOSE_GLOBAL_MOTION_THRESHOLD
-        or _safe_float(sample.get("camera_shake_score")) >= IMPACT_CANDIDATE_SHAKE_THRESHOLD
+        _safe_float(sample.get("motion_score")) >= MOTION_MEDIUM_THRESHOLD
+        or _safe_float(sample.get("camera_shake_score")) >= CAMERA_SHAKE_MEDIUM_THRESHOLD
     )
 
 
