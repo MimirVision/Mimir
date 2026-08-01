@@ -1007,17 +1007,21 @@ def _apply_group_contact_context(camera_evidence: dict[str, dict]) -> None:
             continue
 
         base_impact_level = _impact_level_from_motion(evidence)
-        if base_impact_level == "HIGH":
-            evidence["contact_semantics_reasons"] = [
-                "close-object motion was observed, but independent hard motion evidence remains HIGH"
-            ]
-            continue
 
         reason = (
             "single side-camera door motion without synchronized impact evidence"
             if door_articulation_candidate
             else "single-camera close-object motion without synchronized impact evidence"
         )
+        if base_impact_level == "HIGH":
+            # Camera shake and motion-spike ratio are exactly what a person or
+            # vehicle passing close to an uncorroborated single camera produces --
+            # they are generic frame statistics with no notion of the ego vehicle
+            # at all, so "independently high" here is not evidence of contact.
+            # Confirmed against real tester feedback where this exact carve-out
+            # let a passerby's brisk motion skip the downgrade below and force
+            # IMPORTANT ("just people walking by").
+            reason += " -- high generic frame motion alone is not corroboration"
         evidence["door_articulation_candidate"] = door_articulation_candidate
         evidence["single_camera_close_activity"] = True
         evidence["contact_semantics_reasons"] = [
@@ -1027,8 +1031,8 @@ def _apply_group_contact_context(camera_evidence: dict[str, dict]) -> None:
         evidence["hard_contact_candidate"] = False
         evidence["rear_impact_candidate"] = False
         evidence["strong_impact_like_motion"] = False
-        evidence["impact_level"] = base_impact_level
-        evidence["possible_impact"] = base_impact_level in {"MEDIUM", "HIGH"}
+        evidence["impact_level"] = "MEDIUM" if base_impact_level == "HIGH" else base_impact_level
+        evidence["possible_impact"] = evidence["impact_level"] in {"MEDIUM", "HIGH"}
         evidence["contact_level"] = "MEDIUM"
         evidence["possible_contact"] = True
         evidence["object_contact_used_for_contact"] = False
