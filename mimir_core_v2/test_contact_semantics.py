@@ -149,6 +149,32 @@ class GroupContactSemanticsTests(unittest.TestCase):
         self.assertTrue(rear["hard_contact_candidate"])
         self.assertTrue(rear["rear_impact_candidate"])
 
+    def test_uncorroborated_close_activity_with_high_generic_motion_is_not_hard_contact(self) -> None:
+        # A passerby moving briskly in front of an otherwise-static camera can
+        # push camera_shake_score/motion_spike_ratio into "HIGH" territory on
+        # their own -- these are generic frame statistics with no notion of
+        # the ego vehicle, so "independently high" must not let an
+        # uncorroborated single camera bypass the downgrade below it.
+        side = _side_door_evidence()
+        side["camera_shake_score"] = 0.6
+        cameras = {
+            "front": {"motion_samples": [_motion_sample(10.971, 0.011)]},
+            "back": {"motion_samples": [_motion_sample(10.720, 0.007)]},
+            "left_repeater": {"motion_samples": [_motion_sample(10.969, 0.010)]},
+            "right_repeater": side,
+        }
+
+        _apply_group_contact_context(cameras)
+
+        self.assertTrue(side["single_camera_close_activity"])
+        self.assertFalse(side["multi_camera_impact_corroborated"])
+        self.assertFalse(side["hard_contact_candidate"])
+        self.assertFalse(side["rear_impact_candidate"])
+        self.assertFalse(side["strong_impact_like_motion"])
+        self.assertEqual("MEDIUM", side["impact_level"])
+        self.assertEqual("MEDIUM", side["contact_level"])
+        self.assertIn("image-space overlap is not physical-contact proof", side["contact_semantics_reasons"])
+
     def test_single_camera_hard_contact_is_unchanged(self) -> None:
         evidence = _side_door_evidence()
         cameras = {"unknown": evidence}
