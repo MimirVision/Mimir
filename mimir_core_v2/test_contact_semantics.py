@@ -57,6 +57,35 @@ def _side_door_evidence() -> dict:
     }
 
 
+def _motion_only_hard_contact_evidence() -> dict:
+    # hard_contact_candidate can also be reached with no bounding-box overlap
+    # at all -- _impact_candidate_details() only needs a generically detected
+    # vehicle (anywhere in frame, not necessarily touching anything) plus
+    # motion/shake/spike thresholds. object_contact_candidate is deliberately
+    # left False/absent here to reproduce that path.
+    return {
+        "max_motion_score": 0.7,
+        "localized_motion_score": 0.6,
+        "motion_spike_ratio": 6.0,
+        "camera_shake_score": 0.6,
+        "abrupt_scene_change": False,
+        "object_contact_candidate": False,
+        "vehicle_detected": True,
+        "person_detected": False,
+        "impact_level": "HIGH",
+        "contact_level": "HIGH",
+        "possible_impact": True,
+        "possible_contact": True,
+        "strong_impact_like_motion": True,
+        "hard_contact_candidate": True,
+        "rear_impact_candidate": False,
+        "crash_safety_triggered": False,
+        "no_yolo_motion_impact_candidate": False,
+        "motion_spike_time_sec": 12.0,
+        "motion_samples": [_motion_sample(12.0, 0.7, 0.6)],
+    }
+
+
 class GroupContactSemanticsTests(unittest.TestCase):
     def test_uncorroborated_side_door_is_review_evidence_not_hard_impact(self) -> None:
         cameras = {
@@ -193,6 +222,40 @@ class GroupContactSemanticsTests(unittest.TestCase):
         self.assertEqual("MEDIUM", side["impact_level"])
         self.assertEqual("MEDIUM", side["contact_level"])
         self.assertIn("image-space overlap is not physical-contact proof", side["contact_semantics_reasons"])
+
+    def test_motion_only_hard_contact_without_bounding_box_overlap_is_also_downgraded(self) -> None:
+        # This is the gap the two prior fixes in this file didn't cover:
+        # hard_contact_candidate reached purely through generic
+        # vehicle_detected + motion thresholds, with no object_contact_candidate
+        # at all, used to skip the single-camera corroboration check entirely
+        # because that check only looked at object_contact_candidate.
+        motion_only = _motion_only_hard_contact_evidence()
+        cameras = {
+            "front": {"motion_samples": [_motion_sample(11.9, 0.01)]},
+            "back": {"motion_samples": [_motion_sample(11.7, 0.01)]},
+            "right_repeater": motion_only,
+        }
+
+        _apply_group_contact_context(cameras)
+
+        self.assertTrue(motion_only["single_camera_close_activity"])
+        self.assertFalse(motion_only["multi_camera_impact_corroborated"])
+        self.assertFalse(motion_only["hard_contact_candidate"])
+        self.assertFalse(motion_only["strong_impact_like_motion"])
+        self.assertEqual("MEDIUM", motion_only["impact_level"])
+        self.assertEqual("MEDIUM", motion_only["contact_level"])
+
+    def test_motion_only_hard_contact_with_real_corroboration_is_preserved(self) -> None:
+        motion_only = _motion_only_hard_contact_evidence()
+        cameras = {
+            "back": {"motion_samples": [_motion_sample(12.1, 0.6, 0.6)]},
+            "right_repeater": motion_only,
+        }
+
+        _apply_group_contact_context(cameras)
+
+        self.assertTrue(motion_only["multi_camera_impact_corroborated"])
+        self.assertTrue(motion_only["hard_contact_candidate"])
 
     def test_single_camera_hard_contact_is_unchanged(self) -> None:
         evidence = _side_door_evidence()
