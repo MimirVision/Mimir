@@ -55,6 +55,7 @@ import {
   aiConfidenceCopy,
   aiEvidence,
   aiModelName,
+  aiPendingReason,
   aiQualityWarning,
   aiRecommendedSeverity,
   aiReviewed,
@@ -103,6 +104,14 @@ interface IncidentViewerScreenProps {
   onReloadSession: () => Promise<MimirSession | null>
   onIncidentUpdated: (incident: MimirIncident) => void
   onManualStatusChange: (status: SeverityGroup) => void
+  // The same ordered list the library card grid is currently showing --
+  // lets the viewer jump directly to the next/previous clip without
+  // dropping back out to the grid. It re-renders with fresh data whenever
+  // the library's session reloads (e.g. right after a trash action), so a
+  // navigation target looked up from it is never stale by more than the one
+  // reload already in flight.
+  incidentList: MimirIncident[]
+  onNavigate: (incident: MimirIncident) => void
 }
 
 interface ClipActionResult {
@@ -1285,6 +1294,7 @@ function DetailsPanel({
   const aiEvidenceItems = safeTextList(ai.evidence)
   const aiConcernItems = safeTextList(ai.concerns).concat(safeTextList(incident.ai_concerns))
   const aiWarning = aiQualityWarning(incident)
+  const pendingAiReason = aiPendingReason(incident)
   const resolverReasons = severityReasonList(incident)
   const severityCapReason = safeText(debug.severity_cap_reason || incident.severity_cap_reason, '')
   const severityFloorReason = safeText(debug.severity_floor_reason, '')
@@ -1425,6 +1435,13 @@ function DetailsPanel({
                   ))}
                 </ul>
               )}
+            </div>
+          )}
+
+          {pendingAiReason && (
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
+              <div className="text-[12px] font-semibold text-[var(--mimir-text-muted)]">AI second opinion</div>
+              <div className="mt-2 text-[12px] leading-5 text-[var(--mimir-text-subtle)]">{pendingAiReason}</div>
             </div>
           )}
         </div>
@@ -2072,6 +2089,8 @@ export function IncidentViewerScreen({
   onReloadSession,
   onIncidentUpdated,
   onManualStatusChange,
+  incidentList,
+  onNavigate,
 }: IncidentViewerScreenProps) {
   const title = eventDisplayTitle(incident)
   const timestamp = formatDateTime(sourceEventTimestamp(incident))
@@ -2135,6 +2154,24 @@ export function IncidentViewerScreen({
     setActionMessage(fallbackMessage)
   }
 
+  // incidentList is the same ordered set the library grid is showing right
+  // now, so "adjacent" here means whatever the tester would see next by
+  // scrolling the grid, not just array order.
+  const adjacentIncident = (direction: 1 | -1): MimirIncident | null => {
+    const currentIndex = incidentList.findIndex(item => incidentActionId(item) === incidentActionId(incident))
+    if (currentIndex < 0) {
+      return null
+    }
+    return incidentList[currentIndex + direction] ?? null
+  }
+
+  const goToIncident = (direction: 1 | -1) => {
+    const target = adjacentIncident(direction)
+    if (target && busyAction === null) {
+      onNavigate(target)
+    }
+  }
+
   const updateManualStatus = (status: SeverityGroup) => {
     onManualStatusChange(status)
     setActionError('')
@@ -2150,6 +2187,12 @@ export function IncidentViewerScreen({
         ? 'Restored from Mimir Trash'
         : 'Moved to Mimir Trash'
 
+    // Captured before the action runs -- once this clip is actually trashed
+    // it drops out of incidentList on the next reload, so "next" has to mean
+    // next in the order the tester was looking at, not next in a list that
+    // no longer contains this clip.
+    const nextAfterTrash = action === 'move_to_trash' ? adjacentIncident(1) ?? adjacentIncident(-1) : null
+
     setBusyAction(busyKey)
     setActionError('')
     setActionDetails('')
@@ -2164,8 +2207,23 @@ export function IncidentViewerScreen({
       const report = parseStorageActionReport(result.report_json)
       const status = storageActionStatus(report)
       const details = storageActionDetails(result.report_json, result)
+      const succeeded = !status.partial && !status.failed && result.ok
 
-      await refreshCurrentIncident(status.partial || status.failed ? '' : successMessage)
+      // A trashed clip is hard to keep track of if the viewer just sits on
+      // it afterward -- move straight to whatever the tester would look at
+      // next instead of making them go back to the grid and re-enter.
+      if (action === 'move_to_trash' && succeeded) {
+        const refreshedSession = await onReloadSession()
+        const freshNext = nextAfterTrash && refreshedSession ? findIncident(refreshedSession, nextAfterTrash) : null
+        if (freshNext) {
+          onNavigate(freshNext)
+        } else {
+          onBack()
+        }
+        return
+      }
+
+      await refreshCurrentIncident(succeeded ? successMessage : '')
 
       if (status.partial) {
         setActionMessage('')
@@ -2439,6 +2497,18 @@ export function IncidentViewerScreen({
       return
     }
 
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      goToIncident(-1)
+      return
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      goToIncident(1)
+      return
+    }
+
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
       seekAdjacentMarker('previous')
@@ -2492,14 +2562,49 @@ export function IncidentViewerScreen({
         {/* Leaving mid-action re-opened the viewer when the action finished
             and refreshed the incident. Blocking the exit while a write is in
             flight is also the safer half: the session file is being rewritten. */}
-        <button
-          onClick={onBack}
-          disabled={busyAction !== null}
-          title={busyAction !== null ? 'Finishing the current action first...' : undefined}
-          className="h-9 rounded-lg bg-white/[0.03] px-3.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.03] disabled:hover:text-[var(--mimir-text-muted)]"
-        >
-          Back to Library
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            disabled={busyAction !== null}
+            title={busyAction !== null ? 'Finishing the current action first...' : undefined}
+            className="h-9 rounded-lg bg-white/[0.03] px-3.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.03] disabled:hover:text-[var(--mimir-text-muted)]"
+          >
+            Back to Library
+          </button>
+
+          {incidentList.length > 0 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => goToIncident(-1)}
+                disabled={busyAction !== null || !adjacentIncident(-1)}
+                title="Previous clip (Up arrow)"
+                aria-label="Previous clip"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.03] text-[13px] text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-white/[0.03]"
+              >
+                &#8593;
+              </button>
+              <button
+                onClick={() => goToIncident(1)}
+                disabled={busyAction !== null || !adjacentIncident(1)}
+                title="Next clip (Down arrow)"
+                aria-label="Next clip"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.03] text-[13px] text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-white/[0.03]"
+              >
+                &#8595;
+              </button>
+              {(() => {
+                const currentIndex = incidentList.findIndex(
+                  item => incidentActionId(item) === incidentActionId(incident),
+                )
+                return currentIndex >= 0 ? (
+                  <span className="ml-1 text-[11px] text-[var(--mimir-text-subtle)]">
+                    {currentIndex + 1} of {incidentList.length}
+                  </span>
+                ) : null
+              })()}
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 rounded-full border border-[rgba(157,183,170,0.14)] bg-[var(--mimir-accent-soft)] px-3 py-1.5 text-[12px] text-[var(--mimir-text-muted)]">
           <span className="h-2 w-2 rounded-full bg-[var(--mimir-status-green)]" />
