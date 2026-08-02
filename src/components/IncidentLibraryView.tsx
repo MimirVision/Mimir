@@ -942,6 +942,8 @@ export function IncidentLibraryView({
             onIncidentUpdated={updatedIncident => {
               setSelectedIncident(updatedIncident)
             }}
+            incidentList={visibleIncidents}
+            onNavigate={nextIncident => setSelectedIncident(nextIncident)}
         />
       </CrashSafeBoundary>
     )

@@ -220,7 +220,22 @@ export function reviewBadgeCopy(incident: MimirIncident) {
 }
 
 export function experimentalAiUsed(incident: MimirIncident) {
-  return Boolean(aiReviewed(incident) || aiModelName(incident) || Object.keys(aiEvidence(incident)).length > 0)
+  // aiModelName() alone is not proof of a real review: a clip still queued
+  // for asynchronous AI enrichment gets a placeholder record with the model
+  // name filled in but ai_reviewed=false and schema-default values
+  // (recommended_severity "IGNORE", confidence 0.0) standing in until the
+  // real pass runs. Treating that placeholder as a completed opinion showed
+  // testers a fake "AI recommends Ignore, 0% confidence" on clips the AI
+  // had never actually looked at.
+  return Boolean(aiReviewed(incident) || Object.keys(aiEvidence(incident)).length > 0)
+}
+
+export function aiPendingReason(incident: MimirIncident) {
+  if (experimentalAiUsed(incident)) {
+    return ''
+  }
+
+  return safeText(incident.ai_review_skipped_reason, '')
 }
 
 export function aiQualityWarning(incident: MimirIncident) {
