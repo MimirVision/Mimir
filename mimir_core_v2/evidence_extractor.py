@@ -974,14 +974,24 @@ def _apply_group_contact_context(camera_evidence: dict[str, dict]) -> None:
         evidence["distributed_uncorroborated_activity"] = False
         evidence["contact_semantics_reasons"] = []
 
-        candidate_time = 0.0
-        if evidence.get("object_contact_candidate"):
-            candidate_time = _safe_float(evidence.get("object_contact_time_sec"))
-        elif (
+        # hard_contact_candidate can be reached two ways: via object_contact_candidate
+        # (a bounding-box overlap with the ego vehicle), or entirely independently
+        # via _impact_candidate_details() from generic vehicle_detected + motion
+        # thresholds alone (see IMPACT_CANDIDATE_SHAKE_THRESHOLD/SPIKE_RATIO_THRESHOLD
+        # in that function) -- "some vehicle is somewhere in frame" plus ambient
+        # motion, with no notion of the object actually touching anything. Both need
+        # the same corroboration check below; only the bounding-box path used to get
+        # one, so a single uncorroborated camera whose only signal was the
+        # motion-only path was left floored to IMPORTANT untouched.
+        has_hard_contact_signal = bool(
             evidence.get("hard_contact_candidate")
             or evidence.get("strong_impact_like_motion")
             or str(evidence.get("impact_level") or "") == "HIGH"
-        ):
+        )
+        candidate_time = 0.0
+        if evidence.get("object_contact_candidate"):
+            candidate_time = _safe_float(evidence.get("object_contact_time_sec"))
+        elif has_hard_contact_signal:
             candidate_time = _safe_float(evidence.get("visual_contact_time_sec"))
             if candidate_time <= 0:
                 candidate_time = _safe_float(evidence.get("motion_spike_time_sec"))
@@ -1013,7 +1023,7 @@ def _apply_group_contact_context(camera_evidence: dict[str, dict]) -> None:
         )
         single_camera_close_activity = bool(
             is_grouped
-            and evidence.get("object_contact_candidate")
+            and (evidence.get("object_contact_candidate") or has_hard_contact_signal)
             and not support_cameras
             and not evidence.get("crash_safety_triggered")
             and not evidence.get("no_yolo_motion_impact_candidate")
@@ -1041,7 +1051,9 @@ def _apply_group_contact_context(camera_evidence: dict[str, dict]) -> None:
         evidence["single_camera_close_activity"] = True
         evidence["contact_semantics_reasons"] = [
             reason,
-            "image-space overlap is not physical-contact proof",
+            "image-space overlap is not physical-contact proof"
+            if evidence.get("object_contact_candidate")
+            else "a detected vehicle plus ambient motion is not a verified touch",
         ]
         evidence["hard_contact_candidate"] = False
         evidence["rear_impact_candidate"] = False
