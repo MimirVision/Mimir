@@ -10,6 +10,12 @@ export interface OutboxEntry {
   attempts: number
   last_error: string
   status: string
+  /**
+   * Set by the Rust side when the submission can never succeed as it stands --
+   * an oversized package, or a rejection the server will simply repeat.
+   * Optional because entries written before this field existed lack it.
+   */
+  permanent_failure?: boolean
 }
 
 // Mirrors MAX_AUTO_RETRY_ATTEMPTS in src-tauri/src/outbox.rs. Duplicated
@@ -17,7 +23,7 @@ export interface OutboxEntry {
 // affects wording -- but it does have to be changed in both places.
 export const MAX_AUTO_RETRY_ATTEMPTS = 5
 
-export type OutboxState = 'sent' | 'needs_manual_retry' | 'pending'
+export type OutboxState = 'sent' | 'cannot_send' | 'needs_manual_retry' | 'pending'
 
 /** `chrono_like_now()` in main.rs writes `unix:<seconds>`, not an ISO string. */
 export function outboxTimestamp(value: string) {
@@ -55,6 +61,12 @@ export function outboxState(entry: OutboxEntry): OutboxState {
     return 'sent'
   }
 
+  // Checked before the attempt cap: an unsendable package is not something a
+  // manual retry rescues either, so offering one would just waste the upload.
+  if (entry.permanent_failure) {
+    return 'cannot_send'
+  }
+
   // Past the cap, auto-retry-on-launch deliberately stops touching this entry,
   // so it will sit there forever unless the user asks. Saying "will retry
   // automatically" at that point would be a lie.
@@ -64,6 +76,10 @@ export function outboxState(entry: OutboxEntry): OutboxState {
 export function outboxStateLabel(state: OutboxState) {
   if (state === 'sent') {
     return 'Sent'
+  }
+
+  if (state === 'cannot_send') {
+    return 'Cannot be sent'
   }
 
   if (state === 'needs_manual_retry') {
@@ -78,11 +94,20 @@ export function outboxStateDetail(state: OutboxState) {
     return 'This one reached Mimir.'
   }
 
+  if (state === 'cannot_send') {
+    return 'The submission service refused this and would refuse it again, so Mimir has stopped trying. Your encrypted copy is still saved on this computer.'
+  }
+
   if (state === 'needs_manual_retry') {
     return `Mimir stopped retrying this automatically after ${MAX_AUTO_RETRY_ATTEMPTS} attempts. Your copy is still saved.`
   }
 
   return 'Mimir will try again next time it starts. Your copy is saved either way.'
+}
+
+/** Whether offering a retry button would be honest. */
+export function canRetry(entry: OutboxEntry) {
+  return outboxState(entry) !== 'sent' && outboxState(entry) !== 'cannot_send'
 }
 
 export function isUnsent(entry: OutboxEntry) {
@@ -101,15 +126,25 @@ export function sortedOutboxEntries(entries: OutboxEntry[]) {
 }
 
 export function outboxSummary(entries: OutboxEntry[]) {
-  const unsent = entries.filter(isUnsent).length
-
   if (entries.length === 0) {
     return ''
   }
 
-  if (unsent === 0) {
-    return entries.length === 1 ? '1 sent' : `${entries.length} sent`
+  const blocked = entries.filter(entry => outboxState(entry) === 'cannot_send').length
+  const waiting = entries.filter(canRetry).length
+
+  // Blocked entries are called out separately: rolling them into "waiting to
+  // send" would promise a delivery that is never coming.
+  const parts: string[] = []
+  if (waiting > 0) {
+    parts.push(`${waiting} waiting to send`)
+  }
+  if (blocked > 0) {
+    parts.push(`${blocked} cannot be sent`)
+  }
+  if (parts.length > 0) {
+    return parts.join(', ')
   }
 
-  return unsent === 1 ? '1 waiting to send' : `${unsent} waiting to send`
+  return entries.length === 1 ? '1 sent' : `${entries.length} sent`
 }
