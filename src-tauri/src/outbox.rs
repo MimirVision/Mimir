@@ -94,7 +94,10 @@ pub struct OutboxEntry {
 #[derive(Serialize, Clone)]
 pub struct OutboxSubmitResult {
     pub package_id: String,
-    pub status: String, // "sent" | "pending"
+    // "blocked" means this entry can never be sent as it stands -- its
+    // encrypted package is missing, or its kind is unrecognized -- as opposed
+    // to "pending", which is a send that failed and is worth retrying.
+    pub status: String, // "sent" | "pending" | "blocked"
     pub message: String,
 }
 
@@ -289,7 +292,20 @@ pub async fn retry_pending() -> Result<Vec<OutboxSubmitResult>, ScanFailure> {
             continue;
         }
         let entry_dir = outbox_entry_dir(&root, &entry.package_id);
-        results.push(attempt_upload(&entry_dir).await?);
+        // One unusable entry must not abort the batch. `attempt_upload` returns
+        // `Err` -- not a recorded failure -- when the package file is gone or the
+        // kind is unrecognized, so propagating here would let a single quarantined
+        // or hand-edited entry permanently block every *other* pending submission
+        // from ever retrying on launch. Record it and keep going instead.
+        let result = match attempt_upload(&entry_dir).await {
+            Ok(result) => result,
+            Err(failure) => OutboxSubmitResult {
+                package_id: entry.package_id.clone(),
+                status: "blocked".to_string(),
+                message: failure.message.clone(),
+            },
+        };
+        results.push(result);
     }
     Ok(results)
 }
@@ -526,6 +542,46 @@ mod tests {
             // touched an entry it skipped.
             let reloaded = read_entry(&entry_dir).unwrap();
             assert_eq!(reloaded.attempts, MAX_AUTO_RETRY_ATTEMPTS + 1);
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn one_unusable_entry_does_not_block_the_rest_of_the_batch() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let server = spawn_mock_server(OUTBOX_APP_TOKEN);
+
+        with_pending_entry(&server.url, |good_entry_dir| async move {
+            // A second entry staged as pending but with no encrypted package
+            // on disk -- exactly what an antivirus quarantine leaves behind.
+            // Its id sorts before the healthy entry's so it is reached first
+            // on any sane directory ordering.
+            let root = outbox_root().unwrap();
+            let broken_id = "00000000000000000000000000000000";
+            let broken_dir = outbox_entry_dir(&root, broken_id);
+            std::fs::create_dir_all(&broken_dir).expect("create broken entry dir");
+            stage_pending_entry(&broken_dir, SubmissionKind::Feedback, broken_id)
+                .expect("stage broken entry");
+
+            // This previously propagated the broken entry's error with `?`, so
+            // a single quarantined package permanently stopped every *other*
+            // pending submission from ever being retried on launch.
+            let results = retry_pending()
+                .await
+                .expect("one unusable entry must not fail the whole batch");
+
+            assert_eq!(results.len(), 2, "both entries should be accounted for");
+            assert!(
+                results
+                    .iter()
+                    .any(|result| result.package_id == broken_id && result.status == "blocked"),
+                "the unusable entry should be reported as blocked rather than aborting the run"
+            );
+            assert_eq!(
+                read_entry(&good_entry_dir).unwrap().status,
+                "sent",
+                "the healthy entry must still have been uploaded"
+            );
         })
         .await;
     }

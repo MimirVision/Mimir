@@ -44,9 +44,18 @@ const SESSION = {
   scan_summary: { total_clips: 2, incidents: 2 },
 }
 
-async function stubTauri(page: import('@playwright/test').Page) {
+interface StubOutboxEntry {
+  kind: string
+  package_id: string
+  created_at: string
+  attempts: number
+  last_error: string
+  status: string
+}
+
+async function stubTauri(page: import('@playwright/test').Page, outbox: StubOutboxEntry[] = []) {
   await page.addInitScript(
-    ({ session }) => {
+    ({ session, outbox }) => {
       window.localStorage.setItem('mimir_onboarding_completed', 'true')
       window.localStorage.setItem('mimir_beta_privacy_notice_accepted', 'true')
 
@@ -73,6 +82,12 @@ async function stubTauri(page: import('@playwright/test').Page) {
           target_dir: '',
         },
         cancel_local_scan: true,
+        // The import screen lists the Outbox on mount and App.tsx sweeps it
+        // once on launch. Empty is the normal state and renders no panel at
+        // all; the Submissions describe block below passes entries instead.
+        list_outbox_entries: outbox,
+        retry_pending_outbox: [],
+        retry_outbox_entry: { package_id: outbox[0]?.package_id ?? '', status: 'sent', message: 'Sent.' },
       }
 
       // Tauri v2 routes every `invoke` through this hook.
@@ -88,7 +103,7 @@ async function stubTauri(page: import('@playwright/test').Page) {
         unregisterListener: () => Promise.resolve(),
       }
     },
-    { session: SESSION },
+    { session: SESSION, outbox },
   )
 }
 
@@ -189,5 +204,80 @@ test.describe('incident screens', () => {
       expect(dialog.modal).toBe('true')
       expect(dialog.labelled).toBe(true)
     }
+  })
+})
+
+// The Submissions panel renders only when the Outbox is non-empty, so the
+// stub above hides it from every other test. Without this block, a whole
+// interactive surface -- the only place a user can retry a failed submission
+// -- would ship with no accessibility coverage at all.
+test.describe('the submissions panel', () => {
+  const PENDING = {
+    kind: 'feedback',
+    package_id: 'b'.repeat(32),
+    created_at: 'unix:1785000000',
+    attempts: 2,
+    last_error: 'Could not reach the submission server.',
+    status: 'pending',
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await stubTauri(page, [PENDING])
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+  })
+
+  test('surfaces an unsent submission without serious violations', async ({ page }) => {
+    await expect(page.getByText('1 waiting to send')).toBeVisible()
+    await expect(page.getByText('Waiting to send -- 2 attempts')).toBeVisible()
+
+    expect(await seriousViolations(page)).toEqual([])
+  })
+
+  test('the retry control names what it will retry', async ({ page }) => {
+    // Not just "Retry": with two kinds of submission in one list, the
+    // accessible name has to say which one this button acts on.
+    const retry = page.getByRole('button', { name: 'Retry sending this feedback' })
+    await expect(retry).toBeVisible()
+
+    await retry.click()
+    await expect(page.getByText('Sent.', { exact: true })).toBeVisible()
+  })
+
+  test('the failure reason is available but folded away by default', async ({ page }) => {
+    const reason = page.getByText('Could not reach the submission server.')
+    await expect(reason).toBeHidden()
+
+    await page.getByText('Why it did not send').click()
+    await expect(reason).toBeVisible()
+  })
+})
+
+// Zero real footage contributions arrived during the entire free beta, and the
+// batch button was hidden until consent details already existed -- so a user
+// who had never contributed saw no affordance at all, and the guidance message
+// behind it was unreachable. These pin the recovered path.
+test.describe('contributing from the library', () => {
+  test.beforeEach(async ({ page }) => {
+    await stubTauri(page)
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Back to latest session' }).click()
+    await page.getByRole('button', { name: 'Select', exact: true }).click()
+    await page.locator('article').first().click()
+  })
+
+  test('the batch contribute action is offered before any consent details exist', async ({ page }) => {
+    // The trailing ellipsis is the promise that it opens something first.
+    await expect(page.getByRole('button', { name: 'Contribute selected...' })).toBeVisible()
+  })
+
+  test('it hands off to the consent form instead of dead-ending', async ({ page }) => {
+    await page.getByRole('button', { name: 'Contribute selected...' }).click()
+
+    await expect(page.getByRole('button', { name: 'Back to Library' })).toBeVisible()
+    const panel = page.locator('#mimir-contribute-panel')
+    // Arriving with it already open is the whole point: the library unmounts
+    // on handoff, so any explanatory message there would never be seen.
+    await expect(panel).toHaveAttribute('open', '')
+    await expect(panel.getByText('How do you know this footage is yours?')).toBeVisible()
   })
 })

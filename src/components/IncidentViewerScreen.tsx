@@ -4,6 +4,9 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { CrashSafeBoundary, logIncidentDiagnostic } from './CrashSafeBoundary'
 import {
   readContributorIdentity,
+  permissionReferenceHelp,
+  permissionReferenceLabel,
+  permissionReferencePlaceholder,
   rightsBasisLabel,
   saveContributorIdentity,
   type RightsBasis,
@@ -96,6 +99,22 @@ import {
 } from '../lib/incidentVideoPaths'
 import type { MimirIncident, MimirSession, MimirTimelineMarker } from '../types'
 
+// Opening the contribute disclosure happens from two places now -- the
+// feedback panel's "Contribute this incident too" link, and the library's
+// batch action handing off here to collect consent details the first time.
+// One implementation so the two cannot drift apart.
+function revealContributePanel() {
+  const panel = document.getElementById('mimir-contribute-panel')
+
+  if (!(panel instanceof HTMLDetailsElement)) {
+    return false
+  }
+
+  panel.open = true
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  return true
+}
+
 interface IncidentViewerScreenProps {
   incident: MimirIncident
   session?: MimirSession
@@ -104,6 +123,10 @@ interface IncidentViewerScreenProps {
   onReloadSession: () => Promise<MimirSession | null>
   onIncidentUpdated: (incident: MimirIncident) => void
   onManualStatusChange: (status: SeverityGroup) => void
+  // Set when the library handed off here specifically to collect consent
+  // details -- the consent form only exists on this screen, so arriving with
+  // it already open is what makes "Contribute selected" work the first time.
+  autoOpenContribute?: boolean
   // The same ordered list the library card grid is currently showing --
   // lets the viewer jump directly to the next/previous clip without
   // dropping back out to the grid. It re-renders with fresh data whenever
@@ -1563,13 +1586,7 @@ function AiFeedbackPanel({
           requirements.{' '}
           <button
             type="button"
-            onClick={() => {
-              const panel = document.getElementById('mimir-contribute-panel')
-              if (panel instanceof HTMLDetailsElement) {
-                panel.open = true
-                panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }
-            }}
+            onClick={() => revealContributePanel()}
             className="font-semibold text-[var(--mimir-text)] underline decoration-white/30 underline-offset-2 hover:decoration-white/60"
           >
             Contribute this incident too
@@ -1649,8 +1666,14 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
   // encrypted and staged either way, so a "save without sending yet" click
   // costs nothing extra and cannot lose the encrypted file if declined.
   const exportPackage = async (oneClick: boolean, attemptSend: boolean) => {
-    if (!recordedBy.trim() || !permissionReference.trim()) {
-      setError('Complete the consent details first.')
+    // Say which field is missing. "Complete the consent details first" left the
+    // user hunting, and the permission reference is the one people get stuck on.
+    if (!recordedBy.trim()) {
+      setError('Add your name first -- it is recorded with the consent statement.')
+      return
+    }
+    if (!permissionReference.trim()) {
+      setError(`Answer "${permissionReferenceLabel(rightsBasis)}" before contributing.`)
       return
     }
     if (!oneClick && !rightsConfirmed) {
@@ -1749,13 +1772,25 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         <option value="explicit_permission">I have explicit permission</option>
         <option value="public_license">A public license permits this use</option>
       </select>
-      <input
-        value={permissionReference}
-        onChange={event => setPermissionReference(event.target.value)}
-        placeholder="Ownership, permission, or license reference"
-        aria-label="Ownership, permission, or license reference"
-        className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
-      />
+      <div className="grid gap-1.5">
+        <label
+          htmlFor="mimir-permission-reference"
+          className="text-[12px] font-medium text-[var(--mimir-text)]"
+        >
+          {permissionReferenceLabel(rightsBasis)}
+        </label>
+        <input
+          id="mimir-permission-reference"
+          value={permissionReference}
+          onChange={event => setPermissionReference(event.target.value)}
+          placeholder={permissionReferencePlaceholder(rightsBasis)}
+          aria-describedby="mimir-permission-reference-help"
+          className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
+        />
+        <p id="mimir-permission-reference-help" className="text-[11px] leading-4 text-[var(--mimir-text-subtle)]">
+          {permissionReferenceHelp(rightsBasis)}
+        </p>
+      </div>
       <button
         type="button"
         onClick={() => void choosePermissionRecord()}
@@ -1995,8 +2030,12 @@ function ReviewActionsPanel({
       </details>
 
       <details id="mimir-contribute-panel" className="mt-3 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
+        {/* Was "Export for Mimir training", which reads as a developer tool and
+            buried the one action that supplies the training corpus. The button
+            inside, the docs, and the library's bulk action all say
+            "Contribute" -- this now matches them. */}
         <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
-          Export for Mimir training
+          Contribute this clip to improve Mimir
         </summary>
         <TrainingContributionPanel incident={incident} session={session} />
       </details>
@@ -2089,6 +2128,7 @@ export function IncidentViewerScreen({
   onReloadSession,
   onIncidentUpdated,
   onManualStatusChange,
+  autoOpenContribute = false,
   incidentList,
   onNavigate,
 }: IncidentViewerScreenProps) {
@@ -2119,6 +2159,14 @@ export function IncidentViewerScreen({
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackError, setFeedbackError] = useState('')
   const [showKeyMoments, setShowKeyMoments] = useState(true)
+
+  // Runs after commit, so the disclosure is in the DOM by the time this fires.
+  useEffect(() => {
+    if (autoOpenContribute) {
+      revealContributePanel()
+    }
+  }, [autoOpenContribute, incident.id])
+
   const markers = useMemo(() => deriveReviewTimelineMarkers(incident, duration), [incident, duration])
 
   useEffect(() => {

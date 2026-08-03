@@ -69,3 +69,51 @@ export function rightsBasisLabel(basis: RightsBasis): string {
 
   return 'Public license'
 }
+
+// The consent receipt requires a non-empty permission reference -- enforced in
+// three places (this form, main.rs's valid_free_text_argument, and
+// dataset_package.py's consent validation), because it is what makes the
+// receipt auditable rather than a bare checkbox.
+//
+// It was one field labelled "Ownership, permission, or license reference" for
+// all three bases. Someone contributing footage from their own car has no idea
+// what to type there, and it is required, so the common case dead-ends. These
+// make the question answerable per basis without weakening what gets recorded:
+// the user still types their own attestation, it is just a question they can
+// actually answer.
+
+export function permissionReferenceLabel(basis: RightsBasis): string {
+  if (basis === 'owned') {
+    return 'How do you know this footage is yours?'
+  }
+
+  if (basis === 'explicit_permission') {
+    return 'Who gave permission, and how?'
+  }
+
+  return 'Which license permits this use?'
+}
+
+export function permissionReferencePlaceholder(basis: RightsBasis): string {
+  if (basis === 'owned') {
+    return 'e.g. Recorded by my own Tesla parked outside my house'
+  }
+
+  if (basis === 'explicit_permission') {
+    return 'e.g. Written permission from the vehicle owner, 2026-07-14'
+  }
+
+  return 'e.g. CC BY 4.0, with a link to the source'
+}
+
+export function permissionReferenceHelp(basis: RightsBasis): string {
+  if (basis === 'owned') {
+    return 'A short sentence in your own words is enough. It is stored with the clip so the consent record says how you came to have it.'
+  }
+
+  if (basis === 'explicit_permission') {
+    return 'Point at something checkable later -- who granted it, when, and in what form. Attach the record itself below if you have it.'
+  }
+
+  return 'Name the license and where the footage came from, so the terms can be checked later.'
+}

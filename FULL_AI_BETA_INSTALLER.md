@@ -6,9 +6,8 @@ The Full AI Beta should feel like a normal consumer desktop app:
 
 1. Install Mimir.
 2. Open Mimir.
-3. Confirm AI review is ready.
-4. Choose a USB drive or footage folder.
-5. Analyze footage.
+3. Choose a USB drive or footage folder.
+4. Analyze footage.
 
 Normal users should not need to understand the scanner internals, install developer tools, or run terminal commands before they can review incidents.
 
@@ -39,16 +38,21 @@ Developer workflows can still exist, but they should not appear as the normal pr
 
 ## AI Readiness Rule
 
-Full AI Beta requires AI review readiness before scanning.
+This section previously required AI review readiness before scanning, and said
+Mimir must block scanning without it and must not expose a basic scan option.
+**That is not what ships and was never what shipped.** It described a
+`FULL_AI_BETA` flag that has since been removed from `src/config.ts`; every
+branch behind it was already unreachable because `USE_MIMIR_CORE_V2` is on.
 
-If AI setup is broken or incomplete:
+What actually ships:
 
-- Mimir blocks scanning.
-- Mimir shows friendly repair/recheck UI.
-- Mimir does not silently fall back to basic scanning.
-- Mimir does not expose a standard/basic scan option in the normal UI.
-
-The normal ready state should communicate that AI review is ready and the user can choose footage.
+- Local evidence scanning is the primary path and needs no AI runtime.
+- The optional local vision-language second opinion is **off by default**, lives
+  behind the "Labs" disclosure in the import screen, and is opt-in per user.
+- A missing or broken Ollama setup never blocks a scan. It only means the
+  optional second opinion is unavailable.
+- The second opinion can only escalate a REVIEW result. It cannot downgrade
+  hard local evidence, and it is not authoritative. See `docs/LIMITATIONS.md`.
 
 ## Internal Pipeline Clarification
 
@@ -73,7 +77,7 @@ On a fresh Windows PC:
 - No manual terminal setup is required.
 - Install Mimir.
 - Open Mimir.
-- AI readiness passes.
+- System check passes.
 - Select a USB drive or footage folder.
 - Scan footage.
 - Open an incident.

@@ -9,7 +9,7 @@ import { friendlyMessage } from './lib/errorMessages'
 import { ImportPanel } from './components/ImportPanel'
 import { IncidentLibraryView } from './components/IncidentLibraryView'
 import { OnboardingFlow } from './components/OnboardingFlow'
-import { FULL_AI_BETA, USE_MIMIR_CORE_V2 } from './config'
+import { USE_MIMIR_CORE_V2 } from './config'
 import type {
   AiTimeoutSec,
   BackendProgress,
@@ -316,6 +316,15 @@ export default function App() {
   useEffect(() => {
     void runSystemCheck()
   }, [runSystemCheck])
+
+  // Auto-retry-on-launch for anything still sitting in the Outbox. This is
+  // deliberately silent: the durable queue already records each attempt and its
+  // error on disk, unsent packages are never lost, and a failed background
+  // retry is not something to interrupt the user with at startup. The attempt
+  // cap in outbox.rs is what stops a broken connection retry-storming here.
+  useEffect(() => {
+    void invoke('retry_pending_outbox').catch(() => {})
+  }, [])
 
   const recheckLocalAi = useCallback(async () => {
     setIsCheckingLocalAi(true)
@@ -691,14 +700,14 @@ export default function App() {
       return
     }
 
-    if (FULL_AI_BETA && !USE_MIMIR_CORE_V2 && localAiStatus?.ok !== true) {
+    if (!USE_MIMIR_CORE_V2 && localAiStatus?.ok !== true) {
       setScanState('error')
       setScanError('Mimir needs to finish setup before scanning. AI review is not ready.')
       setSessionLoadState('idle')
       return
     }
 
-    await runScan(USE_MIMIR_CORE_V2 ? experimentalAiEnabled : FULL_AI_BETA ? true : localAiStatus?.ok === true)
+    await runScan(USE_MIMIR_CORE_V2 ? experimentalAiEnabled : localAiStatus?.ok === true)
   }
 
   const pullLocalAiModel = async () => {
