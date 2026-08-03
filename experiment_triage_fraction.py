@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -73,8 +74,20 @@ def severity_of(incident: dict) -> str:
     return str(incident.get("final_severity") or incident.get("severity") or "").upper()
 
 
-def build_subset(source: Path, count: int, workdir: Path) -> Path:
-    """Junction the first `count` group folders so nothing is copied."""
+def build_subset(source: Path, count: int, workdir: Path, stage_local: bool) -> Path:
+    """Make the chosen groups available for scanning.
+
+    Junctions by default (instant, nothing copied). With `stage_local`, the
+    footage is copied to local disk first instead.
+
+    Staging locally matters for two reasons. Practically, scanning straight off
+    a USB drive means a 5-10 minute sustained read, and a dropout part-way
+    through kills the run -- which is exactly how the first two attempts at
+    this measurement died. Methodologically, it is also the better experiment:
+    reading over USB inflates decode time, which understates the detector's
+    share of scan cost, and that share is the number this script exists to
+    measure. A short copy burst is far less likely to drop than a long scan.
+    """
 
     groups = sorted(item for item in source.iterdir() if item.is_dir())
     if count > 0:
@@ -86,11 +99,23 @@ def build_subset(source: Path, count: int, workdir: Path) -> Path:
     subset = workdir / "subset"
     subset.mkdir(parents=True, exist_ok=True)
 
-    for group in groups:
-        link = subset / group.name
+    for index, group in enumerate(groups, start=1):
+        target = subset / group.name
+
+        if stage_local:
+            print(f"  staging {index}/{len(groups)}: {group.name}", flush=True)
+            try:
+                shutil.copytree(group, target)
+            except OSError as error:
+                raise SystemExit(
+                    f"Could not copy {group.name} ({error}).\n"
+                    "If the source is a removable drive, it may have dropped out mid-copy."
+                ) from error
+            continue
+
         # /J is a directory junction: no copy, no admin rights needed.
         result = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(link), str(group)],
+            ["cmd", "/c", "mklink", "/J", str(target), str(group)],
             capture_output=True,
             text=True,
         )
@@ -100,7 +125,7 @@ def build_subset(source: Path, count: int, workdir: Path) -> Path:
     return subset
 
 
-def run_scan(source: Path, output: Path, disable_yolo: bool) -> tuple[dict, float]:
+def run_scan(source: Path, output: Path, disable_yolo: bool, cache_dir: Path) -> tuple[dict, float]:
     output.mkdir(parents=True, exist_ok=True)
     command = [
         sys.executable,
@@ -115,12 +140,22 @@ def run_scan(source: Path, output: Path, disable_yolo: bool) -> tuple[dict, floa
     if disable_yolo:
         command.append("--disable-yolo")
 
+    # The detector cache is GLOBAL by default (%LOCALAPPDATA%\Mimir\cache\
+    # detector) and persists across runs, so a pass over footage that was
+    # scanned before is served from it and reports near-zero detector time.
+    # That silently invalidates any timing comparison. Point each pass at its
+    # own empty directory so both are genuinely cold -- and so the developer's
+    # real cache is left untouched.
+    environment = dict(os.environ)
+    environment["MIMIR_DETECTOR_CACHE_DIR"] = str(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
     label = "detector-free triage" if disable_yolo else "full pipeline"
-    print(f"  running {label}...", flush=True)
+    print(f"  running {label} (cold cache)...", flush=True)
     started = time.monotonic()
     # Output is captured rather than streamed so a failure leaves the real
     # error behind instead of an empty log.
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, capture_output=True, text=True, env=environment)
     elapsed = time.monotonic() - started
 
     if result.returncode != 0:
@@ -156,6 +191,11 @@ def main() -> int:
     parser.add_argument("--input", required=True, help="Folder containing event-group subfolders.")
     parser.add_argument("--groups", type=int, default=40, help="How many groups to use. 0 means all.")
     parser.add_argument("--keep-output", action="store_true", help="Leave the scan output on disk.")
+    parser.add_argument(
+        "--stage-local",
+        action="store_true",
+        help="Copy the footage to local disk before scanning. Use when the source is a removable drive.",
+    )
     args = parser.parse_args()
 
     source = Path(args.input)
@@ -164,14 +204,21 @@ def main() -> int:
 
     workdir = Path(tempfile.mkdtemp(prefix="mimir-exp0-"))
     try:
-        subset = build_subset(source, args.groups, workdir)
+        subset = build_subset(source, args.groups, workdir, args.stage_local)
         group_count = len(list(subset.iterdir()))
-        clips = sum(1 for _ in subset.rglob("*.mp4"))
-        print(f"Subset: {group_count} groups, {clips} clips (junctioned, nothing copied)")
+        clip_paths = list(subset.rglob("*.mp4"))
+        clips = len(clip_paths)
+        gigabytes = sum(path.stat().st_size for path in clip_paths) / (1024**3)
+        placement = "copied to local disk" if args.stage_local else "junctioned, nothing copied"
+        print(f"Subset: {group_count} groups, {clips} clips, {gigabytes:.1f} GB ({placement})")
         print()
 
-        triage, triage_seconds = run_scan(subset, workdir / "out_noyolo", disable_yolo=True)
-        full, full_seconds = run_scan(subset, workdir / "out_full", disable_yolo=False)
+        triage, triage_seconds = run_scan(
+            subset, workdir / "out_noyolo", disable_yolo=True, cache_dir=workdir / "cache_noyolo"
+        )
+        full, full_seconds = run_scan(
+            subset, workdir / "out_full", disable_yolo=False, cache_dir=workdir / "cache_full"
+        )
 
         triage_best = summarise(triage)
         full_best = summarise(full)
@@ -193,6 +240,30 @@ def main() -> int:
         if triage_seconds > 0:
             print(f"Triage is                   {full_seconds / triage_seconds:6.1f}x cheaper")
         print()
+
+        # The self-reported performance block is the trustworthy source: wall
+        # clock includes process startup and model load, and cannot tell a real
+        # inference run from a cache hit.
+        for label, session in (("triage", triage), ("full", full)):
+            performance = session.get("performance") or {}
+            hits = performance.get("detector_cache_hits", 0)
+            misses = performance.get("detector_cache_misses", 0)
+            detector_seconds = performance.get("object_detector_runtime_sec", 0.0) or 0.0
+            ready = performance.get("local_results_ready_sec", 0.0) or 0.0
+            share = (100 * detector_seconds / ready) if ready else 0.0
+            print(f"{label} pass:")
+            print(f"  detector runtime:         {detector_seconds:7.1f}s  ({share:.0f}% of scan)")
+            print(f"  inferences:               {performance.get('object_detector_inference_count', 0)}")
+            print(f"  provider:                 {performance.get('object_detector_provider', 'unknown')}")
+            print(f"  cache hits / misses:      {hits} / {misses}")
+            if hits:
+                print("  !! WARNING: cache hits above zero -- this pass was NOT cold,")
+                print("     so its detector timing understates the real cost.")
+            parts = performance.get("parts_sec") or {}
+            if parts:
+                ranked = sorted(parts.items(), key=lambda item: -(item[1] or 0))
+                print("  slowest stages:           " + ", ".join(f"{k}={v:.1f}s" for k, v in ranked[:4]))
+            print()
         print(f"KEPT BY TRIAGE:             {len(kept)}/{len(groups)}  ({100 * len(kept) / total:.1f}%)")
         print("  ^ the fraction that would need uploading under selective upload")
         print()
