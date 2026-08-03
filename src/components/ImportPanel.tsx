@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import mimirLockup from '../assets/mimir-lockup.png'
-import { FULL_AI_BETA, MIMIR_VERSION, USE_MIMIR_CORE_V2 } from '../config'
+import { MIMIR_VERSION, USE_MIMIR_CORE_V2 } from '../config'
 import { ActiveScanStatus } from './ActiveScanStatus'
 import type { ScanOutput } from './ActiveScanStatus'
 import { ModelUpdatePanel } from './ModelUpdatePanel'
+import { OutboxPanel } from './OutboxPanel'
 import type {
   AiTimeoutSec,
   BackendProgress,
@@ -591,7 +592,7 @@ function ReadinessPanel({
   }
 
   const aiReady = localAiStatus?.ok === true
-  const aiRequired = FULL_AI_BETA && !USE_MIMIR_CORE_V2
+  const aiRequired = !USE_MIMIR_CORE_V2
 
   if (!USE_MIMIR_CORE_V2 && isCheckingLocalAi) {
     return (
@@ -722,7 +723,7 @@ export function ImportPanel({
   const systemFailures = failedSystemChecks(systemCheck)
   const scannerReady = systemCheck?.ok === true
   const aiReviewReady = localAiStatus?.ok === true
-  const aiRequired = FULL_AI_BETA && !USE_MIMIR_CORE_V2
+  const aiRequired = !USE_MIMIR_CORE_V2
   const canAnalyze = hasSelectedFolder && scannerReady && (!aiRequired || aiReviewReady) && !isWorking
 
   return (
@@ -993,6 +994,10 @@ export function ImportPanel({
                 />
                 <ModelUpdatePanel />
               </details>
+
+              {/* Renders nothing unless something has actually been submitted,
+                  so this stays invisible for anyone who never sends feedback. */}
+              <OutboxPanel />
             </>
           )}
 

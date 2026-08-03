@@ -68,7 +68,10 @@ export interface TrainingContributionResult {
 
 export interface OutboxSubmitResult {
   package_id: string
-  status: 'sent' | 'pending'
+  // 'blocked' means the entry cannot be sent at all -- its encrypted package is
+  // missing or its kind is unrecognized -- as opposed to 'pending', which is a
+  // send that failed and is worth retrying.
+  status: 'sent' | 'pending' | 'blocked'
   message: string
 }
 
@@ -127,9 +130,13 @@ export function incidentFeedbackPayload(
     ai_model: session?.ai_model ?? (aiModelName(incident) || null),
     ai_reviewed_groups: session?.ai_reviewed_groups ?? null,
     ai_failed_groups: session?.ai_failed_groups ?? null,
-    thumbnail_path: cleanPath(incident.thumbnail) || cleanPath(incident.hero_thumbnail),
-    hero_thumbnail_path: cleanPath(incident.hero_thumbnail),
-    contact_sheet_path: cleanPath(incident.contact_sheet),
+    // Reduced to bare filenames for the same reason as source_filename above:
+    // these are generated artifacts under the user's profile, so the absolute
+    // form carries the Windows account name into an uploaded package. PRIVACY.md
+    // says diagnostics redact source paths where practical -- here it is.
+    thumbnail_path: sourceFilename(cleanPath(incident.thumbnail) || cleanPath(incident.hero_thumbnail)),
+    hero_thumbnail_path: sourceFilename(cleanPath(incident.hero_thumbnail)),
+    contact_sheet_path: sourceFilename(cleanPath(incident.contact_sheet)),
     include_video_clip: includeVideo,
     video_included_by_user: includeVideo,
     automatic_upload: false,
