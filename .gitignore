@@ -17,6 +17,10 @@ Important/
 Review/
 Ignore/
 *.mp4_event_*.jpg
+# Regenerated from MimirOutputV2/ by harvest_feedback_labels.py, and it carries
+# submitter notes. The reviewed rows belong in benchmark_labels.csv, which is
+# tracked -- this working file is not the deliverable.
+feedback_label_worksheet.csv
 dist_backend/
 build_backend/
 *.pt

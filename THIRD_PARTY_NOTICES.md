@@ -1,8 +1,8 @@
 # Third-Party Notices
 
-## RF-DETR Nano
+## RF-DETR Small
 
-Mimir Core v2 uses an ONNX export of RF-DETR Nano for local person and
+Mimir Core v2 uses an ONNX export of RF-DETR Small for local person and
 vehicle candidate detection.
 
 - Project: RF-DETR
