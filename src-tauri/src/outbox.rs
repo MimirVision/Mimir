@@ -419,6 +419,18 @@ mod tests {
         F: FnOnce(PathBuf) -> Fut,
         Fut: Future<Output = ()>,
     {
+        with_pending_entry_of_kind(intake_url, SubmissionKind::Feedback, body).await
+    }
+
+    /// As above, but for a chosen submission kind. Contribution and feedback
+    /// take different routes and different package suffixes, and only feedback
+    /// was ever covered -- while contribution is the route that has never
+    /// delivered a real package in production.
+    async fn with_pending_entry_of_kind<F, Fut>(intake_url: &str, kind: SubmissionKind, body: F)
+    where
+        F: FnOnce(PathBuf) -> Fut,
+        Fut: Future<Output = ()>,
+    {
         struct EnvCleanup {
             root: PathBuf,
         }
@@ -440,11 +452,11 @@ mod tests {
         let entry_dir = outbox_entry_dir(&root, package_id);
         std::fs::create_dir_all(&entry_dir).expect("create entry dir");
         std::fs::write(
-            outbox_package_path(&entry_dir, SubmissionKind::Feedback),
+            outbox_package_path(&entry_dir, kind),
             b"age-encryption.org/v1\nfake payload, just needs the real header",
         )
         .expect("write fake package");
-        stage_pending_entry(&entry_dir, SubmissionKind::Feedback, package_id).expect("stage pending entry");
+        stage_pending_entry(&entry_dir, kind, package_id).expect("stage pending entry");
 
         body(entry_dir).await;
     }
@@ -624,6 +636,40 @@ mod tests {
             .map(|entries| !entries.is_empty())
             .unwrap_or(false);
         assert!(stored, "the mock server's storage should contain a feedback/<year> folder after a successful send");
+    }
+
+    #[tokio::test]
+    async fn a_contribution_reaches_the_contribution_route_and_storage() {
+        // Every other test here uses Feedback, so the contribution route had no
+        // coverage at all -- and contribution is the one that has never
+        // delivered a real package in production (the intake sync log shows a
+        // single synthetic object against 22 real feedback packages). A
+        // contribution takes a different route and a different package suffix,
+        // so "feedback works" was never evidence that this does.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let server = spawn_mock_server(OUTBOX_APP_TOKEN);
+        let storage_dir = server.storage_dir.clone();
+
+        with_pending_entry_of_kind(&server.url, SubmissionKind::Contribution, |entry_dir| async move {
+            let result = attempt_upload(&entry_dir).await.unwrap();
+            assert_eq!(result.status, "sent");
+
+            let reloaded = read_entry(&entry_dir).unwrap();
+            assert_eq!(reloaded.kind, "contribution");
+            assert_eq!(reloaded.status, "sent");
+            // The encrypted package survives a successful send, same as feedback.
+            assert!(outbox_package_path(&entry_dir, SubmissionKind::Contribution).is_file());
+        })
+        .await;
+
+        let stored = std::fs::read_dir(storage_dir.join("contributions"))
+            .and_then(|entries| entries.collect::<std::io::Result<Vec<_>>>())
+            .map(|entries| !entries.is_empty())
+            .unwrap_or(false);
+        assert!(
+            stored,
+            "a contribution must land under contributions/, not feedback/ -- the two are filed separately at intake",
+        );
     }
 }
 
