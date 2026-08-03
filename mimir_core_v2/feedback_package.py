@@ -27,7 +27,7 @@ import subprocess
 import tempfile
 import uuid
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .dataset_package import (
@@ -44,6 +44,33 @@ from .dataset_package import (
 
 FEEDBACK_PACKAGE_SCHEMA = "mimir_feedback_package_v1"
 
+# Values under these keys are absolute paths on the submitting user's machine,
+# inserted by the desktop app when it saves feedback locally. Locally that is
+# useful. In an uploaded package it carries the Windows account name
+# (C:\\Users\\<name>\\...) into data the developer receives, for no diagnostic
+# benefit the basename doesn't already give. PRIVACY.md commits to redacting
+# source paths where practical, and `build_feedback_package` is the single
+# point where feedback stops being local -- so it is redacted here rather than
+# in any one caller.
+_LOCAL_PATH_KEYS = ("feedback_folder", "included_video_path")
+
+
+def _redact_local_paths(feedback: dict[str, Any]) -> dict[str, Any]:
+    """Reduce known local-filesystem values to their bare filename.
+
+    Returns a copy: the caller's dict, and the local feedback.json it was read
+    from, are deliberately left untouched. Backslashes are normalised first so
+    a Windows path is reduced correctly even when this runs on Linux, where
+    `\\` is not a path separator.
+    """
+
+    redacted = dict(feedback)
+    for key in _LOCAL_PATH_KEYS:
+        value = redacted.get(key)
+        if isinstance(value, str) and value.strip():
+            redacted[key] = PurePosixPath(value.replace("\\", "/")).name or value
+    return redacted
+
 
 def build_feedback_package(feedback: dict[str, Any], video_path: Path | None, staging_root: Path) -> Path:
     """Stage feedback.json (+ an optional video copy) into a fresh folder
@@ -58,7 +85,7 @@ def build_feedback_package(feedback: dict[str, Any], video_path: Path | None, st
     collection = staging_root / package_id
     collection.mkdir(parents=True, exist_ok=False)
 
-    write_json(collection / "feedback.json", feedback)
+    write_json(collection / "feedback.json", _redact_local_paths(feedback))
 
     if video_path is not None:
         if not video_path.is_file():

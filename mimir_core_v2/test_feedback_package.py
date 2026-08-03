@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from .dataset_package import DatasetPackageError, find_age_executable
+from .dataset_package import DatasetPackageError, find_age_executable, read_json
 from .feedback_package import (
     FEEDBACK_PACKAGE_SCHEMA,
     build_feedback_package,
@@ -103,6 +103,29 @@ class FeedbackPackageTest(unittest.TestCase):
             video.read_bytes(),
         )
 
+    def test_local_paths_do_not_survive_into_an_encrypted_package(self) -> None:
+        account_path = r"C:\Users\realname\Documents\Mimir Feedback\incident_0009_20260802T101500Z"
+        feedback = {
+            "incident_id": "incident_0009",
+            "user_selected_feedback": "Correct",
+            "feedback_folder": account_path,
+            "included_video_path": account_path + r"\clip.mp4",
+        }
+        staging = self.root / "staging"
+        staging.mkdir()
+        collection = build_feedback_package(feedback, None, staging)
+        output = self.root / "out.mimir-feedback.age"
+        encrypt_feedback_collection(collection, output, self.recipient)
+
+        feedback_root = self.root / "feedback_inbox"
+        result = intake_feedback_package(output, self.identity, feedback_root)
+        # Asserted after a full encrypt/decrypt round trip rather than on the
+        # staged collection, because what matters is what the developer can
+        # actually read out at intake.
+        imported = (feedback_root / result["package_id"] / "feedback.json").read_text(encoding="utf-8")
+        self.assertNotIn("realname", imported)
+        self.assertNotIn("C:", imported)
+
     def test_repeated_intake_of_the_same_package_is_idempotent(self) -> None:
         feedback = {"incident_id": "incident_0003", "user_selected_feedback": "Correct"}
         staging = self.root / "staging"
@@ -168,6 +191,56 @@ class FeedbackPackageTest(unittest.TestCase):
         package = json.loads((collection / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(package["schema_version"], FEEDBACK_PACKAGE_SCHEMA)
         self.assertFalse(package["automatic_upload"])
+
+
+class FeedbackRedactionTest(unittest.TestCase):
+    """Deliberately outside FeedbackPackageTest, and with no age dependency.
+
+    Whether a submitting user's Windows account name reaches an uploaded
+    package is a privacy invariant. Inside the skipUnless'd class above it
+    would silently go unverified on any machine without the age tooling
+    installed, which is exactly where a regression would slip through.
+    """
+
+    def _package(self, feedback: dict[str, object]) -> dict[str, object]:
+        with tempfile.TemporaryDirectory() as temporary:
+            staging = Path(temporary) / "staging"
+            staging.mkdir()
+            collection = build_feedback_package(feedback, None, staging)
+            return read_json(collection / "feedback.json")
+
+    def test_local_paths_are_reduced_to_bare_filenames(self) -> None:
+        folder = r"C:\Users\realname\Documents\Mimir Feedback\incident_0010_20260802T101500Z"
+        feedback = {
+            "incident_id": "incident_0010",
+            "notes": "Missed a door ding.",
+            "feedback_folder": folder,
+            "included_video_path": folder + r"\clip.mp4",
+        }
+
+        packaged = self._package(feedback)
+
+        self.assertEqual(packaged["feedback_folder"], "incident_0010_20260802T101500Z")
+        self.assertEqual(packaged["included_video_path"], "clip.mp4")
+        # Unrelated fields must survive untouched -- this redacts paths, not content.
+        self.assertEqual(packaged["notes"], "Missed a door ding.")
+        # The caller's dict, and the local feedback.json it came from, are not mutated.
+        self.assertEqual(feedback["feedback_folder"], folder)
+
+    def test_missing_and_empty_local_path_keys_are_left_alone(self) -> None:
+        packaged = self._package({"incident_id": "incident_0011", "feedback_folder": ""})
+
+        self.assertEqual(packaged["feedback_folder"], "")
+        self.assertNotIn("included_video_path", packaged)
+
+    def test_a_posix_path_is_reduced_too(self) -> None:
+        # The desktop app is Windows-only today, but the reduction should not
+        # quietly depend on that -- it runs server-side in the packaged sidecar.
+        packaged = self._package(
+            {"incident_id": "incident_0012", "included_video_path": "/home/realname/feedback/clip.mp4"}
+        )
+
+        self.assertEqual(packaged["included_video_path"], "clip.mp4")
 
 
 if __name__ == "__main__":
