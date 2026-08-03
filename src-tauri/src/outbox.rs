@@ -44,6 +44,59 @@ fn intake_base_url() -> String {
 // permanently broken connection would retry-storm on every app launch.
 const MAX_AUTO_RETRY_ATTEMPTS: u32 = 5;
 
+// Cloudflare caps request bodies at the edge, before a Worker runs, so the
+// intake Worker's own 2 GB cap is unreachable and never gets to answer. A real
+// 106 MB contribution sent on 2026-08-04 came back `413 Payload Too Large`
+// with an HTML body -- the edge error page, not the Worker's JSON -- which is
+// why no contribution has ever arrived while small feedback packages have.
+//
+// The documented limit is 100 MB on Free/Pro (200 MB Business, 500 MB
+// Enterprise), and the exact byte boundary is not stated, so this uses the
+// conservative decimal reading. Being slightly under-generous only means an
+// early, clearly-explained refusal instead of a slow opaque one.
+//
+// Raising this is not the fix. Uploads must stop going through the Worker at
+// all -- presigned R2 PUT per clip, per the cloud design.
+const MAX_SUBMISSION_BYTES: u64 = 100_000_000;
+
+fn describe_bytes(bytes: u64) -> String {
+    if bytes >= 1_000_000_000 {
+        return format!("{:.1} GB", bytes as f64 / 1_000_000_000.0);
+    }
+
+    if bytes >= 1_000_000 {
+        return format!("{:.0} MB", bytes as f64 / 1_000_000.0);
+    }
+
+    format!("{bytes} bytes")
+}
+
+/// Turn a server rejection into one readable line.
+///
+/// The body was previously pasted in raw, so a Cloudflare HTML error page
+/// ended up inside the entry's `last_error` and in front of the user. Markup
+/// carries nothing actionable, and the page can be arbitrarily long.
+fn summarize_server_error(status: reqwest::StatusCode, body: &str) -> String {
+    let trimmed = body.trim();
+    let looks_like_markup = trimmed.starts_with('<') || trimmed.to_ascii_lowercase().contains("<html");
+
+    if trimmed.is_empty() || looks_like_markup {
+        if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE {
+            return format!(
+                "The submission service refused this as too large ({status}), before Mimir's own \
+                 server saw it. Retrying will not help."
+            );
+        }
+
+        return format!("The submission server declined this ({status}).");
+    }
+
+    let condensed: String = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
+    let clipped: String = condensed.chars().take(300).collect();
+
+    format!("The submission server declined this ({status}): {clipped}")
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SubmissionKind {
     Feedback,
@@ -89,6 +142,12 @@ pub struct OutboxEntry {
     pub attempts: u32,
     pub last_error: String,
     pub status: String, // "pending" | "sent"
+    /// Set when the submission can never succeed as it stands -- an oversized
+    /// package, or a rejection the server will repeat. Retrying is futile, and
+    /// telling the user "Mimir will try again" would be a lie. Defaulted so
+    /// entries written before this field existed still load.
+    #[serde(default)]
+    pub permanent_failure: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -164,6 +223,7 @@ pub fn stage_pending_entry(entry_dir: &Path, kind: SubmissionKind, package_id: &
         attempts: 0,
         last_error: String::new(),
         status: "pending".to_string(),
+        permanent_failure: false,
     };
     write_entry(entry_dir, &entry)
 }
@@ -197,6 +257,23 @@ pub async fn attempt_upload(entry_dir: &Path) -> Result<OutboxSubmitResult, Scan
             return record_failure(entry_dir, &mut entry, format!("Could not read the encrypted package: {error}"));
         }
     };
+
+    // Refuse before spending the upload. Anything over the edge limit is
+    // rejected by Cloudflare before the Worker runs, so pushing it anyway
+    // costs the user minutes of transfer to earn an opaque HTML error page.
+    if size > MAX_SUBMISSION_BYTES {
+        return record_permanent_failure(
+            entry_dir,
+            &mut entry,
+            format!(
+                "This package is {} and the submission service refuses anything over {}. \
+                 Retrying will not help. Your encrypted copy is kept -- see docs/DATA_CONTRIBUTION.md \
+                 for transferring it another way.",
+                describe_bytes(size),
+                describe_bytes(MAX_SUBMISSION_BYTES),
+            ),
+        );
+    }
 
     let file = match tokio::fs::File::open(&package_path).await {
         Ok(file) => file,
@@ -239,7 +316,19 @@ pub async fn attempt_upload(entry_dir: &Path) -> Result<OutboxSubmitResult, Scan
         Ok(response) => {
             let status = response.status();
             let reason = response.text().await.unwrap_or_default();
-            record_failure(entry_dir, &mut entry, format!("The submission server declined this ({status}): {reason}"))
+            let summary = summarize_server_error(status, &reason);
+
+            // A rejection for size or shape will be repeated verbatim on every
+            // retry. Anything else (auth, rate limit, server trouble) may well
+            // succeed later, so those stay ordinarily retryable.
+            if matches!(
+                status,
+                reqwest::StatusCode::PAYLOAD_TOO_LARGE | reqwest::StatusCode::UNSUPPORTED_MEDIA_TYPE
+            ) {
+                return record_permanent_failure(entry_dir, &mut entry, summary);
+            }
+
+            record_failure(entry_dir, &mut entry, summary)
         }
         Err(error) => record_failure(
             entry_dir,
@@ -257,6 +346,24 @@ fn record_failure(entry_dir: &Path, entry: &mut OutboxEntry, error: String) -> R
         package_id: entry.package_id.clone(),
         status: "pending".to_string(),
         message: "Saved locally. Mimir will retry sending automatically.".to_string(),
+    })
+}
+
+/// As `record_failure`, but for something retrying cannot fix. The package is
+/// still never deleted -- it stays on disk for a manual transfer.
+fn record_permanent_failure(
+    entry_dir: &Path,
+    entry: &mut OutboxEntry,
+    error: String,
+) -> Result<OutboxSubmitResult, ScanFailure> {
+    entry.attempts += 1;
+    entry.last_error = error.clone();
+    entry.permanent_failure = true;
+    write_entry(entry_dir, entry)?;
+    Ok(OutboxSubmitResult {
+        package_id: entry.package_id.clone(),
+        status: "pending".to_string(),
+        message: error,
     })
 }
 
@@ -288,7 +395,10 @@ pub async fn retry_pending() -> Result<Vec<OutboxSubmitResult>, ScanFailure> {
     let root = outbox_root()?;
     let mut results = Vec::new();
     for entry in list_entries()? {
-        if entry.status != "pending" || entry.attempts > MAX_AUTO_RETRY_ATTEMPTS {
+        // Skip anything already known to be unsendable: re-uploading an
+        // oversized package on every launch just burns the user's bandwidth to
+        // earn the same rejection.
+        if entry.status != "pending" || entry.permanent_failure || entry.attempts > MAX_AUTO_RETRY_ATTEMPTS {
             continue;
         }
         let entry_dir = outbox_entry_dir(&root, &entry.package_id);
@@ -636,6 +746,75 @@ mod tests {
             .map(|entries| !entries.is_empty())
             .unwrap_or(false);
         assert!(stored, "the mock server's storage should contain a feedback/<year> folder after a successful send");
+    }
+
+    #[test]
+    fn server_errors_never_carry_markup_to_the_user() {
+        // A real 413 from Cloudflare's edge is a full HTML page. Pasting it in
+        // raw put "<html>" in front of the user and in the entry's last_error.
+        let html = summarize_server_error(
+            reqwest::StatusCode::PAYLOAD_TOO_LARGE,
+            "<html>\n<head><title>413 Request Entity Too Large</title></head>\n<body>...</body>\n</html>",
+        );
+        assert!(!html.contains('<'), "markup must not reach the user: {html}");
+        assert!(html.contains("too large"), "the actionable part must survive: {html}");
+        assert!(html.contains("not help"), "a 413 is not worth retrying, and should say so: {html}");
+
+        // A real JSON reason from the Worker is worth keeping verbatim.
+        let json = summarize_server_error(
+            reqwest::StatusCode::UNAUTHORIZED,
+            "{\"accepted\":false,\"reason\":\"bad_token\"}",
+        );
+        assert!(json.contains("bad_token"), "the Worker's own reason must survive: {json}");
+
+        // An empty body still produces a sentence rather than a dangling colon.
+        let empty = summarize_server_error(reqwest::StatusCode::BAD_GATEWAY, "   ");
+        assert!(!empty.trim_end().ends_with(':'), "should not trail an empty reason: {empty}");
+    }
+
+    #[test]
+    fn long_server_errors_are_clipped() {
+        let long = summarize_server_error(reqwest::StatusCode::BAD_REQUEST, &"x".repeat(5000));
+        assert!(long.len() < 400, "an unbounded body must not land in the entry file");
+    }
+
+    #[tokio::test]
+    async fn an_oversized_package_is_refused_before_any_upload_is_attempted() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // Nothing is listening here: if the size guard did not fire first, this
+        // would fail with a connection error instead of the size message.
+        with_pending_entry_of_kind("http://127.0.0.1:1", SubmissionKind::Contribution, |entry_dir| async move {
+            let package = outbox_package_path(&entry_dir, SubmissionKind::Contribution);
+            let oversized = vec![b'x'; (MAX_SUBMISSION_BYTES + 1) as usize];
+            std::fs::write(&package, &oversized).expect("write oversized package");
+
+            let result = attempt_upload(&entry_dir).await.unwrap();
+            assert_eq!(result.status, "pending");
+
+            let reloaded = read_entry(&entry_dir).unwrap();
+            assert!(
+                reloaded.last_error.contains("too large") || reloaded.last_error.contains("refuses"),
+                "the size limit should be named, not a connection error: {}",
+                reloaded.last_error
+            );
+            assert!(
+                reloaded.last_error.contains("not help"),
+                "retrying an oversized package is futile and must say so: {}",
+                reloaded.last_error
+            );
+            assert!(reloaded.permanent_failure, "an oversized package must be flagged unsendable");
+            // The package is still kept, exactly as with any other failure.
+            assert!(package.is_file());
+
+            // And auto-retry must leave it alone rather than re-uploading it
+            // on every launch.
+            let swept = retry_pending().await.unwrap();
+            assert!(
+                swept.is_empty(),
+                "auto-retry should skip a package it already knows cannot be sent"
+            );
+        })
+        .await;
     }
 
     #[tokio::test]

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_AUTO_RETRY_ATTEMPTS,
+  canRetry,
   formatOutboxTimestamp,
   isUnsent,
   outboxKindLabel,
@@ -80,6 +81,42 @@ describe('outboxState', () => {
     // the boundary here has to be the same or the UI promises a retry that
     // will never happen.
     expect(outboxState(entry({ attempts: MAX_AUTO_RETRY_ATTEMPTS + 1 }))).toBe('needs_manual_retry')
+  })
+})
+
+describe('permanently failed entries', () => {
+  it('reports cannot_send, ahead of the attempt cap', () => {
+    expect(outboxState(entry({ permanent_failure: true }))).toBe('cannot_send')
+    // Even past the auto-retry cap it stays cannot_send: a manual retry does
+    // not rescue an oversized package either.
+    expect(outboxState(entry({ permanent_failure: true, attempts: 99 }))).toBe('cannot_send')
+  })
+
+  it('never offers a retry that cannot work', () => {
+    expect(canRetry(entry({ permanent_failure: true }))).toBe(false)
+    expect(canRetry(entry({ status: 'sent' }))).toBe(false)
+    expect(canRetry(entry({ attempts: 2 }))).toBe(true)
+    expect(canRetry(entry({ attempts: 99 }))).toBe(true)
+  })
+
+  it('does not promise a delivery that is not coming', () => {
+    const detail = outboxStateDetail('cannot_send')
+    expect(outboxStateLabel('cannot_send')).toBe('Cannot be sent')
+    expect(detail).not.toMatch(/will try again/i)
+    expect(detail).toMatch(/stopped trying/i)
+    // The user's copy surviving is the reassuring part, and must still be said.
+    expect(detail).toMatch(/saved/i)
+  })
+
+  it('is counted separately from things still waiting', () => {
+    expect(outboxSummary([entry({ permanent_failure: true })])).toBe('1 cannot be sent')
+    expect(outboxSummary([entry({ permanent_failure: true }), entry({})])).toBe(
+      '1 waiting to send, 1 cannot be sent',
+    )
+  })
+
+  it('still counts as unsent for the panel visibility check', () => {
+    expect(isUnsent(entry({ permanent_failure: true }))).toBe(true)
   })
 })
 

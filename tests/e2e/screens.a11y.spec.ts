@@ -51,6 +51,7 @@ interface StubOutboxEntry {
   attempts: number
   last_error: string
   status: string
+  permanent_failure?: boolean
 }
 
 async function stubTauri(page: import('@playwright/test').Page, outbox: StubOutboxEntry[] = []) {
@@ -249,6 +250,41 @@ test.describe('the submissions panel', () => {
 
     await page.getByText('Why it did not send').click()
     await expect(reason).toBeVisible()
+  })
+})
+
+// A contribution package over Cloudflare's edge limit is rejected before the
+// Worker runs, and no retry will ever change that. The panel must say so
+// rather than offering a button that re-earns the same 413.
+test.describe('a submission that cannot be sent', () => {
+  const BLOCKED = {
+    kind: 'contribution',
+    package_id: 'c'.repeat(32),
+    created_at: 'unix:1785000000',
+    attempts: 1,
+    last_error: 'The submission service refused this as too large (413 Payload Too Large).',
+    status: 'pending',
+    permanent_failure: true,
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await stubTauri(page, [BLOCKED])
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+  })
+
+  test('is reported as blocked, not as waiting', async ({ page }) => {
+    await expect(page.getByText('1 cannot be sent')).toBeVisible()
+    // Scoped to the entry itself: the summary line above carries the same
+    // phrase, and the label sits alongside the attempt count in one element.
+    await expect(page.getByRole('listitem').first().getByText(/Cannot be sent/)).toBeVisible()
+    await expect(page.getByText('1 waiting to send')).toHaveCount(0)
+  })
+
+  test('offers no retry button, and stays accessible', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /Retry sending/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Retry all/ })).toHaveCount(0)
+
+    expect(await seriousViolations(page)).toEqual([])
   })
 })
 

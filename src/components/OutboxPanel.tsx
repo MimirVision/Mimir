@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { ErrorNotice } from './ErrorNotice'
 import { describeError, type DescribedError } from '../lib/errorMessages'
 import {
+  canRetry,
   formatOutboxTimestamp,
   isUnsent,
   outboxKindLabel,
@@ -110,6 +111,9 @@ export function OutboxPanel() {
 
   const sorted = sortedOutboxEntries(entries)
   const unsentCount = entries.filter(isUnsent).length
+  // Only entries a retry could actually help. An oversized package is unsent
+  // but retrying it just re-earns the same rejection.
+  const retryableCount = entries.filter(canRetry).length
   const isBusy = isRetryingAll || retryingId !== null
 
   return (
@@ -124,14 +128,14 @@ export function OutboxPanel() {
         local copy is kept whether or not it sends.
       </p>
 
-      {unsentCount > 1 && (
+      {retryableCount > 1 && (
         <button
           type="button"
           onClick={handleRetryAll}
           disabled={isBusy}
           className="mt-3 h-9 rounded-lg border border-white/[0.08] bg-white/[0.045] px-3 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.075] disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {isRetryingAll ? 'Retrying...' : `Retry all ${unsentCount} waiting`}
+          {isRetryingAll ? 'Retrying...' : `Retry all ${retryableCount} waiting`}
         </button>
       )}
 
@@ -151,7 +155,15 @@ export function OutboxPanel() {
                 </span>
               </div>
 
-              <div className={state === 'sent' ? 'mt-1 text-emerald-100/78' : 'mt-1 text-amber-100/78'}>
+              <div
+                className={
+                  state === 'sent'
+                    ? 'mt-1 text-emerald-100/78'
+                    : state === 'cannot_send'
+                      ? 'mt-1 text-red-100/80'
+                      : 'mt-1 text-amber-100/78'
+                }
+              >
                 {outboxStateLabel(state)}
                 {item.attempts > 0 && ` -- ${item.attempts} attempt${item.attempts === 1 ? '' : 's'}`}
               </div>
@@ -168,7 +180,7 @@ export function OutboxPanel() {
                 </details>
               )}
 
-              {isUnsent(item) && (
+              {canRetry(item) && (
                 <button
                   type="button"
                   onClick={() => handleRetry(item.package_id)}
