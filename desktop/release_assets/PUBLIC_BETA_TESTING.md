@@ -71,7 +71,12 @@ If you'd rather not send footage over the network for a particular clip, Mimir a
 
 ## Known Limitations
 
-- Mimir ships with a stock, general-purpose detector, not yet fine-tuned on real Sentry footage. It can miss real events and can flag ordinary activity as noteworthy.
+**See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for the full, measured version** -- how
+often Mimir over-flags, how long a scan actually takes on GPU versus CPU, and
+what it deliberately will not do. Worth reading before you start, so you know
+what you are looking at.
+
+- Mimir ships with a stock, general-purpose detector, not yet fine-tuned on real Sentry footage. It can miss real events and can flag ordinary activity as noteworthy. In beta feedback so far, most clips rated IMPORTANT were rated lower by the person who reviewed them -- treat IMPORTANT as "look at this", not "something happened".
 - The installer is not code-signed, so Windows SmartScreen warns on first run.
 - Some media formats may not preview in the viewer even if the scan output is valid.
 - Move to Mimir Trash is recoverable, but there is no in-app restore button yet.
