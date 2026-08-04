@@ -54,7 +54,7 @@ python mimir_core_v2_scan.py --input "C:\mimir\test" --mode balanced --vlm qwen2
 Output is written to:
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\latest_session.json
+C:\MimirDev\backend\MimirOutputV2\latest_session.json
 ```
 
 The session includes `schema_version`, `scanner_version`, `selected_input`, `event_groups_found`,

@@ -17,7 +17,7 @@ interface FeedbackScreenProps {
 
 // Reviewing feedback here does not by itself change the model -- unlike a
 // Contribution, feedback never went through clip-level rights confirmation
-// (see C:\Mimir\docs\DATA_CONTRIBUTION.md), so it can't be folded into the
+// (see C:\MimirDev\desktop\docs\DATA_CONTRIBUTION.md), so it can't be folded into the
 // training dataset automatically. Mimir itself now nudges testers to also
 // hit Contribute when they pick a choice that flags a real detector error
 // (see AiFeedbackPanel in IncidentViewerScreen.tsx), so the developer's job

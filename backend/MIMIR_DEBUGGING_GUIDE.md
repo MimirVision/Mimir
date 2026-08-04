@@ -8,7 +8,7 @@ This guide gives practical first steps when something looks wrong. It targets th
 From the backend folder:
 
 ```powershell
-cd C:\Mimir_Backend
+cd C:\MimirDev\backend
 .venv\Scripts\python.exe -m py_compile mimir_core_v2_scan.py
 .venv\Scripts\python.exe -m unittest discover -s mimir_core_v2 -t . -p "test_*.py"
 .venv\Scripts\python.exe inspect_latest_session.py
@@ -143,9 +143,9 @@ Remember: AI is supporting evidence only. `mimir_core_v2/ai_enrichment.py` hard-
 Backend:
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\latest_session.json
-C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\session.json
-C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\thumbnails\
+C:\MimirDev\backend\MimirOutputV2\latest_session.json
+C:\MimirDev\backend\MimirOutputV2\sessions\<session_id>\session.json
+C:\MimirDev\backend\MimirOutputV2\sessions\<session_id>\thumbnails\
 ```
 
 Frontend/user logs:

@@ -19,7 +19,7 @@
           "allow": [
             "$APPDATA/**",
             "$APPLOCALDATA/**",
-            "C:/Mimir_Backend/**"
+            "C:/MimirDev/backend/**"
           ],
           "deny": [
             "**/.git/**",

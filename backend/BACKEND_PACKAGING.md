@@ -9,23 +9,23 @@ The goal is to produce Windows executables that the Tauri app can call without r
 The packaging script creates executables in:
 
 ```text
-C:\Mimir_Backend\dist_backend\
+C:\MimirDev\backend\dist_backend\
 ```
 
 Expected files:
 
 ```text
-C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe
-C:\Mimir_Backend\dist_backend\mimir-core-v2-ai-enrich.exe
-C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe
-C:\Mimir_Backend\dist_backend\mimir-core-v2-dataset.exe
+C:\MimirDev\backend\dist_backend\mimir-core-v2-scan.exe
+C:\MimirDev\backend\dist_backend\mimir-core-v2-ai-enrich.exe
+C:\MimirDev\backend\dist_backend\mimir-core-v2-actions.exe
+C:\MimirDev\backend\dist_backend\mimir-core-v2-dataset.exe
 ```
 
 If `mimir_core_v2_release_check.py` exists, the script also builds this
 developer-only release tool in the backend distribution folder:
 
 ```text
-C:\Mimir_Backend\dist_backend\mimir-core-v2-release-check.exe
+C:\MimirDev\backend\dist_backend\mimir-core-v2-release-check.exe
 ```
 
 The desktop installer does not bundle this executable. Release checks run in
@@ -33,7 +33,7 @@ the controlled build workspace and are not part of the customer runtime.
 
 ## Build Command
 
-From `C:\Mimir_Backend`:
+From `C:\MimirDev\backend`:
 
 ```powershell
 .venv-runtime\Scripts\python.exe build_backend_exe.py
@@ -61,7 +61,7 @@ After building, test the scanner executable:
 dist_backend\mimir-core-v2-scan.exe --input "D:\TeslaCam\SentryClips\2026-04-18_16-04-02" --mode balanced
 ```
 
-Run this from a directory outside `C:\Mimir_Backend` as a clean runtime smoke
+Run this from a directory outside `C:\MimirDev\backend` as a clean runtime smoke
 test. The executable contains the Core v2 modules, ONNX model, manifest, and
 model license; it does not import source files from the developer workspace.
 
@@ -84,7 +84,7 @@ required real-footage fixtures are available:
 .venv-runtime\Scripts\python.exe mimir_core_v2_reliability.py `
   --scanner "dist_backend\mimir-core-v2-scan.exe" `
   --iterations 500 `
-  --report "C:\Mimir\release_assets\reliability_report.json"
+  --report "C:\MimirDev\desktop\release_assets\reliability_report.json"
 ```
 
 `--allow-missing-required` is for developer smoke runs only. Reports produced
@@ -96,7 +96,7 @@ The scanner always receives an explicit output directory from the desktop app.
 Release builds use the application data directory. Development builds may use:
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\
+C:\MimirDev\backend\MimirOutputV2\
 ```
 
 Set `MIMIR_OUTPUT_DIR` to an absolute path for an explicit development override.

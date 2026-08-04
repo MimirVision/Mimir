@@ -3,7 +3,7 @@
 The main output file is:
 
 ```text
-C:\Mimir_Backend\MimirOutput\latest_session.json
+C:\MimirDev\backend\MimirOutput\latest_session.json
 ```
 
 This file is what the Tauri/React app loads to show scan results. Fields are additive over time, so frontend/backend tools should read missing fields safely.

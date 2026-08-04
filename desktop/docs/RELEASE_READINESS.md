@@ -6,14 +6,14 @@ entitlement server, or destructive expiration switch is permitted.
 Run the internal operational check:
 
 ```powershell
-C:\Mimir_Backend\.venv-runtime\Scripts\python.exe C:\Mimir_Backend\mimir_core_v2_release_check.py `
-  --internal --input "C:\Mimir\Test" --source-set current_crash_door_ding_set
+C:\MimirDev\backend\.venv-runtime\Scripts\python.exe C:\MimirDev\backend\mimir_core_v2_release_check.py `
+  --internal --input "C:\MimirDev\desktop\Test" --source-set current_crash_door_ding_set
 ```
 
 Run the strict external gate:
 
 ```powershell
-C:\Mimir_Backend\.venv-runtime\Scripts\python.exe C:\Mimir_Backend\mimir_core_v2_release_check.py --gate-only
+C:\MimirDev\backend\.venv-runtime\Scripts\python.exe C:\MimirDev\backend\mimir_core_v2_release_check.py --gate-only
 ```
 
 Build an unsigned installer for internal dogfood without creating updater
@@ -38,10 +38,10 @@ Run the real-fixture reliability gate with the packaged scanner only after every
 required fixture is connected:
 
 ```powershell
-C:\Mimir_Backend\.venv-runtime\Scripts\python.exe C:\Mimir_Backend\mimir_core_v2_reliability.py `
-  --scanner "C:\Mimir\src-tauri\resources\mimir-backend\mimir-core-v2-scan.exe" `
+C:\MimirDev\backend\.venv-runtime\Scripts\python.exe C:\MimirDev\backend\mimir_core_v2_reliability.py `
+  --scanner "C:\MimirDev\desktop\src-tauri\resources\mimir-backend\mimir-core-v2-scan.exe" `
   --iterations 500 `
-  --report "C:\Mimir\release_assets\reliability_report.json"
+  --report "C:\MimirDev\desktop\release_assets\reliability_report.json"
 ```
 
 For a short developer smoke run, add `--iterations 5 --allow-missing-required`

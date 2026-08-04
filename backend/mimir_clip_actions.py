@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-DEFAULT_SESSION = r"C:\Mimir_Backend\MimirOutput\latest_session.json"
+DEFAULT_SESSION = r"C:\MimirDev\backend\MimirOutput\latest_session.json"
 VALID_STATUSES = {"IGNORE", "REVIEW", "IMPORTANT"}
 VIDEO_FIELDS = [
     "video_path",

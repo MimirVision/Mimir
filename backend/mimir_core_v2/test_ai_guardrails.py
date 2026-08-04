@@ -147,10 +147,10 @@ def test_ai_unavailable_scan_completes() -> tuple[bool, str]:
     ai_reviewer.call_ollama = failing_call_ollama
     try:
         session = run_scan(
-            r"C:\Mimir\Test",
+            r"C:\MimirDev\desktop\Test",
             mode="balanced",
             vlm="unavailable-test-model",
-            output=r"C:\Mimir_Backend\MimirOutputV2\ai_guardrail_test",
+            output=r"C:\MimirDev\backend\MimirOutputV2\ai_guardrail_test",
             ai_review_budget=1,
             ai_timeout_sec=1,
             ai_debug_review_all=True,

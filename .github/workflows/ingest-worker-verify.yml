@@ -1,0 +1,46 @@
+name: ingest-worker-verify
+
+# The Worker had no CI at all, which is part of why a too-short upload-id
+# bound reached production: nothing typechecked it on push, and the dev mock
+# it is meant to stay in contract with lives in another directory.
+on:
+  push:
+    paths:
+      - 'ingest-worker/**'
+      - 'desktop/scripts/dev_intake_mock.py'
+      - '.github/workflows/ingest-worker-verify.yml'
+  pull_request:
+    paths:
+      - 'ingest-worker/**'
+      - 'desktop/scripts/dev_intake_mock.py'
+      - '.github/workflows/ingest-worker-verify.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ingest-worker/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ingest-worker
+        run: npm ci
+
+      - name: Type check
+        working-directory: ingest-worker
+        run: npx tsc --noEmit
+
+      # index.ts and dev_intake_mock.py are meant to expose the same contract;
+      # index.ts says so in its own header. They sit in different directories,
+      # and drifting apart is exactly how a too-short upload-id bound passed
+      # every local test and then failed against real R2. This does not prove
+      # parity -- it makes a mock change trigger this job, so the two are at
+      # least looked at together.
+      - name: Check the mock still parses
+        run: python -c "import ast; ast.parse(open('desktop/scripts/dev_intake_mock.py', encoding='utf-8').read())"

@@ -1,6 +1,6 @@
 // Rust command layer for Mimir Forge. Every command here shells out to
-// `mimir_training_ground.py` in C:\Mimir_Backend -- same idiom as
-// C:\Mimir\src-tauri\src\main.rs's `backend_command`/`resolve_core_v2_*_runtime`
+// `mimir_training_ground.py` in C:\MimirDev\backend -- same idiom as
+// C:\MimirDev\desktop\src-tauri\src\main.rs's `backend_command`/`resolve_core_v2_*_runtime`
 // pattern, simplified because this app only ever runs on the developer's own
 // machine (no packaged sidecar fallback needed, unlike the tester-facing app).
 
@@ -12,9 +12,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
-const BACKEND_ROOT: &str = r"C:\Mimir_Backend";
-const BACKEND_PYTHON: &str = r"C:\Mimir_Backend\.venv\Scripts\python.exe";
-const BACKEND_SCRIPT: &str = r"C:\Mimir_Backend\mimir_training_ground.py";
+const BACKEND_ROOT: &str = r"C:\MimirDev\backend";
+const BACKEND_PYTHON: &str = r"C:\MimirDev\backend\.venv\Scripts\python.exe";
+const BACKEND_SCRIPT: &str = r"C:\MimirDev\backend\mimir_training_ground.py";
 const KEYRING_SERVICE: &str = "MimirForge";
 const SETTINGS_FILE: &str = "settings.json";
 const FEEDBACK_REVIEWS_FILE: &str = "feedback_reviews.json";
@@ -134,7 +134,7 @@ fn write_settings(app: &tauri::AppHandle, settings: &Settings) -> Result<(), For
     let body = serde_json::to_string_pretty(settings)
         .map_err(|error| ForgeError::new(format!("Could not serialize settings: {error}")))?;
     // Write-to-temp-then-rename so a crash mid-write can never leave a
-    // truncated settings.json -- same atomic-write idiom as C:\Mimir's
+    // truncated settings.json -- same atomic-write idiom as C:\MimirDev\desktop's
     // write_json_atomically.
     let temp_path = path.with_extension("json.tmp");
     std::fs::write(&temp_path, body)
@@ -149,7 +149,7 @@ fn write_settings(app: &tauri::AppHandle, settings: &Settings) -> Result<(), For
 // Feedback (the AI-correction flow: Correct / Weird AI flag / Missed obvious
 // event + notes) is qualitative developer signal, not training data -- unlike
 // a Contribution, it never went through the clip-level rights confirmation
-// C:\Mimir\docs\DATA_CONTRIBUTION.md requires, so it must never be silently
+// C:\MimirDev\desktop\docs\DATA_CONTRIBUTION.md requires, so it must never be silently
 // folded into the training dataset. What Forge *can* do is stop review effort
 // from evaporating: this is a local-only "have I looked at this, what did I
 // do about it" note per feedback item, stored next to settings.json and kept
@@ -924,9 +924,9 @@ mod tests {
     #[test]
     fn settings_round_trip_through_json() {
         let settings = Settings {
-            dataset_root: r"C:\Mimir_Backend\MimirOutputV2\training".to_string(),
-            inbox: r"C:\Mimir_Backend\inbox".to_string(),
-            feedback_inbox: r"C:\Mimir_Backend\feedback_inbox".to_string(),
+            dataset_root: r"C:\MimirDev\backend\MimirOutputV2\training".to_string(),
+            inbox: r"C:\MimirDev\backend\inbox".to_string(),
+            feedback_inbox: r"C:\MimirDev\backend\feedback_inbox".to_string(),
             identity_path: r"C:\keys\identity.txt".to_string(),
             r2_endpoint: "https://example.r2.cloudflarestorage.com".to_string(),
             r2_bucket: "mimir-intake".to_string(),

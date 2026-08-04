@@ -26,7 +26,7 @@ Worker should never drift from that contract without updating both.
    ```
 
 3. **Set the app token** to `mimir-beta-2026-a4f9c1` -- the current value of
-   `OUTBOX_APP_TOKEN` in `C:\Mimir\src-tauri\src\outbox.rs`. It must match
+   `OUTBOX_APP_TOKEN` in `C:\MimirDev\desktop\src-tauri\src\outbox.rs`. It must match
    exactly. Pasting the literal value here is fine: it's already compiled
    into every copy of the app and extractable by anyone, so it was never a
    secret -- it's a traffic filter, not authentication (see the top of

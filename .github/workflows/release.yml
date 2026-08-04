@@ -4,12 +4,18 @@ name: Release
 # download page gets a real URL and free bandwidth for a ~250 MB file.
 #
 # Triggered by pushing a tag like v0.5.0-free-beta.1. The tag must match the
-# version in package.json -- a mismatch is a hard failure rather than a
+# version in desktop/package.json -- a mismatch is a hard failure rather than a
 # silently mislabelled download, because the release check pins signature
 # verification to the package version.
 #
 # The release is created as a DRAFT. Nothing becomes publicly downloadable
 # until a human opens it and presses publish.
+#
+# Monorepo notes: this moved from desktop/.github/workflows/ because GitHub
+# only runs workflows from the repo root. The separate `Check out backend`
+# step is gone with it -- the backend is now `backend/` in this same checkout,
+# which also retires the vars.MIMIR_BACKEND_REPO / secrets.MIMIR_BACKEND_TOKEN
+# pair that had to be configured for a tag build to work at all.
 
 on:
   push:
@@ -24,6 +30,10 @@ on:
 permissions:
   contents: write
 
+defaults:
+  run:
+    working-directory: desktop
+
 jobs:
   build:
     runs-on: windows-latest
@@ -32,19 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The backend lives in a separate repository. Without it there are no
-      # sidecars to bundle, so fail loudly rather than shipping a broken app.
-      - name: Check out backend
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.MIMIR_BACKEND_REPO }}
-          path: mimir-backend
-          token: ${{ secrets.MIMIR_BACKEND_TOKEN }}
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       - uses: actions/setup-python@v5
         with:
@@ -54,7 +56,7 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: desktop/src-tauri
 
       - name: Verify the tag matches package.json
         shell: pwsh
@@ -62,7 +64,7 @@ jobs:
           $tag = if ('${{ github.event.inputs.tag }}') { '${{ github.event.inputs.tag }}' } else { '${{ github.ref_name }}' }
           $expected = "v$((Get-Content package.json | ConvertFrom-Json).version)"
           if ($tag -ne $expected) {
-            throw "Tag $tag does not match package.json version ($expected). Bump one or the other."
+            throw "Tag $tag does not match desktop/package.json version ($expected). Bump one or the other."
           }
           "Building $tag"
 
@@ -71,7 +73,7 @@ jobs:
 
       - name: Install backend runtime
         shell: pwsh
-        working-directory: mimir-backend
+        working-directory: backend
         run: |
           python -m venv .venv-runtime
           .\.venv-runtime\Scripts\python.exe -m pip install --upgrade pip
@@ -80,7 +82,7 @@ jobs:
 
       - name: Backend tests
         shell: pwsh
-        working-directory: mimir-backend
+        working-directory: backend
         run: .\.venv-runtime\Scripts\python.exe -m unittest discover -s mimir_core_v2 -t . -p "test_*.py"
 
       - name: Frontend checks
@@ -89,7 +91,7 @@ jobs:
           npx vitest run
 
       - name: Rust tests
-        working-directory: src-tauri
+        working-directory: desktop/src-tauri
         run: cargo test
 
       # age is bundled for encrypted training contributions and the sidecar
@@ -101,7 +103,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         env:
-          MIMIR_BACKEND_ROOT: ${{ github.workspace }}\mimir-backend
+          MIMIR_BACKEND_ROOT: ${{ github.workspace }}\backend
         run: npm run desktop:build:internal
 
       - name: Locate the installer
@@ -146,13 +148,3 @@ jobs:
 
             **${{ steps.installer.outputs.size }}**
             SHA-256: `${{ steps.installer.outputs.sha256 }}`
-
-            This installer is not code-signed yet, so Windows SmartScreen will
-            warn that the app is unrecognized on first run. Choose the advanced
-            option to continue.
-
-            The detector is a stock, off-the-shelf model that has not been
-            fine-tuned on real Sentry footage. It can miss real events and can
-            flag ordinary activity. See MODEL_CARD.md and LIMITATIONS.md.
-
-            Feedback: feedback.mimir@gmail.com

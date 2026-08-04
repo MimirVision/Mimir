@@ -1,13 +1,13 @@
 [
   {
     "name": "current_crash_door_ding_set",
-    "input": "C:\\Mimir\\Test",
+    "input": "C:\\MimirDev\\desktop\\Test",
     "required": true,
     "notes": "Current mixed test folder with normal clips, door dings, and rear-end."
   },
   {
     "name": "current_crash_door_ding_no_yolo",
-    "input": "C:\\Mimir\\Test",
+    "input": "C:\\MimirDev\\desktop\\Test",
     "required": true,
     "source_set": "current_crash_door_ding_set",
     "extra_args": ["--disable-yolo"],

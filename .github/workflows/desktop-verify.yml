@@ -1,11 +1,25 @@
-name: frontend-verify
+name: desktop-verify
 
-# The frontend had no CI at all. That is why the accessibility report sat
-# stale and failing for six days without anyone noticing, and why type or
-# test regressions could only be caught by remembering to run them locally.
+# Moved to the repo root for the monorepo: GitHub only runs workflows from
+# .github/workflows at the top level, so leaving this under desktop/ would
+# have silently stopped CI entirely.
+#
+# The path filter is what keeps the monorepo cheap -- an ingest-worker typo
+# should not spend twenty minutes running the desktop suite. The workflow file
+# itself is included so a change to CI still exercises CI.
 on:
   push:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-verify.yml'
   pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-verify.yml'
+
+defaults:
+  run:
+    working-directory: desktop
 
 jobs:
   verify:
@@ -19,6 +33,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -42,6 +57,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Rust tests
+        # The Outbox and its upload paths live here, and were previously only
+        # ever run locally.
+        working-directory: desktop/src-tauri
+        run: cargo test
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
@@ -53,5 +74,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: accessibility-report
-          path: release_assets/accessibility_report.json
+          path: desktop/release_assets/accessibility_report.json
           if-no-files-found: ignore

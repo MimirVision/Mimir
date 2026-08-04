@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_SESSION = Path(r"C:\Mimir_Backend\MimirOutputV2\latest_session.json")
+DEFAULT_SESSION = Path(r"C:\MimirDev\backend\MimirOutputV2\latest_session.json")
 IMPACT_LABELS = {"Impact/contact", "Impact"}
 
 

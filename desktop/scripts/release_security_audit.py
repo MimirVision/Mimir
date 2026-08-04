@@ -115,7 +115,7 @@ def scan_packaged_runtimes(frontend: Path) -> list[dict[str, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--frontend-root", default=str(Path(__file__).resolve().parents[1]))
-    parser.add_argument("--backend-root", default="C:\\Mimir_Backend")
+    parser.add_argument("--backend-root", default="C:\\MimirDev\\backend")
     parser.add_argument("--output", default="")
     args = parser.parse_args()
     frontend = Path(args.frontend_root).resolve()

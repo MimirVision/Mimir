@@ -7,7 +7,7 @@ This guide explains what to check when the desktop app behaves strangely.
 From the frontend folder:
 
 ```powershell
-cd C:\Mimir
+cd C:\MimirDev\desktop
 npm run build
 npm run type-check
 ```
@@ -15,14 +15,14 @@ npm run type-check
 If Tauri/Rust commands changed:
 
 ```powershell
-cd C:\Mimir\src-tauri
+cd C:\MimirDev\desktop\src-tauri
 cargo check
 ```
 
 For local desktop testing:
 
 ```powershell
-cd C:\Mimir
+cd C:\MimirDev\desktop
 npm run desktop:dev
 ```
 
@@ -130,7 +130,7 @@ Useful files:
 Backend performance data is in the session's `performance` block:
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\latest_session.json
+C:\MimirDev\backend\MimirOutputV2\latest_session.json
 ```
 
 ## If Review Actions Fail
@@ -192,8 +192,8 @@ Feedback packages:
 Backend scan outputs:
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\latest_session.json
-C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\session.json
+C:\MimirDev\backend\MimirOutputV2\latest_session.json
+C:\MimirDev\backend\MimirOutputV2\sessions\<session_id>\session.json
 ```
 
 Development terminal logs may also exist in the repo, such as:
@@ -232,10 +232,10 @@ If Copy diagnostics is not available, open:
 Use this loop after frontend edits:
 
 ```powershell
-cd C:\Mimir
+cd C:\MimirDev\desktop
 npm run build
 npm run type-check
-cd C:\Mimir\src-tauri
+cd C:\MimirDev\desktop\src-tauri
 cargo check
 ```
 

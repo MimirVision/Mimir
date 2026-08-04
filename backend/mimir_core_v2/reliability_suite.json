@@ -4,7 +4,7 @@
   "fixtures": [
     {
       "name": "current_crash_door_ding_set",
-      "input": "C:\\Mimir\\Test",
+      "input": "C:\\MimirDev\\desktop\\Test",
       "source_set": "current_crash_door_ding_set",
       "required": true
     },
