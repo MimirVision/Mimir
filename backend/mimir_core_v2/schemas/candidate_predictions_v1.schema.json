@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/candidate_predictions_v1.schema.json",
+  "title": "Mimir candidate predictions",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "created_at", "candidate_id", "candidate_manifest_sha256", "release_eligible", "items"],
+  "properties": {
+    "schema_version": {"const": "mimir_candidate_predictions_v1"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "candidate_id": {"type": "string"},
+    "candidate_manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "release_eligible": {"type": "boolean"},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["incident_id", "severity", "contact_probability", "impact_probability"],
+        "properties": {
+          "incident_id": {"type": "string"},
+          "severity": {"enum": ["IGNORE", "REVIEW", "IMPORTANT"]},
+          "contact_probability": {"type": "number", "minimum": 0, "maximum": 1},
+          "impact_probability": {"type": "number", "minimum": 0, "maximum": 1},
+          "best_time_sec": {"type": ["number", "null"], "minimum": 0},
+          "timing_uncertainty_sec": {"type": ["number", "null"], "minimum": 0}
+        }
+      }
+    }
+  }
+}

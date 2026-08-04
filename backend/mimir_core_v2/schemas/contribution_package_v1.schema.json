@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/contribution_package_v1.schema.json",
+  "title": "Mimir encrypted contribution package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_id",
+    "created_at",
+    "source_session_id",
+    "source_session_sha256",
+    "consent_record",
+    "collection_manifest",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {"const": "mimir_contribution_package_v1"},
+    "package_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "source_session_id": {"type": ["string", "null"]},
+    "source_session_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "consent_record": {"const": "consent.json"},
+    "collection_manifest": {"const": "manifest.json"},
+    "encryption": {"const": "age-x25519"},
+    "automatic_upload": {"const": false},
+    "files": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relative_path", "sha256", "size_bytes"],
+        "properties": {
+          "relative_path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "size_bytes": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

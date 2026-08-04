@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/stationary_auxiliary_manifest_v1.schema.json",
+  "title": "Mimir stationary-camera auxiliary dataset manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "source_id",
+    "capture_domain",
+    "target_domain",
+    "domain_role",
+    "promotion_eligible",
+    "contact_ground_truth_available",
+    "license",
+    "repository_revision",
+    "records"
+  ],
+  "properties": {
+    "schema_version": {"const": "mimir_stationary_auxiliary_manifest_v1"},
+    "source_id": {"const": "meva_kf1_vehicle_activity"},
+    "capture_domain": {"const": "stationary_ground_surveillance"},
+    "target_domain": {"const": "stationary_vehicle_mounted_camera"},
+    "promotion_eligible": {"const": false},
+    "contact_ground_truth_available": {"const": false},
+    "pixel_overlap_is_physical_contact_proof": {"const": false},
+    "license": {"const": "CC-BY-4.0"},
+    "repository_revision": {"type": "string", "minLength": 7},
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["split", "role", "source_event_group", "video_name", "source_url"],
+        "properties": {
+          "source_role": {"const": "auxiliary"},
+          "promotion_eligible": {"const": false},
+          "contact_ground_truth_available": {"const": false},
+          "split": {"enum": ["train_auxiliary", "validation_auxiliary"]},
+          "role": {"enum": ["door_activity", "suspicious_activity", "hard_negative"]},
+          "source_event_group": {"type": "string"},
+          "video_name": {"type": "string"},
+          "source_url": {"type": "string"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+[
+  {
+    "name": "current_crash_door_ding_set",
+    "input": "C:\\Mimir\\Test",
+    "required": true,
+    "notes": "Current mixed test folder with normal clips, door dings, and rear-end."
+  },
+  {
+    "name": "current_crash_door_ding_no_yolo",
+    "input": "C:\\Mimir\\Test",
+    "required": true,
+    "source_set": "current_crash_door_ding_set",
+    "extra_args": ["--disable-yolo"],
+    "notes": "Ensures hard rear-end is still Important when object detection is unavailable."
+  },
+  {
+    "name": "known_person_near_set",
+    "input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
+    "required": true,
+    "notes": "Mandatory person-near/pass-by hard-negative regression set; must never be skipped for release evidence."
+  },
+  {
+    "name": "known_person_passby_set",
+    "input": "D:\\TeslaCam\\SentryClips\\2026-04-17_17-53-23",
+    "required": true,
+    "notes": "Known grouped person pass-by without contact; must remain Ignore."
+  },
+  {
+    "name": "known_close_door_no_contact_set",
+    "input": "D:\\TeslaCam\\SentryClips\\2026-04-17_19-08-35",
+    "required": true,
+    "notes": "User-confirmed adjacent door activity without impact; must stay at Review and never become Important."
+  },
+  {
+    "name": "known_grouping_set",
+    "input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
+    "required": false,
+    "notes": "Known Tesla multi-camera grouping set."
+  }
+]

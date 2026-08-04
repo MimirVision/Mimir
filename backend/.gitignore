@@ -1,0 +1,40 @@
+
+# Python / local env
+.venv/
+.venv-runtime/
+.venv-training/
+__pycache__/
+*.py[cod]
+*.pyo
+# Build artifacts
+build/
+dist/
+# Runtime / generated output
+Frames/
+MimirOutput/
+MimirOutputV2/
+Important/
+Review/
+Ignore/
+*.mp4_event_*.jpg
+# Regenerated from MimirOutputV2/ by harvest_feedback_labels.py, and it carries
+# submitter notes. The reviewed rows belong in benchmark_labels.csv, which is
+# tracked -- this working file is not the deliverable.
+feedback_label_worksheet.csv
+# Generated per scan by build_label_worksheet.py. Completed rows belong in
+# benchmark_labels.csv, which is tracked; the worksheet itself is scratch.
+label_worksheet.csv
+dist_backend/
+build_backend/
+*.pt
+models/
+training_data/
+training_runs/
+.training-cache/
+*.onnx
+# Local logs
+*.log
+
+# age private identity key -- decrypts everything testers submit, must never
+# be committed. Lives here for mimir_training_ground.py's --identity flag.
+mimir_intake_identity.txt

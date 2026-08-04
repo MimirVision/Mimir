@@ -1,0 +1,9 @@
+{
+  "schema_version": "mimir_training_exclusions_v1",
+  "policy": "These regression assets have no independently recorded training permission. Hash matching is used only by dataset intake and is never detection evidence.",
+  "files": [
+    {"sha256": "f691b866eff129fd2162479e2763aefac2e05ae9cd57573aa339e5aa3f557b23", "reason": "Social-media regression clip; ownership or training permission not established."},
+    {"sha256": "aeb9427bc88b6373b669bfb3a64120e9ed7720b709bc9b879b12899d5af87920", "reason": "Social-media regression clip; ownership or training permission not established."},
+    {"sha256": "5c12d7b60d183b5ab47c7e2164f16ed34e789c338d2cbd9af95dcfe6bcd667b7", "reason": "Social-media regression clip; ownership or training permission not established."}
+  ]
+}

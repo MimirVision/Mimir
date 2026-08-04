@@ -1,0 +1,5 @@
+# Only needed to run mimir_training_ground.py sync (R2's S3-compatible API).
+# Deliberately separate from requirements-core-v2.txt: this is a
+# developer-machine-only dependency, never shipped to users, and has no
+# business being pulled into the packaged app's dependency tree.
+boto3==1.35.36
