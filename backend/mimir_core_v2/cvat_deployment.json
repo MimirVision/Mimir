@@ -1,0 +1,11 @@
+{
+  "schema_version": "mimir_cvat_deployment_v1",
+  "distribution": "CVAT Community",
+  "version": "v2.70.0",
+  "commit": "f65b33bc09753ea72daf2cb71d2653068f9d3b08",
+  "repository": "https://github.com/cvat-ai/cvat",
+  "license": "MIT",
+  "default_url": "http://localhost:8080",
+  "cloud_services_allowed": false,
+  "project_definition": "mimir_core_v2/cvat_project_v1.json"
+}

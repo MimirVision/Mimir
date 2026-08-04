@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/training_run_v1.schema.json",
+  "title": "Mimir candidate training run",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "run_id", "started_at", "candidate_kind", "dataset_manifest_sha256", "status"],
+  "properties": {
+    "schema_version": {"const": "mimir_training_run_v1"},
+    "run_id": {"type": "string"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "candidate_kind": {"enum": ["rfdetr_segmentation", "rfdetr_detection", "temporal_contact_verifier"]},
+    "dataset_manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "status": {"enum": ["running", "blocked", "failed", "complete"]},
+    "cuda_device": {"type": ["string", "null"]},
+    "artifacts": {"type": "array", "items": {"type": "object"}}
+  }
+}

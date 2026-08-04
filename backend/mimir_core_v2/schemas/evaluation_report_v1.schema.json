@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/evaluation_report_v1.schema.json",
+  "title": "Mimir locked candidate evaluation",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "generated_at", "locked_test_manifest_sha256", "baseline", "candidate", "promotion_gates", "promotion_allowed"],
+  "properties": {
+    "schema_version": {"const": "mimir_evaluation_report_v1"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "locked_test_manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "baseline": {"type": "object"},
+    "candidate": {"type": "object"},
+    "per_category_confusion_matrices": {"type": "object"},
+    "timing_error_distribution_sec": {"type": "object"},
+    "promotion_gates": {"type": "object"},
+    "promotion_allowed": {"type": "boolean"},
+    "blockers": {"type": "array", "items": {"type": "string"}}
+  }
+}

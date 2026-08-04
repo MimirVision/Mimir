@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/annotation_export_v1.schema.json",
+  "title": "Mimir temporal contact annotation",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "incident_id", "source_group_hash", "split", "annotation"],
+  "properties": {
+    "schema_version": {"const": "mimir_contact_dataset_v1"},
+    "incident_id": {"type": "string"},
+    "source_group_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "split": {"enum": ["train", "validation", "test"]},
+    "annotation": {
+      "type": "object",
+      "required": ["objects", "human_severity", "contact_outcome"],
+      "properties": {
+        "human_severity": {"enum": ["IGNORE", "REVIEW", "IMPORTANT", null]},
+        "contact_outcome": {"enum": ["contact", "impact", "no_contact", "uncertain", null]},
+        "door_state": {"enum": ["closed", "opening", "open", "closing", "not_visible", "not_applicable", null]},
+        "closest_approach_time_sec": {"type": ["number", "null"], "minimum": 0},
+        "apparent_contact_time_sec": {"type": ["number", "null"], "minimum": 0},
+        "impact_time_sec": {"type": ["number", "null"], "minimum": 0},
+        "objects": {"type": "array", "items": {"type": "object"}}
+      }
+    }
+  }
+}

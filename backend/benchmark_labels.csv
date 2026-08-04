@@ -1,0 +1,4 @@
+filename_or_group,expected_severity,category,notes
+Reddit 1.mp4,IMPORTANT,door_ding,door ding
+reddit 4.mp4,IMPORTANT,rear_impact,parked vehicle rear-end crash must never be ignored
+2026-04-19_12-43-26,REVIEW,person_near,person near vehicle with no clear contact should be review at most and never important

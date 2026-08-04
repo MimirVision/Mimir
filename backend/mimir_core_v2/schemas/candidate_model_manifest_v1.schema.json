@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimir.local/schemas/candidate_model_manifest_v1.schema.json",
+  "title": "Mimir unpromoted candidate model",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "candidate_id", "candidate_kind", "created_at", "model_path", "sha256", "license", "promoted"],
+  "properties": {
+    "schema_version": {"const": "mimir_candidate_model_manifest_v1"},
+    "candidate_id": {"type": "string"},
+    "candidate_kind": {"enum": ["rfdetr_segmentation", "rfdetr_detection", "temporal_contact_verifier"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "model_path": {"type": "string"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "license": {"type": "string", "minLength": 1},
+    "promoted": {"const": false},
+    "outputs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "class_names": {"type": "array", "items": {"type": "string"}},
+    "inference_policy": {"type": "object"},
+    "decision_policy": {"type": "object"}
+  }
+}
