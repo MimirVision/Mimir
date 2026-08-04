@@ -92,7 +92,14 @@ const MAX_PARTS = 10_000
 
 // R2 multipart upload ids are opaque; this only guards the shape so a junk
 // value cannot be reflected into an R2 call.
-const UPLOAD_ID_RE = /^[A-Za-z0-9._~-]{1,256}$/
+//
+// The bound was 256 and real R2 ids are longer than that -- an observed one
+// was 343 base64url characters -- so every chunked upload was rejected with
+// `invalid_upload_id` on its first part. The dev mock generated
+// `uuid4().hex`, 32 characters, so nothing caught it until this ran against
+// production. The mock now issues realistically long ids for that reason.
+// 1024 leaves headroom without letting an unbounded string through.
+const UPLOAD_ID_RE = /^[A-Za-z0-9._~-]{1,1024}$/
 
 interface RouteConfig {
   prefix: string
