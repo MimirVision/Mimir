@@ -28,15 +28,18 @@
           </p>
           <div class="actions">
             <!--
-              Point this at the GitHub Release asset once the releases repo
-              exists, e.g.
-                https://github.com/OWNER/REPO/releases/latest/download/MimirSetup.exe
-              That is what makes downloads countable: GitHub reports a download
-              count per asset, and scripts/download_stats.py records it over
-              time. The relative path below works for sharing the folder
-              directly, but nothing is counted when it is used.
+              Points at the GitHub Release asset, which is what makes downloads
+              countable: GitHub reports a download count per asset and
+              scripts/download_stats.py records it over time. A relative
+              ./MimirSetup.exe also works if you hand someone the folder
+              directly, but nothing is counted that way -- and with no
+              telemetry in the app, this number is the only usage signal that
+              exists at all.
+
+              Requires a published (not draft) release carrying the asset.
+              release.yml drafts one on a v* tag; publishing is a manual step.
             -->
-            <a class="button primary" href="./MimirSetup.exe">Download for Windows</a>
+            <a class="button primary" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">Download for Windows</a>
             <a class="button secondary" href="#beta-guide">View beta guide</a>
           </div>
         </div>
@@ -98,7 +101,12 @@
           <h3>Honest about where detection stands.</h3>
           <ul>
             <li>Ships with a stock, general-purpose detector, not yet fine-tuned on real Sentry footage</li>
-            <li>Can miss real events and can flag ordinary activity - you're always the final review</li>
+            <li>
+              <strong>It over-flags.</strong> Of the beta feedback so far, most clips Mimir rated Important were rated
+              lower by the person who looked at them. Treat Important as "look at this", not "something happened" - and
+              telling us when it's wrong is the single most useful thing you can do, because the detector can't improve
+              without examples.
+            </li>
             <li>Rear-end contact and door-ding detection are the current priority to improve</li>
             <li>Report what it gets wrong: <a href="mailto:feedback.mimir@gmail.com">feedback.mimir@gmail.com</a></li>
           </ul>
@@ -111,8 +119,17 @@
             <li>Windows 10 or 11, 64-bit; ~197 MB download, ~325 MB installed</li>
             <li>Scanning and review are fully offline - your footage never leaves the PC on its own</li>
             <li>Internet is used only if you choose to send feedback or a contribution, and for install if Windows is missing the WebView2 runtime (Windows 11 already includes it)</li>
-            <li>No GPU, no Ollama, no account required for the core app</li>
-            <li>Unsigned installer: Windows will show a warning, choose the advanced option to continue</li>
+            <li>No account, and no Ollama unless you want the optional local AI second opinion</li>
+            <li>
+              A DirectX 12 GPU is not required, but it matters: object detection is over half the scan time and runs
+              roughly 10x slower on CPU. With a GPU expect around 25 minutes for a full 679-clip TeslaCam dump; without
+              one, budget hours. The app's system check tells you which you have before you start.
+            </li>
+            <li>
+              The installer is not code-signed yet, so Windows SmartScreen shows a blue "Windows protected your PC"
+              box. Click <strong>More info</strong>, then <strong>Run anyway</strong>. That warning is accurate - it
+              means the publisher is unverified, not that the file is safe. Certificates cost money and this is free.
+            </li>
           </ul>
         </article>
       </section>
