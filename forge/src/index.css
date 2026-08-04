@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Palette ported from C:\Mimir\src\index.css so Forge reads as the same
+   developer's tool rather than a mismatched one-off. */
+@layer base {
+  :root {
+    --mimir-bg: #050606;
+    --mimir-bg-depth: #0a0b0b;
+    --mimir-surface: #111313;
+    --mimir-surface-soft: #171919;
+    --mimir-surface-muted: #202221;
+    --mimir-text: #f4f1e9;
+    --mimir-text-muted: #a09c93;
+    --mimir-text-subtle: #858078;
+    --mimir-border: rgba(244, 241, 233, 0.075);
+    --mimir-border-strong: rgba(244, 241, 233, 0.14);
+    --mimir-accent: #9db7aa;
+    --mimir-accent-soft: rgba(157, 183, 170, 0.13);
+    --mimir-status-red: #c47772;
+    --mimir-status-amber: #c3a062;
+    --mimir-status-green: #8faa9b;
+    --mimir-status-slate: #858b8b;
+  }
+
+  * {
+    @apply m-0 p-0 box-border;
+  }
+
+  html {
+    background:
+      radial-gradient(circle at 50% -24%, rgba(157, 183, 170, 0.12), transparent 30%),
+      radial-gradient(circle at 8% 12%, rgba(196, 119, 114, 0.055), transparent 28%),
+      var(--mimir-bg);
+  }
+
+  body {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 38%),
+      var(--mimir-bg);
+    color: var(--mimir-text);
+    @apply antialiased;
+    font-feature-settings: 'cv11' 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mimir-page-glow {
+    background:
+      radial-gradient(circle at 50% -18%, rgba(157, 183, 170, 0.1), transparent 34%),
+      radial-gradient(circle at 6% 8%, rgba(196, 119, 114, 0.045), transparent 26%);
+  }
+
+  ::selection {
+    background: rgba(244, 241, 234, 0.18);
+    color: var(--mimir-text);
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--mimir-accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}

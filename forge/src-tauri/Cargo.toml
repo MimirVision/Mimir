@@ -1,0 +1,20 @@
+[package]
+name = "mimir-forge"
+version = "0.1.0"
+description = "Developer console for the Mimir training ground"
+authors = ["Mimir"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+keyring = { version = "3", features = ["windows-native"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
