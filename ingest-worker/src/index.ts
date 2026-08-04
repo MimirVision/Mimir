@@ -86,9 +86,17 @@ const PACKAGE_ID_RE = /^[0-9a-f]{32}$/
 // the same size and at least 5 MiB, so the client must use exactly this.
 const PART_SIZE = 64 * 1024 * 1024
 
-// R2 allows 10,000 parts; at 64 MB that is far more than any package needs,
-// but a bound stops a malformed client opening an unbounded upload.
-const MAX_PARTS = 10_000
+// R2 itself allows 10,000 parts, but that is not a useful bound here. The
+// largest route cap is 2 GB, which is 32 parts at PART_SIZE; 64 leaves ample
+// headroom while capping a single upload at ~4 GB instead of ~1 TB.
+//
+// This matters because `total_bytes` is only checked once, at create. Nothing
+// downstream re-derives it, so the real ceiling on an upload is
+// MAX_PARTS * (largest accepted part), not the declared size. With a 10,000
+// bound and no per-part size check, a client could declare 1 KB and then push
+// a terabyte -- and the app token is documented as extractable from the
+// binary, so that is reachable by anyone who downloads Mimir.
+const MAX_PARTS = 64
 
 // R2 multipart upload ids are opaque; this only guards the shape so a junk
 // value cannot be reflected into an R2 call.
@@ -259,6 +267,19 @@ async function handleMultipart(request: Request, env: Env, pathname: string): Pr
       return rejected(400, 'incomplete_body')
     }
 
+    // The second half of bounding an upload. `total_bytes` is validated at
+    // create and never seen again, so without this a part could be any size
+    // the edge accepts (100 MB) regardless of what was declared. R2 requires
+    // every part but the last to be exactly PART_SIZE anyway, so anything
+    // larger is malformed as well as abusive.
+    const declaredLength = Number.parseInt(request.headers.get('Content-Length') ?? '', 10)
+    if (!Number.isFinite(declaredLength) || declaredLength < 0) {
+      return rejected(411, 'length_required')
+    }
+    if (declaredLength > PART_SIZE) {
+      return rejected(413, 'part_too_large')
+    }
+
     // The shape check the single-shot route does before storing anything. It
     // can only run on the first part, which is where the age header lives.
     let payload: ReadableStream<Uint8Array> | ArrayBuffer = request.body
@@ -304,6 +325,13 @@ async function handleMultipart(request: Request, env: Env, pathname: string): Pr
     })
     if (parts.some(part => !Number.isInteger(part.partNumber) || part.partNumber < 1 || !part.etag)) {
       return rejected(400, 'invalid_parts')
+    }
+
+    // The age-magic shape check only runs on part 1, so an upload that never
+    // sent a part 1 would skip it entirely. Requiring it here means the check
+    // cannot be sidestepped by starting at part 2.
+    if (!parts.some(part => part.partNumber === 1)) {
+      return rejected(400, 'missing_first_part')
     }
 
     const upload = bucket.resumeMultipartUpload(objectKey, uploadId)

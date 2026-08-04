@@ -1226,6 +1226,100 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_service_refuses_a_part_larger_than_the_agreed_size() {
+        // total_bytes is validated once at create and never seen again, so the
+        // real ceiling on an upload is MAX_PARTS multiplied by the largest part
+        // the service will accept. Without a per-part cap a client could
+        // declare a small total and then push far more, and the app token is
+        // extractable from the binary, so that is reachable by anyone.
+        //
+        // Driven over raw HTTP rather than through attempt_upload on purpose:
+        // the Rust client takes part_size from the create response, so a
+        // well-behaved client physically cannot send an oversized part. This
+        // guard exists for a client that is not well-behaved, and that is the
+        // only way to exercise it.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let part_bytes: u64 = 32 * 1024;
+        let server = spawn_mock_server_with_part_size(OUTBOX_APP_TOKEN, Some(part_bytes));
+        let client = reqwest::Client::new();
+
+        let created: serde_json::Value = client
+            .post(format!("{}/v1/multipart/create", server.url))
+            .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+            .json(&json!({
+                "kind": "contribution",
+                "package_id": "cccccccccccccccccccccccccccccccc",
+                "total_bytes": part_bytes,
+            }))
+            .send()
+            .await
+            .expect("create should reach the mock")
+            .json()
+            .await
+            .expect("create should return json");
+
+        let oversized = vec![b'M'; (part_bytes * 3) as usize];
+        let response = client
+            .post(format!("{}/v1/multipart/part", server.url))
+            .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+            .header("X-Mimir-Object-Key", created["object_key"].as_str().unwrap())
+            .header("X-Mimir-Upload-Id", created["upload_id"].as_str().unwrap())
+            .header("X-Mimir-Part-Number", "1")
+            .body(oversized)
+            .send()
+            .await
+            .expect("part should reach the mock");
+
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::PAYLOAD_TOO_LARGE,
+            "a part above the agreed size must be refused"
+        );
+        let body = response.text().await.unwrap_or_default();
+        assert!(body.contains("part_too_large"), "should name the reason: {body}");
+    }
+
+    #[tokio::test]
+    async fn the_service_refuses_to_complete_an_upload_with_no_first_part() {
+        // The age-magic shape check only runs on part 1, so completing without
+        // one would skip it entirely.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let server = spawn_mock_server_with_part_size(OUTBOX_APP_TOKEN, Some(32 * 1024));
+        let client = reqwest::Client::new();
+
+        let created: serde_json::Value = client
+            .post(format!("{}/v1/multipart/create", server.url))
+            .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+            .json(&json!({
+                "kind": "contribution",
+                "package_id": "dddddddddddddddddddddddddddddddd",
+                "total_bytes": 1024,
+            }))
+            .send()
+            .await
+            .expect("create should reach the mock")
+            .json()
+            .await
+            .expect("create should return json");
+
+        let response = client
+            .post(format!("{}/v1/multipart/complete", server.url))
+            .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+            .json(&json!({
+                "object_key": created["object_key"],
+                "upload_id": created["upload_id"],
+                "parts": [{ "part_number": 2, "etag": "whatever" }],
+            }))
+            .send()
+            .await
+            .expect("complete should reach the mock");
+
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+        let body = response.text().await.unwrap_or_default();
+        assert!(body.contains("missing_first_part"), "should name the reason: {body}");
+    }
+
+    #[tokio::test]
     async fn a_contribution_reaches_the_contribution_route_and_storage() {
         // Every other test here uses Feedback, so the contribution route had no
         // coverage at all -- and contribution is the one that has never

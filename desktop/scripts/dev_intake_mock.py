@@ -1,4 +1,4 @@
-"""A local stand-in for the real Cloudflare Worker intake endpoint.
+﻿"""A local stand-in for the real Cloudflare Worker intake endpoint.
 
 Implements the exact contract the real Worker will expose, so the Rust
 Outbox/upload logic can be built and tested end-to-end before a Cloudflare
@@ -69,7 +69,12 @@ CHUNK_SIZE = 1024 * 1024
 # leaves headroom for headers; R2 requires every part but the last to be this
 # same size and at least 5 MiB.
 PART_SIZE = 64 * 1024 * 1024
-MAX_PARTS = 10_000
+
+# Not R2's 10,000 limit. `total_bytes` is only checked at create, so the real
+# ceiling on an upload is MAX_PARTS * largest-accepted-part, not the declared
+# size. The largest route cap is 2 GB = 32 parts, so 64 leaves headroom while
+# capping a single upload at ~4 GB rather than ~1 TB.
+MAX_PARTS = 64
 UPLOAD_ID_RE = re.compile(r"^[A-Za-z0-9._~-]{1,1024}$")
 
 # Real R2 upload ids are long base64url strings -- an observed one was 343
@@ -228,6 +233,20 @@ def _make_handler(storage_dir: Path, app_token: str, part_size: int = PART_SIZE)
                     self._reject(404, "not_found")
                     return
 
+                # Bounds the upload. total_bytes is validated at create and
+                # never seen again, so without this a part could be any size
+                # the edge accepts regardless of what was declared.
+                try:
+                    declared = int(self.headers.get("Content-Length", "-1"))
+                except ValueError:
+                    declared = -1
+                if declared < 0:
+                    self._reject(411, "length_required")
+                    return
+                if declared > part_size:
+                    self._reject(413, "part_too_large")
+                    return
+
                 payload = self._read_body()
                 # The same shape check the single-shot route does, on the only
                 # part that can carry the age header.
@@ -267,6 +286,13 @@ def _make_handler(storage_dir: Path, app_token: str, part_size: int = PART_SIZE)
                     for part in parts
                 ):
                     self._reject(400, "invalid_parts")
+                    return
+
+                # The age-magic shape check only runs on part 1, so an upload
+                # that never sent one would skip it entirely. Requiring it here
+                # means the check cannot be sidestepped by starting at part 2.
+                if not any(part["part_number"] == 1 for part in parts):
+                    self._reject(400, "missing_first_part")
                     return
 
                 staging = uploads / _staging_name(upload_id)
