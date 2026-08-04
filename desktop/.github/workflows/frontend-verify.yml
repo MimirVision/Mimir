@@ -1,0 +1,57 @@
+name: frontend-verify
+
+# The frontend had no CI at all. That is why the accessibility report sat
+# stale and failing for six days without anyone noticing, and why type or
+# test regressions could only be caught by remembering to run them locally.
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Type check (unused symbols)
+        # Catches dead imports/locals left behind by refactors. Kept separate
+        # so a genuine type error is not confused with tidiness.
+        run: npx tsc --noEmit --noUnusedLocals --noUnusedParameters
+
+      - name: Unit tests
+        run: npx vitest run
+
+      - name: Dependency audit
+        # High/critical only: the build must not silently accumulate known
+        # vulnerabilities. Moderate and below are reported but not blocking.
+        run: npm audit --audit-level=high
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility checks
+        run: npx playwright test tests/e2e/accessibility.spec.ts tests/e2e/screens.a11y.spec.ts
+
+      - name: Upload accessibility report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-report
+          path: release_assets/accessibility_report.json
+          if-no-files-found: ignore

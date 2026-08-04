@@ -1,0 +1,158 @@
+name: Release
+
+# Publishes the Windows installer as a GitHub Release asset, which is how the
+# download page gets a real URL and free bandwidth for a ~250 MB file.
+#
+# Triggered by pushing a tag like v0.5.0-free-beta.1. The tag must match the
+# version in package.json -- a mismatch is a hard failure rather than a
+# silently mislabelled download, because the release check pins signature
+# verification to the package version.
+#
+# The release is created as a DRAFT. Nothing becomes publicly downloadable
+# until a human opens it and presses publish.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (must already exist)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The backend lives in a separate repository. Without it there are no
+      # sidecars to bundle, so fail loudly rather than shipping a broken app.
+      - name: Check out backend
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.MIMIR_BACKEND_REPO }}
+          path: mimir-backend
+          token: ${{ secrets.MIMIR_BACKEND_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Verify the tag matches package.json
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event.inputs.tag }}') { '${{ github.event.inputs.tag }}' } else { '${{ github.ref_name }}' }
+          $expected = "v$((Get-Content package.json | ConvertFrom-Json).version)"
+          if ($tag -ne $expected) {
+            throw "Tag $tag does not match package.json version ($expected). Bump one or the other."
+          }
+          "Building $tag"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend runtime
+        shell: pwsh
+        working-directory: mimir-backend
+        run: |
+          python -m venv .venv-runtime
+          .\.venv-runtime\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv-runtime\Scripts\python.exe -m pip install -r requirements-core-v2.txt
+          .\.venv-runtime\Scripts\python.exe -m pip install pyinstaller
+
+      - name: Backend tests
+        shell: pwsh
+        working-directory: mimir-backend
+        run: .\.venv-runtime\Scripts\python.exe -m unittest discover -s mimir_core_v2 -t . -p "test_*.py"
+
+      - name: Frontend checks
+        run: |
+          npx tsc --noEmit
+          npx vitest run
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      # age is bundled for encrypted training contributions and the sidecar
+      # build refuses to proceed without the official binary.
+      - name: Install age
+        shell: pwsh
+        run: winget install --id FiloSottile.age --exact --accept-source-agreements --accept-package-agreements
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          MIMIR_BACKEND_ROOT: ${{ github.workspace }}\mimir-backend
+        run: npm run desktop:build:internal
+
+      - name: Locate the installer
+        id: installer
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $exe = Get-ChildItem src-tauri\target\release\bundle\nsis -Filter "*$version*_x64-setup.exe" |
+            Select-Object -First 1
+          if (-not $exe) { throw "No installer matching version $version was produced." }
+          $sizeMb = [math]::Round($exe.Length / 1MB, 1)
+          $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          "path=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sha256=$sha"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "size=$sizeMb MB"      | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "Built $($exe.Name) -- $sizeMb MB, SHA256 $sha"
+
+      # Proves the packaged sidecar runs, rather than only that it compiled.
+      # A sidecar that builds but cannot start has shipped from here before.
+      - name: Smoke-test the packaged sidecar
+        shell: pwsh
+        run: |
+          $scan = "src-tauri\resources\mimir-backend\mimir-core-v2-scan.exe"
+          if (-not (Test-Path $scan)) { throw "Packaged scanner is missing: $scan" }
+          # Captured, not piped: piping into something that stops reading early
+          # (Select-Object -First, Out-Null in some hosts) closes the pipe and
+          # the exe reports a broken-pipe failure that has nothing to do with it.
+          $output = & $scan --help 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "Packaged scanner failed to start (exit $LASTEXITCODE)." }
+          if (-not ($output -match 'mimir-core-v2-scan')) { throw "Packaged scanner produced unexpected output." }
+          "Packaged scanner starts cleanly."
+
+      - name: Draft the release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Mimir ${{ github.event.inputs.tag || github.ref_name }}
+          files: ${{ steps.installer.outputs.path }}
+          body: |
+            Free public beta. Windows 10/11, 64-bit.
+
+            **${{ steps.installer.outputs.size }}**
+            SHA-256: `${{ steps.installer.outputs.sha256 }}`
+
+            This installer is not code-signed yet, so Windows SmartScreen will
+            warn that the app is unrecognized on first run. Choose the advanced
+            option to continue.
+
+            The detector is a stock, off-the-shelf model that has not been
+            fine-tuned on real Sentry footage. It can miss real events and can
+            flag ordinary activity. See MODEL_CARD.md and LIMITATIONS.md.
+
+            Feedback: feedback.mimir@gmail.com

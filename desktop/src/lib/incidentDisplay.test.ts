@@ -1,0 +1,46 @@
+import { describe, expect, it } from 'vitest'
+import { formatDateTime, sourceEventReason, sourceEventTimestamp } from './incidentDisplay'
+
+describe('formatDateTime', () => {
+  it('returns an empty string for missing input', () => {
+    expect(formatDateTime(undefined)).toBe('')
+    expect(formatDateTime(null)).toBe('')
+    expect(formatDateTime('')).toBe('')
+  })
+
+  it('returns the original string for unparseable input', () => {
+    expect(formatDateTime('not-a-date')).toBe('not-a-date')
+  })
+
+  it('formats a valid ISO timestamp', () => {
+    const formatted = formatDateTime('2026-04-19T12:43:26Z')
+    expect(formatted.length).toBeGreaterThan(0)
+    expect(formatted).not.toBe('2026-04-19T12:43:26Z')
+  })
+})
+
+describe('sourceEventReason', () => {
+  it('prefers source_event_reason over tesla_event_reason', () => {
+    expect(sourceEventReason({ source_event_reason: 'sentry_aware_object_detection', tesla_event_reason: 'other' } as never)).toBe(
+      'sentry_aware_object_detection',
+    )
+  })
+
+  it('falls back to tesla_event_reason', () => {
+    expect(sourceEventReason({ tesla_event_reason: 'user_interaction_dashcam_panic' } as never)).toBe(
+      'user_interaction_dashcam_panic',
+    )
+  })
+
+  it('returns an empty string when neither is present', () => {
+    expect(sourceEventReason({} as never)).toBe('')
+  })
+})
+
+describe('sourceEventTimestamp', () => {
+  it('prefers source_event_timestamp, then tesla_event_timestamp, then created_at', () => {
+    expect(sourceEventTimestamp({ source_event_timestamp: 'a', tesla_event_timestamp: 'b', created_at: 'c' } as never)).toBe('a')
+    expect(sourceEventTimestamp({ tesla_event_timestamp: 'b', created_at: 'c' } as never)).toBe('b')
+    expect(sourceEventTimestamp({ created_at: 'c' } as never)).toBe('c')
+  })
+})
