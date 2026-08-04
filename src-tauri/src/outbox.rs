@@ -44,20 +44,35 @@ fn intake_base_url() -> String {
 // permanently broken connection would retry-storm on every app launch.
 const MAX_AUTO_RETRY_ATTEMPTS: u32 = 5;
 
-// Cloudflare caps request bodies at the edge, before a Worker runs, so the
-// intake Worker's own 2 GB cap is unreachable and never gets to answer. A real
+// Cloudflare caps request bodies at the edge, before a Worker runs. A real
 // 106 MB contribution sent on 2026-08-04 came back `413 Payload Too Large`
 // with an HTML body -- the edge error page, not the Worker's JSON -- which is
-// why no contribution has ever arrived while small feedback packages have.
+// why no contribution had ever arrived while small feedback packages had.
 //
-// The documented limit is 100 MB on Free/Pro (200 MB Business, 500 MB
-// Enterprise), and the exact byte boundary is not stated, so this uses the
-// conservative decimal reading. Being slightly under-generous only means an
-// early, clearly-explained refusal instead of a slow opaque one.
-//
-// Raising this is not the fix. Uploads must stop going through the Worker at
-// all -- presigned R2 PUT per clip, per the cloud design.
-const MAX_SUBMISSION_BYTES: u64 = 100_000_000;
+// Anything larger than one part is now uploaded in chunks and reassembled
+// with R2's multipart API, so the edge limit no longer decides what can be
+// sent. This must match PART_SIZE in the Worker and in dev_intake_mock.py:
+// R2 requires every part but the last to be exactly this size.
+const PART_SIZE: u64 = 64 * 1024 * 1024;
+
+// Same env-override idiom as MIMIR_INTAKE_URL and MIMIR_OUTBOX_DIR. Tests use
+// a tiny part size so the chunked path can be exercised without writing a
+// 64 MB fixture; the mock server is told the same value. Not a production
+// knob -- R2 requires real parts to be at least 5 MiB, so anything smaller
+// only works against the mock.
+fn part_size() -> u64 {
+    std::env::var("MIMIR_UPLOAD_PART_SIZE")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(PART_SIZE)
+}
+
+// Still a real ceiling, now the intake service's own per-kind cap rather than
+// the edge's. Declared up front at create time so an impossible upload is
+// refused before any bytes move.
+const MAX_CONTRIBUTION_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const MAX_FEEDBACK_BYTES: u64 = 500 * 1024 * 1024;
 
 fn describe_bytes(bytes: u64) -> String {
     if bytes >= 1_000_000_000 {
@@ -115,6 +130,35 @@ impl SubmissionKind {
         match self {
             Self::Feedback => "/v1/submit/feedback",
             Self::Contribution => "/v1/submit/contribution",
+        }
+    }
+
+    /// Matches the intake service's per-route cap.
+    ///
+    /// Overridable by env for the same reason as the part size: proving that
+    /// an oversized package is refused should not require writing a 2 GB
+    /// fixture. Lowering it client-side only causes an earlier, clearer
+    /// refusal, and raising it proves nothing -- the service enforces its own
+    /// cap regardless of what the client believes.
+    fn max_bytes(self) -> u64 {
+        if let Some(override_bytes) = std::env::var("MIMIR_MAX_SUBMISSION_BYTES")
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .filter(|value| *value > 0)
+        {
+            return override_bytes;
+        }
+
+        match self {
+            Self::Feedback => MAX_FEEDBACK_BYTES,
+            Self::Contribution => MAX_CONTRIBUTION_BYTES,
+        }
+    }
+
+    fn as_create_kind(self) -> &'static str {
+        match self {
+            Self::Feedback => "feedback",
+            Self::Contribution => "contribution",
         }
     }
 
@@ -258,10 +302,9 @@ pub async fn attempt_upload(entry_dir: &Path) -> Result<OutboxSubmitResult, Scan
         }
     };
 
-    // Refuse before spending the upload. Anything over the edge limit is
-    // rejected by Cloudflare before the Worker runs, so pushing it anyway
-    // costs the user minutes of transfer to earn an opaque HTML error page.
-    if size > MAX_SUBMISSION_BYTES {
+    // Refuse before spending the upload on something the service will never
+    // accept, rather than after transferring it.
+    if size > kind.max_bytes() {
         return record_permanent_failure(
             entry_dir,
             &mut entry,
@@ -270,9 +313,30 @@ pub async fn attempt_upload(entry_dir: &Path) -> Result<OutboxSubmitResult, Scan
                  Retrying will not help. Your encrypted copy is kept -- see docs/DATA_CONTRIBUTION.md \
                  for transferring it another way.",
                 describe_bytes(size),
-                describe_bytes(MAX_SUBMISSION_BYTES),
+                describe_bytes(kind.max_bytes()),
             ),
         );
+    }
+
+    // Anything past a single part goes up in chunks: one request per part
+    // keeps every one of them under the edge's body limit.
+    if size > part_size() {
+        return match chunked_upload(kind, &package_path, size, &entry.package_id).await {
+            Ok(()) => {
+                entry.status = "sent".to_string();
+                entry.last_error = String::new();
+                write_entry(entry_dir, &entry)?;
+                Ok(OutboxSubmitResult {
+                    package_id: entry.package_id,
+                    status: "sent".to_string(),
+                    message: "Sent.".to_string(),
+                })
+            }
+            Err(failure) if failure.permanent => {
+                record_permanent_failure(entry_dir, &mut entry, failure.message)
+            }
+            Err(failure) => record_failure(entry_dir, &mut entry, failure.message),
+        };
     }
 
     let file = match tokio::fs::File::open(&package_path).await {
@@ -321,10 +385,7 @@ pub async fn attempt_upload(entry_dir: &Path) -> Result<OutboxSubmitResult, Scan
             // A rejection for size or shape will be repeated verbatim on every
             // retry. Anything else (auth, rate limit, server trouble) may well
             // succeed later, so those stay ordinarily retryable.
-            if matches!(
-                status,
-                reqwest::StatusCode::PAYLOAD_TOO_LARGE | reqwest::StatusCode::UNSUPPORTED_MEDIA_TYPE
-            ) {
+            if is_permanent_rejection(status) {
                 return record_permanent_failure(entry_dir, &mut entry, summary);
             }
 
@@ -336,6 +397,222 @@ pub async fn attempt_upload(entry_dir: &Path) -> Result<OutboxSubmitResult, Scan
             format!("Could not reach the submission server: {error}"),
         ),
     }
+}
+
+/// A chunked-upload failure, carrying whether retrying could ever help.
+struct UploadFailure {
+    message: String,
+    permanent: bool,
+}
+
+impl UploadFailure {
+    fn transient(message: impl Into<String>) -> Self {
+        Self { message: message.into(), permanent: false }
+    }
+
+    fn permanent(message: impl Into<String>) -> Self {
+        Self { message: message.into(), permanent: true }
+    }
+}
+
+#[derive(Deserialize)]
+struct MultipartCreated {
+    object_key: String,
+    upload_id: String,
+    part_size: u64,
+}
+
+#[derive(Deserialize)]
+struct MultipartPartAck {
+    part_number: u32,
+    etag: String,
+}
+
+fn upload_client() -> Result<reqwest::Client, UploadFailure> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(|error| UploadFailure::transient(format!("Could not prepare the upload: {error}")))
+}
+
+/// Upload a package too large for one request, in parts.
+///
+/// Cloudflare refuses request bodies over its edge limit before the Worker
+/// runs, so a contribution -- raw video for every camera angle -- can never
+/// arrive in a single POST. Each part is its own request, comfortably under
+/// that limit, and the service reassembles them with R2's multipart API.
+///
+/// A failure part-way through aborts the upload server-side rather than
+/// leaving an incomplete object accruing storage. The encrypted package on
+/// disk is never touched either way.
+async fn chunked_upload(
+    kind: SubmissionKind,
+    package_path: &Path,
+    size: u64,
+    package_id: &str,
+) -> Result<(), UploadFailure> {
+    let client = upload_client()?;
+    let base = intake_base_url();
+
+    let create = client
+        .post(format!("{base}/v1/multipart/create"))
+        .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+        .json(&json!({
+            "kind": kind.as_create_kind(),
+            "package_id": package_id,
+            "total_bytes": size,
+        }))
+        .send()
+        .await
+        .map_err(|error| UploadFailure::transient(format!("Could not reach the submission server: {error}")))?;
+
+    if !create.status().is_success() {
+        let status = create.status();
+        let body = create.text().await.unwrap_or_default();
+        let message = summarize_server_error(status, &body);
+        // Same reasoning as the single-shot path: size and shape rejections
+        // will simply be repeated, anything else may clear on its own.
+        return Err(if is_permanent_rejection(status) {
+            UploadFailure::permanent(message)
+        } else {
+            UploadFailure::transient(message)
+        });
+    }
+
+    let created: MultipartCreated = create
+        .json()
+        .await
+        .map_err(|error| UploadFailure::transient(format!("The submission server sent an unusable reply: {error}")))?;
+
+    // The server decides the part size; trusting our own constant would break
+    // silently the moment the two drift apart.
+    let part_size = if created.part_size > 0 { created.part_size } else { part_size() };
+
+    match upload_parts(&client, &base, package_path, part_size, &created).await {
+        Ok(parts) => {
+            let complete = client
+                .post(format!("{base}/v1/multipart/complete"))
+                .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+                .json(&json!({
+                    "object_key": created.object_key,
+                    "upload_id": created.upload_id,
+                    "parts": parts
+                        .iter()
+                        .map(|part| json!({ "part_number": part.part_number, "etag": part.etag }))
+                        .collect::<Vec<_>>(),
+                }))
+                .send()
+                .await
+                .map_err(|error| {
+                    UploadFailure::transient(format!("Could not reach the submission server: {error}"))
+                })?;
+
+            if complete.status().is_success() {
+                return Ok(());
+            }
+
+            let status = complete.status();
+            let body = complete.text().await.unwrap_or_default();
+            Err(UploadFailure::transient(summarize_server_error(status, &body)))
+        }
+        Err(failure) => {
+            // Best effort: a failed abort must not mask the real error.
+            let _ = client
+                .post(format!("{base}/v1/multipart/abort"))
+                .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+                .json(&json!({ "object_key": created.object_key, "upload_id": created.upload_id }))
+                .send()
+                .await;
+            Err(failure)
+        }
+    }
+}
+
+async fn upload_parts(
+    client: &reqwest::Client,
+    base: &str,
+    package_path: &Path,
+    part_size: u64,
+    created: &MultipartCreated,
+) -> Result<Vec<MultipartPartAck>, UploadFailure> {
+    use tokio::io::AsyncReadExt;
+
+    let mut file = tokio::fs::File::open(package_path)
+        .await
+        .map_err(|error| UploadFailure::transient(format!("Could not open the encrypted package: {error}")))?;
+
+    let mut parts: Vec<MultipartPartAck> = Vec::new();
+    let mut part_number: u32 = 1;
+    let mut buffer = vec![0u8; part_size as usize];
+
+    loop {
+        // read() can return short reads on a normal file, so fill the buffer
+        // deliberately: a short part that is not the last one would be
+        // rejected by R2, which requires equal-sized parts.
+        let mut filled = 0usize;
+        while filled < buffer.len() {
+            let read = file
+                .read(&mut buffer[filled..])
+                .await
+                .map_err(|error| UploadFailure::transient(format!("Could not read the encrypted package: {error}")))?;
+            if read == 0 {
+                break;
+            }
+            filled += read;
+        }
+
+        if filled == 0 {
+            break;
+        }
+
+        let response = client
+            .post(format!("{base}/v1/multipart/part"))
+            .header("X-Mimir-App-Token", OUTBOX_APP_TOKEN)
+            .header("X-Mimir-Object-Key", created.object_key.as_str())
+            .header("X-Mimir-Upload-Id", created.upload_id.as_str())
+            .header("X-Mimir-Part-Number", part_number.to_string())
+            .header("Content-Type", "application/octet-stream")
+            .body(buffer[..filled].to_vec())
+            .send()
+            .await
+            .map_err(|error| UploadFailure::transient(format!("Could not reach the submission server: {error}")))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            let message = summarize_server_error(status, &body);
+            return Err(if is_permanent_rejection(status) {
+                UploadFailure::permanent(message)
+            } else {
+                UploadFailure::transient(message)
+            });
+        }
+
+        let ack: MultipartPartAck = response
+            .json()
+            .await
+            .map_err(|error| UploadFailure::transient(format!("The submission server sent an unusable reply: {error}")))?;
+        parts.push(ack);
+
+        if (filled as u64) < part_size {
+            break;
+        }
+        part_number += 1;
+    }
+
+    if parts.is_empty() {
+        return Err(UploadFailure::permanent("The encrypted package is empty and cannot be sent.".to_string()));
+    }
+
+    Ok(parts)
+}
+
+/// Rejections the server will repeat verbatim on every retry.
+fn is_permanent_rejection(status: reqwest::StatusCode) -> bool {
+    matches!(
+        status,
+        reqwest::StatusCode::PAYLOAD_TOO_LARGE | reqwest::StatusCode::UNSUPPORTED_MEDIA_TYPE
+    )
 }
 
 fn record_failure(entry_dir: &Path, entry: &mut OutboxEntry, error: String) -> Result<OutboxSubmitResult, ScanFailure> {
@@ -483,12 +760,17 @@ mod tests {
     }
 
     fn spawn_mock_server(app_token: &str) -> MockServer {
+        spawn_mock_server_with_part_size(app_token, None)
+    }
+
+    fn spawn_mock_server_with_part_size(app_token: &str, part_size: Option<u64>) -> MockServer {
         let port = free_port();
         let storage_dir = unique_temp_dir("mockstore");
         std::fs::create_dir_all(&storage_dir).expect("create mock storage dir");
 
         let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("scripts").join("dev_intake_mock.py");
-        let child = Command::new("python")
+        let mut command = Command::new("python");
+        command
             .arg(&script)
             .arg("serve")
             .arg("--storage-dir")
@@ -496,7 +778,11 @@ mod tests {
             .arg("--app-token")
             .arg(app_token)
             .arg("--port")
-            .arg(port.to_string())
+            .arg(port.to_string());
+        if let Some(bytes) = part_size {
+            command.arg("--part-size").arg(bytes.to_string());
+        }
+        let child = command
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -783,9 +1069,12 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         // Nothing is listening here: if the size guard did not fire first, this
         // would fail with a connection error instead of the size message.
+        // Cap lowered so "oversized" is a few kilobytes rather than 2 GB.
+        std::env::set_var("MIMIR_MAX_SUBMISSION_BYTES", "4096");
+
         with_pending_entry_of_kind("http://127.0.0.1:1", SubmissionKind::Contribution, |entry_dir| async move {
             let package = outbox_package_path(&entry_dir, SubmissionKind::Contribution);
-            let oversized = vec![b'x'; (MAX_SUBMISSION_BYTES + 1) as usize];
+            let oversized = vec![b'x'; 4097];
             std::fs::write(&package, &oversized).expect("write oversized package");
 
             let result = attempt_upload(&entry_dir).await.unwrap();
@@ -815,6 +1104,67 @@ mod tests {
             );
         })
         .await;
+
+        std::env::remove_var("MIMIR_MAX_SUBMISSION_BYTES");
+    }
+
+    #[tokio::test]
+    async fn a_package_larger_than_one_part_is_uploaded_in_chunks_and_reassembled() {
+        // The whole reason the chunked path exists: Cloudflare refuses a body
+        // over its edge limit before the Worker runs, so a contribution
+        // carrying raw video could never arrive in one request. Part size is
+        // shrunk on both ends so this exercises three real parts without a
+        // 64 MB fixture.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let part_bytes: u64 = 64 * 1024;
+        let server = spawn_mock_server_with_part_size(OUTBOX_APP_TOKEN, Some(part_bytes));
+        let storage_dir = server.storage_dir.clone();
+        std::env::set_var("MIMIR_UPLOAD_PART_SIZE", part_bytes.to_string());
+
+        // Two and a half parts, so the final short part is covered too.
+        let mut payload = b"age-encryption.org/v1\n".to_vec();
+        payload.resize((part_bytes * 2 + part_bytes / 2) as usize, b'M');
+        let expected = payload.clone();
+
+        with_pending_entry_of_kind(&server.url, SubmissionKind::Contribution, |entry_dir| async move {
+            let package = outbox_package_path(&entry_dir, SubmissionKind::Contribution);
+            std::fs::write(&package, &payload).expect("write multi-part package");
+
+            let result = attempt_upload(&entry_dir).await.unwrap();
+            assert_eq!(result.status, "sent", "chunked upload should succeed: {}", result.message);
+
+            let reloaded = read_entry(&entry_dir).unwrap();
+            assert_eq!(reloaded.status, "sent");
+            assert!(!reloaded.permanent_failure);
+            assert!(package.is_file(), "the encrypted package is kept after sending");
+        })
+        .await;
+
+        std::env::remove_var("MIMIR_UPLOAD_PART_SIZE");
+
+        // The strongest check: the reassembled object is byte-identical, so
+        // the parts went up in the right order and none was truncated.
+        let stored = std::fs::read_dir(storage_dir.join("contributions"))
+            .expect("contributions prefix should exist")
+            .filter_map(|entry| entry.ok())
+            .flat_map(|year| std::fs::read_dir(year.path()).into_iter().flatten().filter_map(|m| m.ok()))
+            .flat_map(|month| std::fs::read_dir(month.path()).into_iter().flatten().filter_map(|f| f.ok()))
+            .map(|file| file.path())
+            .find(|path| path.is_file())
+            .expect("a reassembled object should exist");
+
+        let contents = std::fs::read(&stored).expect("read reassembled object");
+        assert_eq!(contents.len(), expected.len(), "reassembled size must match");
+        assert_eq!(contents, expected, "reassembled bytes must match exactly");
+
+        // Proof the chunked route was actually taken, not the single-shot one:
+        // the mock only creates its staging root when a multipart upload is
+        // opened. Without this the test would pass either way, since the
+        // single-shot route would happily accept a payload this small.
+        assert!(
+            storage_dir.join(".uploads").is_dir(),
+            "the multipart route should have been used, not the single-shot one"
+        );
     }
 
     #[tokio::test]
