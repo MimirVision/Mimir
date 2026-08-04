@@ -1,3 +1,5 @@
+import { FEEDBACK_EMAIL } from '../config'
+
 interface BetaPrivacyNoticeProps {
   open: boolean
   onAccept: () => void
@@ -33,6 +35,19 @@ export function BetaPrivacyNotice({ open, onAccept }: BetaPrivacyNoticeProps) {
           </p>
           <p>
             Mimir may misclassify events. Use the feedback export feature to report mistakes.
+          </p>
+          {/* The beta docs tell testers to email this, but nothing in the app
+              ever showed it -- a tester who never opens README_START_HERE.html
+              had no in-app way to reach anyone. */}
+          <p>
+            Something wrong that feedback cannot capture? Email{' '}
+            <a
+              href={`mailto:${FEEDBACK_EMAIL}`}
+              className="font-semibold text-[var(--mimir-text)] underline decoration-white/30 underline-offset-2 hover:decoration-white/60"
+            >
+              {FEEDBACK_EMAIL}
+            </a>
+            . Please don't post footage on forums or social media.
           </p>
         </div>
 
