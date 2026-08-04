@@ -1,0 +1,13 @@
+node_modules/
+.wrangler/
+dist/
+
+# The age SECRET key that decrypts every submission ever sent. Never commit it
+# -- not even to a private repo: history is permanent and access can widen
+# later. Keep it in a password manager with an offsite copy. Losing it makes
+# every encrypted package undecryptable forever, which has already happened
+# once (commit 93e5de7 in the desktop repo).
+mimir_intake_identity.txt
+*identity*.txt
+*.key
+AGE-SECRET-KEY*
