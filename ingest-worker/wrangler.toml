@@ -1,0 +1,32 @@
+name = "mimir-ingest"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+# Binds this Worker to an R2 bucket named "mimir-intake". Create the bucket
+# first (`wrangler r2 bucket create mimir-intake`), then this binding gives
+# the Worker read/write access to it -- the Worker is the ONLY thing with
+# this binding. The client that uploads never gets R2 credentials at all,
+# and mimir_training_ground.py's `sync` step talks to R2 directly via a
+# separate, developer-only S3 API token, bypassing this Worker entirely.
+[[r2_buckets]]
+binding = "MIMIR_INTAKE_BUCKET"
+bucket_name = "mimir-intake"
+
+# MIMIR_APP_TOKEN is a secret, not a plaintext var -- set it with:
+#   wrangler secret put MIMIR_APP_TOKEN
+# It must match OUTBOX_APP_TOKEN in C:\Mimir\src-tauri\src\outbox.rs exactly.
+# This is a cheap traffic filter (anyone can extract it from the compiled
+# app), not real authentication -- see the comment at the top of src/index.ts
+# for what the actual defenses are.
+
+# Rate limiting via Cloudflare's Workers-native Rate Limiting binding, not a
+# WAF rule -- WAF rate-limiting rules are zone-scoped and need a custom
+# domain attached; this Worker only has a workers.dev subdomain, which has
+# no zone to attach one to. The binding works regardless, since it's
+# attached to the script itself, not to DNS. Keyed by client IP in
+# src/index.ts, applied to both submit routes before anything else runs.
+[[unsafe.bindings]]
+name = "SUBMIT_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
