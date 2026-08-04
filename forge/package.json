@@ -1,0 +1,35 @@
+{
+  "name": "mimir-forge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Developer console for the Mimir training ground -- sync, review feedback, browse collections.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "desktop:dev": "node ./node_modules/@tauri-apps/cli/tauri.js dev",
+    "desktop:build": "node ./node_modules/@tauri-apps/cli/tauri.js build",
+    "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
+    "build": "vite build",
+    "test": "vitest run",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.4"
+  }
+}
