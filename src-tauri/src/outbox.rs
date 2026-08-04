@@ -468,6 +468,20 @@ async fn chunked_upload(
 
     if !create.status().is_success() {
         let status = create.status();
+
+        // A 404 here means the intake service predates chunked upload -- the
+        // route simply is not deployed yet. Left as a bare "404 Not Found"
+        // that reads like a bug in Mimir, so name the actual situation. It is
+        // transient on purpose: it resolves the moment the service is updated,
+        // and the package is kept meanwhile.
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Err(UploadFailure::transient(
+                "This submission is too large to send in one piece, and the submission service \
+                 does not accept chunked uploads yet. Your encrypted copy is kept and Mimir will \
+                 try again later.",
+            ));
+        }
+
         let body = create.text().await.unwrap_or_default();
         let message = summarize_server_error(status, &body);
         // Same reasoning as the single-shot path: size and shape rejections
@@ -1165,6 +1179,50 @@ mod tests {
             storage_dir.join(".uploads").is_dir(),
             "the multipart route should have been used, not the single-shot one"
         );
+    }
+
+    #[tokio::test]
+    async fn a_service_without_chunked_upload_says_so_rather_than_reporting_404() {
+        // Deploy ordering: if a client with chunking reaches an intake service
+        // that predates the multipart routes, create returns 404. A bare
+        // "404 Not Found" reads like a bug in Mimir rather than a service that
+        // has not been updated yet.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let part_bytes: u64 = 32 * 1024;
+        // The mock is told nothing about multipart, but the single-shot routes
+        // it does serve return 404 for unknown paths -- exactly the old
+        // Worker's behaviour.
+        let server = spawn_mock_server(OUTBOX_APP_TOKEN);
+        std::env::set_var("MIMIR_UPLOAD_PART_SIZE", part_bytes.to_string());
+        // Point the multipart calls at a path the mock does not implement by
+        // using a base URL whose /v1/multipart/* routes 404.
+        let base = format!("{}/nope", server.url);
+        std::env::set_var("MIMIR_INTAKE_URL", &base);
+
+        let mut payload = b"age-encryption.org/v1\n".to_vec();
+        payload.resize((part_bytes * 2) as usize, b'M');
+
+        with_pending_entry_of_kind(&base, SubmissionKind::Contribution, |entry_dir| async move {
+            let package = outbox_package_path(&entry_dir, SubmissionKind::Contribution);
+            std::fs::write(&package, &payload).expect("write package");
+
+            let result = attempt_upload(&entry_dir).await.unwrap();
+            assert_eq!(result.status, "pending");
+
+            let reloaded = read_entry(&entry_dir).unwrap();
+            assert!(
+                reloaded.last_error.contains("chunked uploads"),
+                "should name the missing capability, not just the status: {}",
+                reloaded.last_error
+            );
+            assert!(
+                !reloaded.permanent_failure,
+                "a service that has not been updated yet is a transient condition"
+            );
+        })
+        .await;
+
+        std::env::remove_var("MIMIR_UPLOAD_PART_SIZE");
     }
 
     #[tokio::test]
