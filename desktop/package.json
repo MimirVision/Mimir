@@ -1,0 +1,43 @@
+{
+  "name": "mimir-desktop",
+  "private": true,
+  "version": "0.5.0-free-beta.1",
+  "description": "Local-first incident review for vehicle footage",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "sidecar:build": "powershell -ExecutionPolicy Bypass -File scripts\\build-sidecar.ps1",
+    "sbom": "python scripts\\generate_sbom.py",
+    "security:audit": "python scripts\\release_security_audit.py",
+    "desktop:dev": "node ./node_modules/@tauri-apps/cli/tauri.js dev",
+    "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts\\build-sidecar.ps1 && node ./node_modules/@tauri-apps/cli/tauri.js build",
+    "desktop:build:internal": "powershell -ExecutionPolicy Bypass -File scripts\\build-sidecar.ps1 && node ./node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.internal.conf.json",
+    "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:accessibility": "playwright test tests/e2e/accessibility.spec.ts tests/e2e/screens.a11y.spec.ts",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,131 @@
+$ErrorActionPreference = "Stop"
+
+$Root = Split-Path -Parent $PSScriptRoot
+$Package = Get-Content (Join-Path $Root "package.json") -Raw | ConvertFrom-Json
+$PackageVersion = [string]$Package.version
+$ReleaseName = "Mimir-Free-Public-Beta-v$($Package.version)"
+$ReleaseRoot = Join-Path $Root "dist-release"
+$ReleaseDir = Join-Path $ReleaseRoot $ReleaseName
+$BundleDir = Join-Path $Root "src-tauri\target\release\bundle"
+$AssetsDir = Join-Path $Root "release_assets"
+
+function Write-Step($Message) {
+  Write-Host ""
+  Write-Host "== $Message ==" -ForegroundColor Cyan
+}
+
+function Find-Installer {
+  $Nsis = Get-ChildItem -Path (Join-Path $BundleDir "nsis") -Filter "*.exe" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*$PackageVersion*" } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+  if ($Nsis) {
+    return $Nsis
+  }
+
+  $Msi = Get-ChildItem -Path (Join-Path $BundleDir "msi") -Filter "*.msi" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*$PackageVersion*" } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+  if ($Msi) {
+    return $Msi
+  }
+
+  throw "No Windows installer for version $PackageVersion was found under $BundleDir"
+}
+
+Write-Step "Building frontend"
+Push-Location $Root
+try {
+  Write-Step "Running desktop unit and type checks"
+  npm test
+  npm run type-check
+
+  Write-Step "Running desktop shell tests"
+  Push-Location (Join-Path $Root "src-tauri")
+  try {
+    cargo test
+  }
+  finally {
+    Pop-Location
+  }
+
+  Write-Step "Building self-contained Core v2 executables"
+  npm run sidecar:build
+
+  Write-Step "Generating software bill of materials"
+  npm run sbom
+
+  Write-Step "Running dependency, secret, and packaged-content audit"
+  npm run security:audit
+  if ($LASTEXITCODE -ne 0) {
+    throw "Release security audit failed. See release_assets\security_scan_report.json."
+  }
+
+  npm run build
+
+  Write-Step "Building and verifying signed Tauri Windows installer and updater"
+  & (Join-Path $PSScriptRoot "sign_release.ps1")
+  if ($LASTEXITCODE -ne 0) {
+    throw "Signed release build failed. Internal unsigned builds must not be packaged for invitations."
+  }
+}
+finally {
+  Pop-Location
+}
+
+Write-Step "Running strict free-beta release gate"
+$BackendRoot = $env:MIMIR_BACKEND_ROOT
+if ([string]::IsNullOrWhiteSpace($BackendRoot)) {
+  $BackendRoot = Join-Path (Split-Path -Parent $Root) "Mimir_Backend"
+}
+$BackendRoot = [System.IO.Path]::GetFullPath($BackendRoot)
+$ReleaseCheck = Join-Path $BackendRoot "mimir_core_v2_release_check.py"
+$BackendPython = Join-Path $BackendRoot ".venv-runtime\Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $BackendPython)) {
+  throw "Clean backend runtime environment not found: $BackendPython"
+}
+& $BackendPython $ReleaseCheck --gate-only --frontend-root $Root
+if ($LASTEXITCODE -ne 0) {
+  throw "Strict release gate failed. This installer must not be distributed."
+}
+
+Write-Step "Creating beta release folder"
+$Installer = Find-Installer
+
+if (Test-Path $ReleaseDir) {
+  Remove-Item -Recurse -Force $ReleaseDir
+}
+
+New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
+
+$InstallerName = if ($Installer.Extension -ieq ".exe") { "MimirSetup.exe" } else { "MimirInstaller.msi" }
+Copy-Item -Force $Installer.FullName (Join-Path $ReleaseDir $InstallerName)
+
+Copy-Item -Force (Join-Path $AssetsDir "README_START_HERE.html") (Join-Path $ReleaseDir "README_START_HERE.html")
+Copy-Item -Force (Join-Path $AssetsDir "PUBLIC_BETA_TESTING.md") (Join-Path $ReleaseDir "PUBLIC_BETA_TESTING.md")
+Copy-Item -Force (Join-Path $AssetsDir "sbom.cdx.json") (Join-Path $ReleaseDir "sbom.cdx.json")
+Copy-Item -Recurse -Force (Join-Path $Root "docs") (Join-Path $ReleaseDir "docs")
+
+$ScreenshotCandidates = @(
+  (Join-Path $AssetsDir "screenshot.png"),
+  (Join-Path $AssetsDir "screenshot.jpg"),
+  (Join-Path $AssetsDir "mimir-screenshot.png"),
+  (Join-Path $Root "screenshot.png")
+)
+
+foreach ($Candidate in $ScreenshotCandidates) {
+  if (Test-Path $Candidate) {
+    Copy-Item -Force $Candidate (Join-Path $ReleaseDir (Split-Path -Leaf $Candidate))
+    break
+  }
+}
+
+Write-Host ""
+Write-Host "Public beta release package created:" -ForegroundColor Green
+Write-Host $ReleaseDir
+Write-Host ""
+Write-Host "Contents:"
+Get-ChildItem $ReleaseDir | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize

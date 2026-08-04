@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mimir Beta</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <nav class="nav" aria-label="Main navigation">
+        <div class="brand">Mimir</div>
+        <a href="#beta-guide">Beta guide</a>
+      </nav>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Free public beta</p>
+          <h1>Mimir</h1>
+          <h2>Find the moments worth watching.</h2>
+          <p class="subtitle">
+            AI incident review for vehicle footage. Scan locally, review incidents, and stay in control of every clip.
+          </p>
+          <p class="subtitle">
+            Free, no account, nothing leaves your PC unless you choose to send feedback or contribute footage — and
+            even then, it's encrypted before it does. It's still early beta software — see the beta guide below for
+            exactly what that means before you rely on it.
+          </p>
+          <div class="actions">
+            <!--
+              Point this at the GitHub Release asset once the releases repo
+              exists, e.g.
+                https://github.com/OWNER/REPO/releases/latest/download/MimirSetup.exe
+              That is what makes downloads countable: GitHub reports a download
+              count per asset, and scripts/download_stats.py records it over
+              time. The relative path below works for sharing the folder
+              directly, but nothing is counted when it is used.
+            -->
+            <a class="button primary" href="./MimirSetup.exe">Download for Windows</a>
+            <a class="button secondary" href="#beta-guide">View beta guide</a>
+          </div>
+        </div>
+
+        <div class="product-preview" aria-label="Mimir product screenshot placeholder">
+          <div class="preview-topbar">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="preview-video">
+            <div class="play-mark"></div>
+            <div class="preview-badge">Important</div>
+          </div>
+          <div class="preview-timeline">
+            <div class="timeline-line"></div>
+            <span class="marker neutral"></span>
+            <span class="marker amber"></span>
+            <span class="marker red"></span>
+            <span class="marker neutral right"></span>
+          </div>
+          <div class="preview-cards">
+            <div>
+              <strong>Possible contact</strong>
+              <span>Review recommended</span>
+            </div>
+            <div>
+              <strong>Evidence</strong>
+              <span>Local scan complete</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-grid" aria-label="Mimir beta details">
+        <article>
+          <p class="section-kicker">How it works</p>
+          <h3>From folder to review timeline.</h3>
+          <ul>
+            <li>Choose footage folder</li>
+            <li>Scan locally</li>
+            <li>Review incidents</li>
+            <li>Move or trash clips manually</li>
+          </ul>
+        </article>
+
+        <article>
+          <p class="section-kicker">Safety</p>
+          <h3>You stay in control.</h3>
+          <ul>
+            <li>No automatic deletion</li>
+            <li>Manual status control</li>
+            <li>Local processing so you stay in control of your privacy</li>
+          </ul>
+        </article>
+
+        <article id="beta-guide">
+          <p class="section-kicker">Beta notes</p>
+          <h3>Honest about where detection stands.</h3>
+          <ul>
+            <li>Ships with a stock, general-purpose detector, not yet fine-tuned on real Sentry footage</li>
+            <li>Can miss real events and can flag ordinary activity - you're always the final review</li>
+            <li>Rear-end contact and door-ding detection are the current priority to improve</li>
+            <li>Report what it gets wrong: <a href="mailto:feedback.mimir@gmail.com">feedback.mimir@gmail.com</a></li>
+          </ul>
+        </article>
+
+        <article>
+          <p class="section-kicker">Before you download</p>
+          <h3>What it needs to run.</h3>
+          <ul>
+            <li>Windows 10 or 11, 64-bit; ~197 MB download, ~325 MB installed</li>
+            <li>Scanning and review are fully offline - your footage never leaves the PC on its own</li>
+            <li>Internet is used only if you choose to send feedback or a contribution, and for install if Windows is missing the WebView2 runtime (Windows 11 already includes it)</li>
+            <li>No GPU, no Ollama, no account required for the core app</li>
+            <li>Unsigned installer: Windows will show a warning, choose the advanced option to continue</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

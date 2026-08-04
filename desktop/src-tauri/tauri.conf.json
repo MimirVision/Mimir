@@ -1,0 +1,93 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mimir",
+  "version": "0.5.0-free-beta.1",
+  "identifier": "com.mimir.scanner",
+  "mainBinaryName": "mimir",
+  "build": {
+    "beforeDevCommand": "node ./node_modules/vite/bin/vite.js",
+    "beforeBuildCommand": "node ./node_modules/vite/bin/vite.js build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self' customprotocol: asset:; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "$APPDATA/**",
+            "$APPLOCALDATA/**"
+          ],
+          "deny": [
+            "**/.git/**",
+            "**/.env*"
+          ],
+          "requireLiteralLeadingDot": true
+        }
+      },
+      "capabilities": [
+        "main-capability"
+      ]
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Mimir",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1080,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "category": "Utility",
+    "copyright": "Copyright Mimir",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "longDescription": "Local-first incident review for Tesla Sentry footage.",
+    "publisher": "Mimir",
+    "resources": [
+      "resources/mimir-backend/mimir-core-v2-scan.exe",
+      "resources/mimir-backend/mimir-core-v2-ai-enrich.exe",
+      "resources/mimir-backend/mimir-core-v2-actions.exe",
+      "resources/mimir-backend/mimir-core-v2-dataset.exe",
+      "resources/mimir-backend/mimir-core-v2-model-update.exe",
+      "resources/mimir-backend/age.exe",
+      "resources/mimir-backend/AGE-LICENSE.txt"
+    ],
+    "shortDescription": "Local incident review for vehicle footage",
+    "targets": [
+      "nsis"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis/header.bmp",
+        "sidebarImage": "icons/nsis/sidebar.bmp",
+        "template": "installer.nsi"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk4NjM5ODNGODA4QjFDODIKUldTQ0hJdUFQNWhqbVBGQ0tuWTVUbXRjYk9ZTkJ3ckpmdlFDT3N3V29jcG9JUGJ3RFliQ3NwN1oK"
+    }
+  }
+}
