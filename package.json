@@ -1,0 +1,33 @@
+{
+  "name": "mimir-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Root shortcuts. Each component still owns its own package.json; these just forward so a command run from the repo root does the obvious thing instead of failing with ENOENT.",
+  "scripts": {
+    "dev": "cd desktop && npm run dev",
+    "build": "cd desktop && npm run build",
+    "test": "cd desktop && npm run test",
+    "type-check": "cd desktop && npm run type-check",
+    "test:accessibility": "cd desktop && npm run test:accessibility",
+
+    "desktop:dev": "cd desktop && npm run desktop:dev",
+    "desktop:build": "cd desktop && npm run desktop:build",
+    "desktop:build:internal": "cd desktop && npm run desktop:build:internal",
+    "sidecar:build": "cd desktop && npm run sidecar:build",
+    "sbom": "cd desktop && npm run sbom",
+    "security:audit": "cd desktop && npm run security:audit",
+
+    "rust:test": "cd desktop/src-tauri && cargo test",
+    "rust:clippy": "cd desktop/src-tauri && cargo clippy --all-targets",
+
+    "worker:dev": "cd ingest-worker && npm run dev",
+    "worker:deploy": "cd ingest-worker && npm run deploy",
+    "worker:typecheck": "cd ingest-worker && npm run typecheck",
+
+    "backend:test": "cd backend && .venv-runtime\\Scripts\\python.exe -m unittest discover -s mimir_core_v2 -t . -p \"test_*.py\"",
+
+    "forge:dev": "cd forge && npm run dev",
+
+    "install:all": "cd desktop && npm install && cd ../ingest-worker && npm install && cd ../forge && npm install"
+  }
+}
