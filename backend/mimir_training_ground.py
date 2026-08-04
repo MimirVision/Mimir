@@ -16,7 +16,7 @@ feedback:
 
 `status`/`feedback list`/`feedback show`/`collections list` accept `--json`
 for a machine-readable version of the same data (built for Mimir Forge, the
-GUI companion app -- see C:\Mimir_Forge). `sync` always prints one final
+GUI companion app -- see C:\MimirDev\forge). `sync` always prints one final
 `MIMIR_SYNC_RESULT_JSON: {...}` line alongside its normal progress output,
 for the same reason. `collections show` is always JSON -- it's a detail
 dump, there's no useful prose form of it.
@@ -118,7 +118,7 @@ class R2Config:
         if missing:
             raise SystemExit(
                 "Missing R2 credentials: " + ", ".join(missing) + ". "
-                "See C:\\Mimir_Ingest_Worker\\README.md for where these come from."
+                "See C:\\MimirDev\\ingest-worker\\README.md for where these come from."
             )
 
 

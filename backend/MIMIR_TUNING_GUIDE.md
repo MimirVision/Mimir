@@ -133,7 +133,7 @@ Use a lower budget for speed, a higher budget when testing accuracy. The session
 Use a small known test folder first:
 
 ```powershell
-cd C:\Mimir_Backend
+cd C:\MimirDev\backend
 .venv\Scripts\python.exe -m py_compile mimir_core_v2_scan.py
 .venv\Scripts\python.exe mimir_core_v2_scan.py --input "C:\mimir\test" --mode fast
 .venv\Scripts\python.exe validate_mimir_output.py

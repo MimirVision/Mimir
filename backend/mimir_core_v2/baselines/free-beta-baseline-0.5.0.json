@@ -5,7 +5,7 @@
   "release_channel": "internal_free_beta",
   "external_distribution_approved": false,
   "frontend": {
-    "repository": "C:\\Mimir",
+    "repository": "C:\\MimirDev\\desktop",
     "commit": "6110419fe302aac8e69aa5d08a48d07d634c05c4",
     "tag": "free-beta-baseline-0.5.0",
     "installer_filename": "Mimir_0.5.0-beta.1_x64-setup.exe",

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-BASE = Path(r"C:\Mimir_Backend")
+BASE = Path(r"C:\MimirDev\backend")
 LABELS_CSV = BASE / "benchmark_labels.csv"
 LATEST_SESSION_JSON = BASE / "MimirOutput" / "latest_session.json"
 

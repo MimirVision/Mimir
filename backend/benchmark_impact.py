@@ -3,7 +3,7 @@ import json
 import os
 
 
-BASE = r"C:\Mimir_Backend"
+BASE = r"C:\MimirDev\backend"
 LABELS_CSV = os.path.join(BASE, "impact_labels.csv")
 LATEST_SESSION_JSON = os.path.join(BASE, "MimirOutput", "latest_session.json")
 VALID_IMPACT_LEVELS = {"NONE", "LOW", "MEDIUM", "HIGH"}

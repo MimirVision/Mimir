@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Palette ported from C:\Mimir\src\index.css so Forge reads as the same
+/* Palette ported from C:\MimirDev\desktop\src\index.css so Forge reads as the same
    developer's tool rather than a mismatched one-off. */
 @layer base {
   :root {

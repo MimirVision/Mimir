@@ -72,7 +72,7 @@ This keeps scans faster, reduces noise, and helps prevent the AI model from beco
 
 On a fresh Windows PC:
 
-- There is no `C:\Mimir_Backend`.
+- There is no `C:\MimirDev\backend`.
 - Python is not installed or required.
 - No manual terminal setup is required.
 - Install Mimir.

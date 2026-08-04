@@ -29,7 +29,7 @@ pub const OUTBOX_APP_TOKEN: &str = "mimir-beta-2026-a4f9c1";
 // var with a hardcoded fallback (see MIMIR_OUTPUT_DIR). Same idiom here: a
 // real, deployed Worker is now the default, verified end to end (all of
 // accept / duplicate-reject / bad-token / bad-content / bad-package-id /
-// no-read-access) against C:\Mimir_Ingest_Worker on 2026-07-31. Point
+// no-read-access) against C:\MimirDev\ingest-worker on 2026-07-31. Point
 // MIMIR_INTAKE_URL at scripts/dev_intake_mock.py's local mock instead for
 // development, so nothing built locally submits to production by accident.
 fn intake_base_url() -> String {

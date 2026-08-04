@@ -38,7 +38,7 @@ built, run, or referenced by the shipped app — Core v2 replaced it entirely.
 Typical command:
 
 ```powershell
-cd C:\Mimir_Backend
+cd C:\MimirDev\backend
 .venv\Scripts\python.exe mimir_core_v2_scan.py --input "C:\mimir\test" --mode balanced
 ```
 
@@ -138,7 +138,7 @@ Each incident may include `start_frame_image`, `best_frame_image`, `end_frame_im
 `hero_thumbnail`, `thumbnail`, `contact_sheet`. Files are stored per-session under:
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\thumbnails\
+C:\MimirDev\backend\MimirOutputV2\sessions\<session_id>\thumbnails\
 ```
 
 ## Timeline Markers
@@ -152,9 +152,9 @@ Main outputs (dev workspace; packaged builds resolve under `%LOCALAPPDATA%\Mimir
 or wherever `MIMIR_OUTPUT_DIR` points — see `mimir_core_v2/runtime_paths.py`):
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\latest_session.json
-C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\session.json
-C:\Mimir_Backend\MimirOutputV2\sessions\<session_id>\thumbnails\
+C:\MimirDev\backend\MimirOutputV2\latest_session.json
+C:\MimirDev\backend\MimirOutputV2\sessions\<session_id>\session.json
+C:\MimirDev\backend\MimirOutputV2\sessions\<session_id>\thumbnails\
 ```
 
 Optional user-facing storage:
@@ -169,10 +169,10 @@ Optional user-facing storage:
 `mimir_clip_actions.py` is for post-review storage changes. It is not used during scanning.
 
 ```powershell
-python mimir_clip_actions.py --session "C:\Mimir_Backend\MimirOutputV2\latest_session.json" --incident-id incident_0001 --move-to-library
-python mimir_clip_actions.py --session "C:\Mimir_Backend\MimirOutputV2\latest_session.json" --incident-id incident_0001 --delete
-python mimir_clip_actions.py --session "C:\Mimir_Backend\MimirOutputV2\latest_session.json" --move-status IMPORTANT --move-to-library
-python mimir_clip_actions.py --session "C:\Mimir_Backend\MimirOutputV2\latest_session.json" --cleanup-reviewed
+python mimir_clip_actions.py --session "C:\MimirDev\backend\MimirOutputV2\latest_session.json" --incident-id incident_0001 --move-to-library
+python mimir_clip_actions.py --session "C:\MimirDev\backend\MimirOutputV2\latest_session.json" --incident-id incident_0001 --delete
+python mimir_clip_actions.py --session "C:\MimirDev\backend\MimirOutputV2\latest_session.json" --move-status IMPORTANT --move-to-library
+python mimir_clip_actions.py --session "C:\MimirDev\backend\MimirOutputV2\latest_session.json" --cleanup-reviewed
 ```
 
 These actions move files only after review. They should never permanently delete clips.
@@ -187,4 +187,4 @@ as separate v1 scripts:
 - `mimir_core_v2_reliability.py` — real-fixture reliability gate.
 - `mimir_core_v2_verify.py` — quick CI-friendly verification (used by `.github/workflows/core-v2-verify.yml`).
 
-See `docs/RELEASE_READINESS.md` in `C:\Mimir` for the full release process.
+See `docs/RELEASE_READINESS.md` in `C:\MimirDev\desktop` for the full release process.

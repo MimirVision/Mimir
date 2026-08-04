@@ -2,7 +2,7 @@ import json
 import os
 
 
-BASE = r"C:\Mimir_Backend"
+BASE = r"C:\MimirDev\backend"
 LATEST_SESSION_JSON = os.path.join(BASE, "MimirOutputV2", "latest_session.json")
 PATH_FIELDS = [
     "source_video",

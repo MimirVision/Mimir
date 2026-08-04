@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 
-BACKEND_ROOT = Path(r"C:\Mimir_Backend")
+BACKEND_ROOT = Path(r"C:\MimirDev\backend")
 OUTPUT_PATH = BACKEND_ROOT / "MimirOutput" / "discovered_source.json"
 TESLACAM_FOLDERS = {"RecentClips", "SavedClips", "SentryClips"}
 COMMON_CAMERAS = ["front", "back", "left_repeater", "right_repeater"]

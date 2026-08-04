@@ -26,29 +26,29 @@ use outbox::{OutboxEntry, OutboxSubmitResult, SubmissionKind};
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[allow(dead_code)]
-const DEV_BACKEND_ROOT: &str = r"C:\Mimir_Backend";
+const DEV_BACKEND_ROOT: &str = r"C:\MimirDev\backend";
 #[allow(dead_code)]
-const DEV_BACKEND_PYTHON: &str = r"C:\Mimir_Backend\.venv\Scripts\python.exe";
+const DEV_BACKEND_PYTHON: &str = r"C:\MimirDev\backend\.venv\Scripts\python.exe";
 #[allow(dead_code)]
-const DEV_CORE_V2_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_scan.py";
+const DEV_CORE_V2_SCRIPT: &str = r"C:\MimirDev\backend\mimir_core_v2_scan.py";
 #[allow(dead_code)]
-const DEV_CORE_V2_AI_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_ai_enrich.py";
+const DEV_CORE_V2_AI_SCRIPT: &str = r"C:\MimirDev\backend\mimir_core_v2_ai_enrich.py";
 #[allow(dead_code)]
-const DEV_CORE_V2_ACTION_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_actions.py";
+const DEV_CORE_V2_ACTION_SCRIPT: &str = r"C:\MimirDev\backend\mimir_core_v2_actions.py";
 #[allow(dead_code)]
-const DEV_CORE_V2_DATASET_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_dataset.py";
+const DEV_CORE_V2_DATASET_SCRIPT: &str = r"C:\MimirDev\backend\mimir_core_v2_dataset.py";
 #[allow(dead_code)]
-const DEV_CORE_V2_MODEL_UPDATE_SCRIPT: &str = r"C:\Mimir_Backend\mimir_core_v2_model_update.py";
+const DEV_CORE_V2_MODEL_UPDATE_SCRIPT: &str = r"C:\MimirDev\backend\mimir_core_v2_model_update.py";
 #[allow(dead_code)]
-const DEV_CORE_V2_SCAN_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-scan.exe";
+const DEV_CORE_V2_SCAN_EXE: &str = r"C:\MimirDev\backend\dist_backend\mimir-core-v2-scan.exe";
 #[allow(dead_code)]
-const DEV_CORE_V2_AI_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-ai-enrich.exe";
+const DEV_CORE_V2_AI_EXE: &str = r"C:\MimirDev\backend\dist_backend\mimir-core-v2-ai-enrich.exe";
 #[allow(dead_code)]
-const DEV_CORE_V2_ACTIONS_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-actions.exe";
+const DEV_CORE_V2_ACTIONS_EXE: &str = r"C:\MimirDev\backend\dist_backend\mimir-core-v2-actions.exe";
 #[allow(dead_code)]
-const DEV_CORE_V2_DATASET_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-dataset.exe";
+const DEV_CORE_V2_DATASET_EXE: &str = r"C:\MimirDev\backend\dist_backend\mimir-core-v2-dataset.exe";
 #[allow(dead_code)]
-const DEV_CORE_V2_MODEL_UPDATE_EXE: &str = r"C:\Mimir_Backend\dist_backend\mimir-core-v2-model-update.exe";
+const DEV_CORE_V2_MODEL_UPDATE_EXE: &str = r"C:\MimirDev\backend\dist_backend\mimir-core-v2-model-update.exe";
 const BACKEND_RESOURCE_FOLDER: &str = "mimir-backend";
 const CORE_V2_SCAN_EXE_NAME: &str = "mimir-core-v2-scan.exe";
 const CORE_V2_AI_EXE_NAME: &str = "mimir-core-v2-ai-enrich.exe";
@@ -358,7 +358,7 @@ fn backend_missing_failure(kind: &str, candidates: &[&str]) -> ScanFailure {
 // bundled resources under `<exe_dir>/resources/<path-as-declared-in-tauri.conf.json>`,
 // so the "resources" segment has to be added back here. Without it, this always
 // returns a nonexistent path in a packaged build (dev builds never hit this path,
-// since resolve_core_v2_*_runtime short-circuits to C:\Mimir_Backend first).
+// since resolve_core_v2_*_runtime short-circuits to C:\MimirDev\backend first).
 fn backend_resource_path(resource_dir: &Path, exe_name: &str) -> PathBuf {
     resource_dir.join("resources").join(BACKEND_RESOURCE_FOLDER).join(exe_name)
 }

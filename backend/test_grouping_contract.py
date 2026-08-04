@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-BASE_DIR = Path(r"C:\Mimir_Backend")
+BASE_DIR = Path(r"C:\MimirDev\backend")
 LATEST_SESSION_JSON = BASE_DIR / "MimirOutput" / "latest_session.json"
 REPORT_JSON = BASE_DIR / "MimirOutput" / "grouping_contract_report.json"
 

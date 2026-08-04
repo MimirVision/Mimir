@@ -1,8 +1,20 @@
-name: Core v2 verification
+name: backend-verify
 
+# Was backend/.github/workflows/core-v2-verify.yml. GitHub only runs workflows
+# from the repo root, so it moved here when the repos merged.
 on:
   push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-verify.yml'
   pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-verify.yml'
+
+defaults:
+  run:
+    working-directory: backend
 
 jobs:
   verify:
@@ -14,6 +26,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: backend/requirements-core-v2.txt
       - name: Install Core v2 runtime
         run: python -m pip install -r requirements-core-v2.txt
       - name: Verify Core v2 contracts

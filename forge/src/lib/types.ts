@@ -1,5 +1,5 @@
 // Mirrors the JSON shapes mimir_training_ground.py's --json commands emit
-// (C:\Mimir_Backend\mimir_training_ground.py) and gate_progress() in
+// (C:\MimirDev\backend\mimir_training_ground.py) and gate_progress() in
 // mimir_core_v2_pipeline.py. Kept intentionally loose (most fields optional
 // or `unknown`) rather than re-declaring every backend field, since the
 // backend is the source of truth and this only needs what the UI reads.

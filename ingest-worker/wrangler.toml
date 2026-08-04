@@ -14,7 +14,7 @@ bucket_name = "mimir-intake"
 
 # MIMIR_APP_TOKEN is a secret, not a plaintext var -- set it with:
 #   wrangler secret put MIMIR_APP_TOKEN
-# It must match OUTBOX_APP_TOKEN in C:\Mimir\src-tauri\src\outbox.rs exactly.
+# It must match OUTBOX_APP_TOKEN in C:\MimirDev\desktop\src-tauri\src\outbox.rs exactly.
 # This is a cheap traffic filter (anyone can extract it from the compiled
 # app), not real authentication -- see the comment at the top of src/index.ts
 # for what the actual defenses are.

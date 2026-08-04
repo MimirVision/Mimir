@@ -7,7 +7,7 @@ export default {
   ],
   theme: {
     extend: {
-      // Mirrors C:\Mimir\tailwind.config.ts's palette so Forge reads as the
+      // Mirrors C:\MimirDev\desktop\tailwind.config.ts's palette so Forge reads as the
       // same developer's tool rather than a mismatched one-off.
       colors: {
         'mimir-bg': 'var(--mimir-bg)',

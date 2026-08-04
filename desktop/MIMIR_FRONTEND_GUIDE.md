@@ -7,7 +7,7 @@ This guide explains the Tauri + React + TypeScript app in beginner-friendly term
 Important folders:
 
 ```text
-C:\Mimir\
+C:\MimirDev\desktop\
   src\
     App.tsx
     types.ts
@@ -252,7 +252,7 @@ src-tauri\src\main.rs
 The backend source of truth is usually:
 
 ```text
-C:\Mimir_Backend\MimirOutputV2\latest_session.json
+C:\MimirDev\backend\MimirOutputV2\latest_session.json
 ```
 
 ## Backend Commands
@@ -299,7 +299,7 @@ The viewer also has a Copy diagnostics button when an error boundary catches a p
 ## Useful Commands
 
 ```powershell
-cd C:\Mimir
+cd C:\MimirDev\desktop
 npm run dev
 npm run build
 npm run type-check
@@ -309,7 +309,7 @@ npm run desktop:dev
 For Rust/Tauri command checks:
 
 ```powershell
-cd C:\Mimir\src-tauri
+cd C:\MimirDev\desktop\src-tauri
 cargo check
 ```
 

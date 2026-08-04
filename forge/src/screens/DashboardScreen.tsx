@@ -168,7 +168,7 @@ function TrainingCommands({ datasetRoot }: { datasetRoot: string }) {
       </div>
       <p className="mt-1.5 text-[11px] leading-5 text-mimir-text-subtle">
         Syncing and reviewing here only gets the data ready -- starting a training run stays a deliberate
-        step you run yourself, in C:\Mimir_Backend, so a candidate that regresses real detection can never
+        step you run yourself, in C:\MimirDev\backend, so a candidate that regresses real detection can never
         reach testers automatically. These are the exact commands `train` will re-check this gate against:
       </p>
       <pre className="mt-2.5 overflow-x-auto rounded-md border border-mimir-border bg-black/25 p-2.5 text-[11px] leading-5 text-mimir-text-muted">

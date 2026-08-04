@@ -206,14 +206,14 @@ Use a real `latest_session.json` with many incidents.
 Backend:
 
 ```powershell
-cd C:\Mimir_Backend
+cd C:\MimirDev\backend
 .venv\Scripts\python.exe mimir_core_v2_scan.py --input "D:\TeslaCam" --mode balanced
 ```
 
 Frontend:
 
 ```powershell
-cd C:\Mimir
+cd C:\MimirDev\desktop
 npm run build
 npm run desktop:dev
 ```
@@ -232,7 +232,7 @@ Things to check:
 After UI edits:
 
 ```powershell
-cd C:\Mimir
+cd C:\MimirDev\desktop
 npm run build
 npm run type-check
 ```
@@ -240,7 +240,7 @@ npm run type-check
 If you changed Tauri commands:
 
 ```powershell
-cd C:\Mimir\src-tauri
+cd C:\MimirDev\desktop\src-tauri
 cargo check
 ```
 

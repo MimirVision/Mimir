@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 
-DEFAULT_SESSION = Path(r"C:\Mimir_Backend\MimirOutputV2\latest_session.json")
+DEFAULT_SESSION = Path(r"C:\MimirDev\backend\MimirOutputV2\latest_session.json")
 
 REQUIRED_EVIDENCE_KEYS = [
     "motion_score",

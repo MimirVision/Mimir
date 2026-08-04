@@ -4,7 +4,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $BackendRoot = $env:MIMIR_BACKEND_ROOT
 if ([string]::IsNullOrWhiteSpace($BackendRoot)) {
   $SiblingBackend = Join-Path (Split-Path -Parent $Root) "Mimir_Backend"
-  $BackendRoot = if (Test-Path $SiblingBackend) { $SiblingBackend } else { "C:\Mimir_Backend" }
+  $BackendRoot = if (Test-Path $SiblingBackend) { $SiblingBackend } else { "C:\MimirDev\backend" }
 }
 $BackendPython = Join-Path $BackendRoot ".venv-runtime\Scripts\python.exe"
 $BackendBuildScript = Join-Path $BackendRoot "build_backend_exe.py"

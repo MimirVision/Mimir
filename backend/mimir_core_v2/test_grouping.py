@@ -15,8 +15,8 @@ from .source_discovery import discover_videos
 from .validators import sorted_cameras
 
 
-DEFAULT_OUTPUT = Path(r"C:\Mimir_Backend\MimirOutputV2\latest_session.json")
-DEFAULT_REPORT = Path(r"C:\Mimir_Backend\MimirOutputV2\grouping_report.json")
+DEFAULT_OUTPUT = Path(r"C:\MimirDev\backend\MimirOutputV2\latest_session.json")
+DEFAULT_REPORT = Path(r"C:\MimirDev\backend\MimirOutputV2\grouping_report.json")
 
 
 def normalize_path(value: str) -> str:

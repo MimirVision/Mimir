@@ -5,7 +5,7 @@ locates impacts better than `balanced` or `thorough`.
 
 ## Reproduction
 
-`C:\Mimir\Test\reddit 3.mp4` (29s). The real impact is at ~16.3s.
+`C:\MimirDev\desktop\Test\reddit 3.mp4` (29s). The real impact is at ~16.3s.
 
 | mode | sampled frames | `max_motion_score` | `visual_contact_time_sec` | primary key moment |
 |------|----------------|--------------------|---------------------------|--------------------|
