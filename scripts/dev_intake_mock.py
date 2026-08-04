@@ -34,12 +34,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
-import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -69,7 +70,25 @@ CHUNK_SIZE = 1024 * 1024
 # same size and at least 5 MiB.
 PART_SIZE = 64 * 1024 * 1024
 MAX_PARTS = 10_000
-UPLOAD_ID_RE = re.compile(r"^[A-Za-z0-9._~-]{1,256}$")
+UPLOAD_ID_RE = re.compile(r"^[A-Za-z0-9._~-]{1,1024}$")
+
+# Real R2 upload ids are long base64url strings -- an observed one was 343
+# characters. This mock used to hand out `uuid4().hex`, 32 characters, which
+# meant a too-short length bound in the Worker passed every local test and
+# then rejected every real upload with `invalid_upload_id`. Issue ids of a
+# realistic shape and length so that class of bug fails here first.
+def _new_upload_id() -> str:
+    return base64.urlsafe_b64encode(os.urandom(256)).decode("ascii").rstrip("=")
+
+
+def _staging_name(upload_id: str) -> str:
+    """Short, filesystem-safe directory name for an upload.
+
+    The id itself is far too long to use directly -- a 343-character folder
+    name plus the storage path would exceed Windows' MAX_PATH.
+    """
+
+    return hashlib.sha256(upload_id.encode("utf-8")).hexdigest()[:32]
 
 # The exact shape the server mints, so a client-supplied key cannot address
 # anything else. Mirrors isMintedObjectKey() in the Worker.
@@ -175,9 +194,10 @@ def _make_handler(storage_dir: Path, app_token: str, part_size: int = PART_SIZE)
                     self._reject(409, "duplicate")
                     return
 
-                upload_id = uuid.uuid4().hex
-                (uploads / upload_id).mkdir(parents=True, exist_ok=True)
-                (uploads / upload_id / "object_key").write_text(object_key, encoding="utf-8")
+                upload_id = _new_upload_id()
+                staging = uploads / _staging_name(upload_id)
+                staging.mkdir(parents=True, exist_ok=True)
+                (staging / "object_key").write_text(object_key, encoding="utf-8")
                 self._json(201, {
                     "accepted": True,
                     "object_key": object_key,
@@ -203,7 +223,7 @@ def _make_handler(storage_dir: Path, app_token: str, part_size: int = PART_SIZE)
                     self._reject(400, "invalid_part_number")
                     return
 
-                staging = uploads / upload_id
+                staging = uploads / _staging_name(upload_id)
                 if not staging.is_dir():
                     self._reject(404, "not_found")
                     return
@@ -249,7 +269,7 @@ def _make_handler(storage_dir: Path, app_token: str, part_size: int = PART_SIZE)
                     self._reject(400, "invalid_parts")
                     return
 
-                staging = uploads / upload_id
+                staging = uploads / _staging_name(upload_id)
                 if not staging.is_dir():
                     self._reject(404, "not_found")
                     return
@@ -280,7 +300,7 @@ def _make_handler(storage_dir: Path, app_token: str, part_size: int = PART_SIZE)
                 if not MINTED_KEY_RE.match(str(body.get("object_key", ""))) or not UPLOAD_ID_RE.match(upload_id):
                     self._reject(400, "bad_request")
                     return
-                shutil.rmtree(uploads / upload_id, ignore_errors=True)
+                shutil.rmtree(uploads / _staging_name(upload_id), ignore_errors=True)
                 self._json(200, {"accepted": True, "aborted": True})
                 return
 
