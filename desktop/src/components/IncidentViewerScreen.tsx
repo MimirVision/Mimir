@@ -13,7 +13,8 @@ import {
 } from '../lib/contributionIdentity'
 import { formatDateTime, sourceEventTimestamp, sourceFilename } from '../lib/incidentDisplay'
 import { type SeverityGroup } from '../lib/incidentStatus'
-import { describeError, friendlyMessage } from '../lib/errorMessages'
+import { describeError, friendlyMessage, type DescribedError } from '../lib/errorMessages'
+import { ErrorNotice } from './ErrorNotice'
 import { ModalOverlay } from './ModalOverlay'
 import {
   actionButtonTone,
@@ -1630,7 +1631,14 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
   const [rightsConfirmed, setRightsConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
+  // A DescribedError, not a bare string. This panel used to keep only
+  // friendlyMessage()'s headline, which by design returns the generic fallback
+  // for any cause it does not recognise -- so a real contribution failure
+  // showed "That contribution package could not be written." and threw the
+  // actual reason away. Unfixable by the tester and undiagnosable from a bug
+  // report. Every other failure in this file already routes through
+  // describeError + ErrorNotice, which keeps the raw text behind a disclosure.
+  const [error, setError] = useState<DescribedError | null>(null)
   // When consent details are already on file, collapse the whole form down to
   // a single confirm button. The rights confirmation itself is never skipped --
   // only the re-typing of answers that don't change between incidents.
@@ -1645,7 +1653,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
     setPermissionRecord('')
     setRightsConfirmed(false)
     setMessage('')
-    setError('')
+    setError(null)
   }, [incident.id])
 
   const choosePermissionRecord = async () => {
@@ -1655,7 +1663,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         setPermissionRecord(selected)
       }
     } catch (value) {
-      setError(friendlyMessage(value, 'The file picker could not be opened.'))
+      setError(describeError(value, 'The file picker could not be opened.'))
     }
   }
 
@@ -1669,19 +1677,19 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
     // Say which field is missing. "Complete the consent details first" left the
     // user hunting, and the permission reference is the one people get stuck on.
     if (!recordedBy.trim()) {
-      setError('Add your name first -- it is recorded with the consent statement.')
+      setError({ message: 'Add your name first -- it is recorded with the consent statement.', detail: '' })
       return
     }
     if (!permissionReference.trim()) {
-      setError(`Answer "${permissionReferenceLabel(rightsBasis)}" before contributing.`)
+      setError({ message: `Answer "${permissionReferenceLabel(rightsBasis)}" before contributing.`, detail: '' })
       return
     }
     if (!oneClick && !rightsConfirmed) {
-      setError('Confirm your rights before exporting.')
+      setError({ message: 'Confirm your rights before exporting.', detail: '' })
       return
     }
     setBusy(true)
-    setError('')
+    setError(null)
     setMessage('Encrypting selected footage locally...')
     try {
       const result = await invoke<OutboxSubmitResult>('submit_training_contribution', {
@@ -1699,7 +1707,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
       setRightsConfirmed(false)
     } catch (value) {
       setMessage('')
-      setError(friendlyMessage(value, 'That contribution package could not be written.'))
+      setError(describeError(value, 'That contribution package could not be written.'))
     } finally {
       setBusy(false)
     }
@@ -1751,7 +1759,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
             </button>
           </div>
           {message && <div className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">{message}</div>}
-          {error && <div className="text-[12px] leading-5 text-red-100/85">{error}</div>}
+          <ErrorNotice error={error} className="mt-1" />
         </>
       ) : (
       <>
@@ -1827,7 +1835,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         </button>
       </div>
       {message && <div className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">{message}</div>}
-      {error && <div className="text-[12px] leading-5 text-red-100/85">{error}</div>}
+      <ErrorNotice error={error} className="mt-1" />
       </>
       )}
     </div>
