@@ -100,11 +100,42 @@ jobs:
         shell: pwsh
         run: winget install --id FiloSottile.age --exact --accept-source-agreements --accept-package-agreements
 
+      # Signed, with updater artifacts -- NOT desktop:build:internal.
+      #
+      # RELEASE_READINESS.md is explicit that an internal build must never be
+      # handed out as an external beta, because it produces no updater
+      # artifacts. This workflow was calling exactly that, so every release it
+      # drafted was one the updater could never serve.
+      #
+      # The key is not in the repo and never should be. Set it once as a repo
+      # secret from C:\Mimir_Data\keys\mimir-updater.key (paste the file's
+      # contents, not its path). The check below fails loudly rather than
+      # letting Tauri emit its "public key has been found, but no private key"
+      # message from deep inside a 90-minute build.
+      - name: Check the updater signing key is configured
+        shell: pwsh
+        run: |
+          if (-not '${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}') {
+            throw @"
+          Repository secret TAURI_SIGNING_PRIVATE_KEY is not set.
+
+          tauri.conf.json pins an updater public key and sets
+          createUpdaterArtifacts, so a release build must be able to sign the
+          update manifest. Add the secret under
+          Settings -> Secrets and variables -> Actions, using the contents of
+          the updater private key. Add TAURI_SIGNING_PRIVATE_KEY_PASSWORD too
+          if the key is encrypted.
+          "@
+          }
+          "Updater signing key is present."
+
       - name: Build installer
         shell: pwsh
         env:
           MIMIR_BACKEND_ROOT: ${{ github.workspace }}\backend
-        run: npm run desktop:build:internal
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run desktop:build
 
       - name: Locate the installer
         id: installer
@@ -114,11 +145,35 @@ jobs:
           $exe = Get-ChildItem src-tauri\target\release\bundle\nsis -Filter "*$version*_x64-setup.exe" |
             Select-Object -First 1
           if (-not $exe) { throw "No installer matching version $version was produced." }
+
+          # Copied to a fixed name because the download page links to
+          # releases/latest/download/MimirSetup.exe, and that URL only resolves
+          # if an asset is literally called that. Tauri names the bundle after
+          # the version (Mimir_0.5.0-free-beta.1_x64-setup.exe), so uploading it
+          # unchanged left the one public download link pointing at a 404 --
+          # invisible here, because nothing in CI ever fetches that URL.
+          #
+          # The versioned name goes up as well, so a specific build stays
+          # citable after `latest` has moved on.
+          $stable = Join-Path $exe.DirectoryName "MimirSetup.exe"
+          Copy-Item -LiteralPath $exe.FullName -Destination $stable -Force
+
           $sizeMb = [math]::Round($exe.Length / 1MB, 1)
           $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
-          "path=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "sha256=$sha"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "size=$sizeMb MB"      | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          # Updater signature, emitted next to the installer. Its absence means
+          # the release cannot be served as an update, which is the whole
+          # reason this job no longer uses the internal build.
+          $sig = "$($exe.FullName).sig"
+          if (-not (Test-Path -LiteralPath $sig)) {
+            throw "No updater signature was produced next to $($exe.Name). The build did not sign the release."
+          }
+
+          "path=$($exe.FullName)"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "stable=$stable"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature=$sig"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sha256=$sha"             | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "size=$sizeMb MB"         | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "Built $($exe.Name) -- $sizeMb MB, SHA256 $sha"
 
       # Proves the packaged sidecar runs, rather than only that it compiled.
