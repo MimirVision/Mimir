@@ -10,7 +10,7 @@
     "sbom": "python scripts\\generate_sbom.py",
     "security:audit": "python scripts\\release_security_audit.py",
     "desktop:dev": "node ./node_modules/@tauri-apps/cli/tauri.js dev",
-    "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts\\build-sidecar.ps1 && node ./node_modules/@tauri-apps/cli/tauri.js build",
+    "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts\\build-release.ps1",
     "desktop:build:internal": "powershell -ExecutionPolicy Bypass -File scripts\\build-sidecar.ps1 && node ./node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.internal.conf.json",
     "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
     "build": "vite build",

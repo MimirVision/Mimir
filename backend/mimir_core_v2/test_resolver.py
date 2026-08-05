@@ -218,6 +218,50 @@ def main() -> int:
             {},
             {"IMPORTANT"},
         ),
+        # Lone-camera close activity was the single biggest source of false
+        # IMPORTANTs in beta feedback: of 18 clips a tester rated down, 15
+        # carried single_camera_close_activity and the one they agreed with
+        # did not. One camera cannot tell a neighbour squeezing past from
+        # actual contact, which is what corroboration exists for. These stay
+        # REVIEW -- surfaced for a human, never dropped to IGNORE.
+        run_case(
+            "lone-camera close activity, nothing observed -> not IMPORTANT",
+            {"single_camera_close_activity": True, "hard_contact_candidate": True},
+            {},
+            {"REVIEW", "IGNORE"},
+        ),
+        run_case(
+            "lone-camera contact_level HIGH, nothing observed -> not IMPORTANT",
+            {"single_camera_close_activity": True, "contact_level": "HIGH", "possible_contact": True},
+            {},
+            {"REVIEW", "IGNORE"},
+        ),
+        # ...but anything actually observed ignores that gate entirely.
+        run_case(
+            "lone camera but visible contact -> still IMPORTANT",
+            {"single_camera_close_activity": True, "visible_contact": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "lone camera but door handle tried -> still IMPORTANT",
+            {"single_camera_close_activity": True, "door_handle_attempt": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "lone camera but crash safety triggered -> still IMPORTANT",
+            {"single_camera_close_activity": True, "crash_safety_triggered": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        # And corroborated evidence is untouched by any of this.
+        run_case(
+            "hard contact seen by more than one camera -> IMPORTANT",
+            {"single_camera_close_activity": False, "hard_contact_candidate": True},
+            {},
+            {"IMPORTANT"},
+        ),
     ]
 
     failures = []

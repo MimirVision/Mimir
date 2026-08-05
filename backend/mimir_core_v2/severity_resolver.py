@@ -100,18 +100,69 @@ def _has_contact_impact_or_tampering(evidence: dict) -> bool:
     )
 
 
+def _directly_observed(evidence: dict) -> bool:
+    """Something was actually seen, rather than inferred from motion."""
+    return (
+        _bool(evidence, "visible_contact")
+        or _bool(evidence, "visible_impact")
+        or _bool(evidence, "person_interaction_evidence")
+        or _bool(evidence, "tampering_evidence")
+        or _bool(evidence, "door_handle_attempt")
+        or _bool(evidence, "crash_safety_triggered")
+    )
+
+
+def _corroborated_close_activity(evidence: dict) -> bool:
+    """False when close activity was seen by exactly one camera and nothing
+    directly observed backs it up.
+
+    This is the single biggest source of false IMPORTANTs in beta feedback.
+    Of 18 clips a tester rated down from IMPORTANT, 15 carried
+    single_camera_close_activity; the one they agreed with did not. The
+    pipeline's own reason strings say the quiet part -- "single-camera
+    close-object motion **without synchronized impact evidence**" and "single
+    side-camera door motion without synchronized impact evidence" -- so it
+    already records that the evidence is uncorroborated, and then escalates
+    to the highest severity anyway.
+
+    A parked car sees a great deal of lone close motion that is nothing: a
+    neighbour squeezing past, a pedestrian brushing the kerb, a door opening
+    alongside. One camera cannot distinguish those from contact, which is
+    exactly what corroboration across cameras is for.
+
+    Same treatment and same reasoning as _trust_ambient_motion above: this
+    lowers an IMPORTANT floor to a REVIEW floor. The clip is still surfaced
+    for a human, never silently dropped to IGNORE. Anything actually observed
+    -- visible contact, tampering, a door handle tried, the crash safety
+    trigger -- ignores this gate entirely.
+
+    Measured against the 19 IMPORTANT calls in beta feedback: removes 15 of
+    18 the tester rejected and keeps the 1 they accepted. That sample is
+    small and selection-biased (people report mistakes, not successes), so
+    treat it as a strong signal rather than a tuned threshold -- and revisit
+    once the locked evaluation set in MODEL_CARD.md exists.
+    """
+
+    if not _bool(evidence, "single_camera_close_activity"):
+        return True
+    return _directly_observed(evidence)
+
+
 def important_evidence_reasons(local_evidence: dict) -> list[str]:
     evidence = local_evidence if isinstance(local_evidence, dict) else {}
     reasons: list[str] = []
     trust_ambient = _trust_ambient_motion(evidence)
+    # Inferred-from-motion evidence only justifies IMPORTANT when it is not
+    # a lone camera's close activity.
+    trust_derived = _corroborated_close_activity(evidence)
 
     if _bool(evidence, "crash_safety_triggered"):
         reasons.append("crash_safety_triggered")
-    if _bool(evidence, "no_yolo_motion_impact_candidate"):
+    if trust_derived and _bool(evidence, "no_yolo_motion_impact_candidate"):
         reasons.append("no_yolo_motion_impact_candidate")
-    if trust_ambient and _level(evidence, "impact_level") == "HIGH":
+    if trust_ambient and trust_derived and _level(evidence, "impact_level") == "HIGH":
         reasons.append("impact_level=HIGH")
-    if trust_ambient and _level(evidence, "contact_level") == "HIGH":
+    if trust_ambient and trust_derived and _level(evidence, "contact_level") == "HIGH":
         reasons.append("contact_level=HIGH")
     if _bool(evidence, "visible_contact"):
         reasons.append("visible_contact")
@@ -123,11 +174,11 @@ def important_evidence_reasons(local_evidence: dict) -> list[str]:
         reasons.append("tampering_evidence")
     if _bool(evidence, "door_handle_attempt"):
         reasons.append("door_handle_attempt")
-    if trust_ambient and _bool(evidence, "strong_impact_like_motion"):
+    if trust_ambient and trust_derived and _bool(evidence, "strong_impact_like_motion"):
         reasons.append("strong_impact_like_motion")
-    if _bool(evidence, "hard_contact_candidate"):
+    if trust_derived and _bool(evidence, "hard_contact_candidate"):
         reasons.append("hard_contact_candidate")
-    if _bool(evidence, "rear_impact_candidate"):
+    if trust_derived and _bool(evidence, "rear_impact_candidate"):
         reasons.append("rear_impact_candidate")
 
     return reasons
@@ -326,44 +377,76 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
         reasons.append("Possible impact evidence.")
 
     trust_ambient = _trust_ambient_motion(evidence)
+    # Must match important_evidence_reasons(): that function decides the
+    # *reasons* shown, this block decides the *severity*, and the two carry
+    # separate copies of the same rules. Gating only one of them leaves the
+    # other escalating anyway, which is exactly what happened when this fix
+    # was first written -- reasons came back empty and the clip was still
+    # IMPORTANT.
+    trust_derived = _corroborated_close_activity(evidence)
+    lone_camera_note = (
+        "downgraded to REVIEW -- close activity seen by a single camera with nothing directly "
+        "observed to corroborate it; one camera cannot separate a neighbour squeezing past from contact"
+    )
 
     floor_reasons: list[str] = []
     if _bool(evidence, "strong_impact_like_motion"):
-        if trust_ambient:
-            floor_reasons.append("strong_impact_like_motion requires IMPORTANT")
-            severity = "IMPORTANT"
-        else:
+        if not trust_ambient:
             floor_reasons.append(
                 "strong_impact_like_motion downgraded to REVIEW -- SavedClips/RecentClips reflect a moving "
                 "vehicle, where camera shake and close traffic are the normal baseline, not contact evidence"
             )
             severity = _max_severity(severity, "REVIEW")
+        elif not trust_derived:
+            floor_reasons.append(f"strong_impact_like_motion {lone_camera_note}")
+            severity = _max_severity(severity, "REVIEW")
+        else:
+            floor_reasons.append("strong_impact_like_motion requires IMPORTANT")
+            severity = "IMPORTANT"
     if _bool(evidence, "hard_contact_candidate"):
-        floor_reasons.append("hard_contact_candidate requires IMPORTANT")
-        severity = "IMPORTANT"
+        if trust_derived:
+            floor_reasons.append("hard_contact_candidate requires IMPORTANT")
+            severity = "IMPORTANT"
+        else:
+            floor_reasons.append(f"hard_contact_candidate {lone_camera_note}")
+            severity = _max_severity(severity, "REVIEW")
     if _bool(evidence, "rear_impact_candidate"):
-        floor_reasons.append("rear_impact_candidate requires IMPORTANT")
-        severity = "IMPORTANT"
+        if trust_derived:
+            floor_reasons.append("rear_impact_candidate requires IMPORTANT")
+            severity = "IMPORTANT"
+        else:
+            floor_reasons.append(f"rear_impact_candidate {lone_camera_note}")
+            severity = _max_severity(severity, "REVIEW")
     if _bool(evidence, "no_yolo_motion_impact_candidate"):
-        floor_reasons.append("no_yolo_motion_impact_candidate requires IMPORTANT")
-        severity = "IMPORTANT"
+        if trust_derived:
+            floor_reasons.append("no_yolo_motion_impact_candidate requires IMPORTANT")
+            severity = "IMPORTANT"
+        else:
+            floor_reasons.append(f"no_yolo_motion_impact_candidate {lone_camera_note}")
+            severity = _max_severity(severity, "REVIEW")
     if _bool(evidence, "crash_safety_triggered"):
         floor_reasons.append("crash_safety_triggered requires IMPORTANT")
         severity = "IMPORTANT"
     if _level(evidence, "impact_level") == "HIGH":
-        if trust_ambient:
-            floor_reasons.append("impact_level HIGH requires IMPORTANT")
-            severity = "IMPORTANT"
-        else:
+        if not trust_ambient:
             floor_reasons.append("impact_level HIGH downgraded to REVIEW -- ambient motion on SavedClips/RecentClips")
             severity = _max_severity(severity, "REVIEW")
-    if _level(evidence, "contact_level") == "HIGH":
-        if trust_ambient:
-            floor_reasons.append("contact_level HIGH requires IMPORTANT")
-            severity = "IMPORTANT"
+        elif not trust_derived:
+            floor_reasons.append(f"impact_level HIGH {lone_camera_note}")
+            severity = _max_severity(severity, "REVIEW")
         else:
+            floor_reasons.append("impact_level HIGH requires IMPORTANT")
+            severity = "IMPORTANT"
+    if _level(evidence, "contact_level") == "HIGH":
+        if not trust_ambient:
             floor_reasons.append("contact_level HIGH downgraded to REVIEW -- ambient motion on SavedClips/RecentClips")
             severity = _max_severity(severity, "REVIEW")
+        elif not trust_derived:
+            floor_reasons.append(f"contact_level HIGH {lone_camera_note}")
+            severity = _max_severity(severity, "REVIEW")
+        else:
+            floor_reasons.append("contact_level HIGH requires IMPORTANT")
+            severity = "IMPORTANT"
     if _level(evidence, "impact_level") == "MEDIUM":
         floor_reasons.append("impact_level MEDIUM requires at least REVIEW")
         severity = _max_severity(severity, "REVIEW")
