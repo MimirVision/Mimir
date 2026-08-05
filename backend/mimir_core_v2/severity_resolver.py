@@ -148,6 +148,48 @@ def _corroborated_close_activity(evidence: dict) -> bool:
     return _directly_observed(evidence)
 
 
+def _corroborates_contact_level(evidence: dict) -> bool:
+    """True when something other than contact_level=HIGH argues for IMPORTANT.
+
+    contact_level=HIGH is not evidence of contact. _contact_level_from_motion
+    sets it whenever something is close to a camera and localized motion is
+    strong -- so a pedestrian walking past a parked car scores it, and the
+    contact_score is literally just the localized motion score. Nothing in the
+    computation requires anything to touch the vehicle.
+
+    Measured across every IMPORTANT verdict that came back with beta feedback:
+    contact_level=HIGH fired on **all 19**, on the 18 a human rated down and on
+    the 1 they agreed with. A signal that fires on every case discriminates
+    nothing, and on its own it was the entire justification for three of the
+    rejected clips (and for the one a tester reported on 2026-08-05, which read
+    "person_close_to_camera, vehicle_close_to_camera, localized_motion" with
+    contact_verified False and object_touching_ego_vehicle False).
+
+    In none of the clips where contact_level=HIGH was the only reason did the
+    human agree with IMPORTANT. The one they did agree with carried
+    visible_contact, impact_level=HIGH, strong_impact_like_motion and
+    hard_contact_candidate alongside it -- so requiring any one corroborating
+    signal keeps it.
+
+    Same treatment as the gates above: this lowers an IMPORTANT floor to a
+    REVIEW floor, so the clip is still surfaced to a human, never dropped to
+    IGNORE.
+
+    Nineteen selection-biased labels is a hint, not a calibration. Revisit
+    against the locked evaluation set MODEL_CARD.md requires, which does not
+    exist yet.
+    """
+
+    return (
+        _directly_observed(evidence)
+        or _bool(evidence, "hard_contact_candidate")
+        or _bool(evidence, "rear_impact_candidate")
+        or _bool(evidence, "no_yolo_motion_impact_candidate")
+        or _bool(evidence, "strong_impact_like_motion")
+        or _level(evidence, "impact_level") == "HIGH"
+    )
+
+
 def important_evidence_reasons(local_evidence: dict) -> list[str]:
     evidence = local_evidence if isinstance(local_evidence, dict) else {}
     reasons: list[str] = []
@@ -162,7 +204,12 @@ def important_evidence_reasons(local_evidence: dict) -> list[str]:
         reasons.append("no_yolo_motion_impact_candidate")
     if trust_ambient and trust_derived and _level(evidence, "impact_level") == "HIGH":
         reasons.append("impact_level=HIGH")
-    if trust_ambient and trust_derived and _level(evidence, "contact_level") == "HIGH":
+    if (
+        trust_ambient
+        and trust_derived
+        and _corroborates_contact_level(evidence)
+        and _level(evidence, "contact_level") == "HIGH"
+    ):
         reasons.append("contact_level=HIGH")
     if _bool(evidence, "visible_contact"):
         reasons.append("visible_contact")
@@ -443,6 +490,13 @@ def resolve_severity(local_evidence: dict, ai_evidence: dict | None = None) -> d
             severity = _max_severity(severity, "REVIEW")
         elif not trust_derived:
             floor_reasons.append(f"contact_level HIGH {lone_camera_note}")
+            severity = _max_severity(severity, "REVIEW")
+        elif not _corroborates_contact_level(evidence):
+            floor_reasons.append(
+                "contact_level HIGH downgraded to REVIEW -- proximity plus localized motion is the "
+                "whole of the evidence, and nothing else points at contact; contact_level=HIGH fired "
+                "on every IMPORTANT that came back with beta feedback, right and wrong alike"
+            )
             severity = _max_severity(severity, "REVIEW")
         else:
             floor_reasons.append("contact_level HIGH requires IMPORTANT")
