@@ -158,11 +158,21 @@ def main() -> int:
             {},
             {"IGNORE"},
         ),
+        # Changed deliberately on 2026-08-05: this used to expect IMPORTANT.
+        #
+        # contact_level=HIGH on its own is proximity plus localized motion, and
+        # the contact score is literally the localized motion score -- nothing
+        # in it requires anything to touch the vehicle. Every IMPORTANT that
+        # came back with beta feedback had it set, the 18 a human rated down
+        # and the 1 they agreed with, so on its own it distinguishes nothing.
+        #
+        # The three clips where it was the *only* reason were all rated down.
+        # See _corroborates_contact_level in severity_resolver.py.
         run_case(
-            "contact_level HIGH",
+            "contact_level HIGH with nothing to corroborate it",
             {"contact_level": "HIGH"},
             {},
-            {"IMPORTANT"},
+            {"REVIEW"},
         ),
         run_case(
             "impact_level HIGH",
@@ -259,6 +269,67 @@ def main() -> int:
         run_case(
             "hard contact seen by more than one camera -> IMPORTANT",
             {"single_camera_close_activity": False, "hard_contact_candidate": True},
+            {},
+            {"IMPORTANT"},
+        ),
+        # contact_level=HIGH is proximity plus localized motion, not contact.
+        # It fired on all 19 IMPORTANTs that came back with beta feedback --
+        # the 18 rated down and the 1 agreed with -- so alone it separates
+        # nothing. Multi-camera, so the lone-camera gate above does not apply
+        # and this is the only thing keeping these out of IMPORTANT.
+        run_case(
+            "contact_level HIGH alone -> not IMPORTANT",
+            {
+                "single_camera_close_activity": False,
+                "contact_level": "HIGH",
+                "possible_contact": True,
+            },
+            {},
+            {"REVIEW", "IGNORE"},
+        ),
+        run_case(
+            "contact_level HIGH with a person merely passing by -> not IMPORTANT",
+            {
+                "single_camera_close_activity": False,
+                "contact_level": "HIGH",
+                "possible_contact": True,
+                "person_passby": True,
+                "person_close_detected": True,
+                "vehicle_close_detected": True,
+            },
+            {},
+            {"REVIEW", "IGNORE"},
+        ),
+        # One corroborating signal is enough to restore it. The clip the
+        # tester agreed with carried visible_contact, impact_level=HIGH,
+        # strong_impact_like_motion and hard_contact_candidate together.
+        run_case(
+            "contact_level HIGH plus impact_level HIGH -> IMPORTANT",
+            {
+                "single_camera_close_activity": False,
+                "contact_level": "HIGH",
+                "impact_level": "HIGH",
+            },
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "contact_level HIGH plus visible contact -> IMPORTANT",
+            {
+                "single_camera_close_activity": False,
+                "contact_level": "HIGH",
+                "visible_contact": True,
+            },
+            {},
+            {"IMPORTANT"},
+        ),
+        run_case(
+            "contact_level HIGH plus hard contact candidate -> IMPORTANT",
+            {
+                "single_camera_close_activity": False,
+                "contact_level": "HIGH",
+                "hard_contact_candidate": True,
+            },
             {},
             {"IMPORTANT"},
         ),
