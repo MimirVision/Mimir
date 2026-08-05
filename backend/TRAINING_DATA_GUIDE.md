@@ -74,6 +74,39 @@ pretraining command, and must remain sealed until a materially stronger semantic
 candidate has been frozen. Motion-only experiments that fail public evaluation are
 retained as negative results rather than being tuned against the private lockbox.
 
+## Intake Keys
+
+There are two age key pairs on this machine and they are **not**
+interchangeable. Using the wrong one produces a package that looks fine and
+cannot be opened.
+
+| | Recipient (encrypt to) | Identity (decrypt with) |
+|---|---|---|
+| **Live** | `age1fyd556z2tyhyah5yf2c6h3k7yts9l80d2yvtwsfg64q8jljf0uss2mh64x` | `backend\mimir_intake_identity.txt` |
+| Retired (pre-rekey) | `age1ahsfxe3…` (`C:\Mimir_Data\keys\mimir-training-recipient.txt`) | `C:\Mimir_Data\keys\mimir-training-intake-identity.txt` |
+
+**The live recipient is the one the app uses.** It is compiled into the desktop
+build at `desktop/src-tauri/src/main.rs:66`, so every contribution a tester
+sends is encrypted to it, and nothing else can open those packages.
+
+This guide used to document the retired pair throughout — encrypt with
+`mimir-training-recipient.txt`, decrypt with `mimir-training-intake-identity.txt`.
+That pair is self-consistent, which is exactly why it went unnoticed: following
+the guide end to end worked. It only fails against packages that came from the
+app, and until 2026-08-05 no packaged build could produce one, so the mismatch
+had never been exercised.
+
+The retired pair is still listed because anything encrypted before the rekey
+needs it. **Do not delete either key file** — the retired identity is the only
+thing that can read pre-rekey packages. Verify a pairing rather than trusting a
+filename:
+
+```powershell
+"probe" | Out-File -Encoding ascii -NoNewline $env:TEMP\p.txt
+age -r <recipient> -o $env:TEMP\c.age $env:TEMP\p.txt
+age -d -i <identity-file> $env:TEMP\c.age    # prints "probe" only if they match
+```
+
 ## Encrypted Contribution Export
 
 The tester-facing path produces a manually transferable encrypted package:
@@ -87,8 +120,12 @@ python mimir_core_v2_dataset.py export-encrypted `
   --rights-confirmed `
   --rights-basis owned `
   --permission-reference "Recorded by me on my vehicle" `
-  --recipient-file C:\Mimir_Data\keys\mimir-training-recipient.txt
+  --recipient age1fyd556z2tyhyah5yf2c6h3k7yts9l80d2yvtwsfg64q8jljf0uss2mh64x
 ```
+
+The recipient is written out rather than read from a file, so what a package is
+encrypted to is visible in the command itself. A wrong `--recipient-file` path
+is silent; a wrong key here is not.
 
 For a large scan (hundreds of incidents), typing one `--consent-incident` per clip
 is impractical. `select` lists incidents matching a review filter and prints the
@@ -103,7 +140,7 @@ python mimir_core_v2_dataset.py select `
   --rights-basis owned `
   --permission-reference "Recorded by me on my vehicle" `
   --output C:\Exports\batch.mimir-dataset.age `
-  --recipient-file C:\Mimir_Data\keys\mimir-training-recipient.txt
+  --recipient age1fyd556z2tyhyah5yf2c6h3k7yts9l80d2yvtwsfg64q8jljf0uss2mh64x
 ```
 
 `--filter reviewed` (default) matches incidents with a manual status change or a
@@ -121,10 +158,16 @@ permission record is bundled.
 ```powershell
 python mimir_core_v2_dataset.py intake `
   --package C:\Incoming\incident_0001.mimir-dataset.age `
-  --identity C:\Mimir_Data\keys\mimir-training-intake-identity.txt `
+  --identity mimir_intake_identity.txt `
   --dataset-root C:\Mimir_Data\training `
   --create-cvat-tasks
 ```
+
+The identity is the live one (see **Intake Keys** above). Packages that arrive
+from testers are encrypted to the live recipient, so the retired identity fails
+on them with `no identity matched any of the recipients` — a message that reads
+like a corrupt package rather than a wrong key. For anything exported before the
+rekey, pass `C:\Mimir_Data\keys\mimir-training-intake-identity.txt` instead.
 
 Intake validates encryption, consent, every file hash, duplicate footage, global
 source splits, and exclusions before copying the collection. Re-running the same
