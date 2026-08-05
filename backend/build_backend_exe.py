@@ -169,6 +169,22 @@ def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
     ]
     for module in EXCLUDED_MODULES:
         command[-1:-1] = ["--exclude-module", module]
+    # dataset_package.py reads training_exclusions.json from beside itself
+    # (EXCLUSIONS_PATH = Path(__file__).with_name(...)). PyInstaller bundles
+    # imported *modules*, never data files sitting next to them, so the frozen
+    # exe unpacked into _MEIxxxx without it and every contribution died with
+    # "Invalid JSON file ... training_exclusions.json: No such file".
+    #
+    # This is why contributions never once worked from a packaged build while
+    # feedback did: export-feedback does not touch the exclusion list, and
+    # running from source always finds the file on disk, so it only ever broke
+    # for real users and never in development.
+    if name in {"mimir-core-v2-dataset", "mimir-core-v2-release-check"}:
+        exclusions = ROOT / "mimir_core_v2" / "training_exclusions.json"
+        if not exclusions.exists():
+            raise PackagingError(f"Training exclusions list is missing: {exclusions}")
+        command[-1:-1] = ["--add-data", f"{exclusions};mimir_core_v2"]
+
     manifest_data: dict[str, object] = {}
     if name in {"mimir-core-v2-scan", "mimir-core-v2-release-check"}:
         manifest = ROOT / "mimir_core_v2" / "model_manifest.json"
