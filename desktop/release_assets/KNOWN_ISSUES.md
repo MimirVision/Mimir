@@ -22,6 +22,27 @@ Practically: treat IMPORTANT as "look at this", not as "something happened".
 Mimir is trying to save you from scrubbing hours of footage, not to tell you
 what occurred.
 
+**What changed on 2026-08-05.** Two rules were tightened after reading that
+feedback back. Both come down to the same mistake: motion near the car was
+being treated as evidence that something touched it.
+
+- Close activity seen by a **single camera**, with nothing directly observed to
+  back it up, no longer forces IMPORTANT. One camera cannot tell a neighbour
+  squeezing past from actual contact.
+- **Proximity plus strong motion** no longer forces IMPORTANT on its own. That
+  signal was set on every IMPORTANT in the feedback -- the 18 rated down *and*
+  the 1 agreed with -- so by itself it distinguished nothing.
+
+Replayed against that feedback, this removes 17 of the 18 IMPORTANTs a human
+rejected while keeping the one they agreed with. Both cases drop to REVIEW, not
+IGNORE: the clip is still put in front of you, just not at the top.
+
+Take the improvement with the same salt as the original number. Nineteen clips,
+selected by people who wrote in because something looked wrong, is a hint --
+not a measured accuracy claim, and not a substitute for the evaluation set the
+model card requires and that does not exist yet. **It should over-flag less
+than it did. It still over-flags.**
+
 **The single most useful thing you can do is tell us when it is wrong.** The
 detector cannot improve without examples, and a clip Mimir got wrong is worth
 more than one it got right.
@@ -77,6 +98,14 @@ Not bugs -- design decisions, listed because they surprise people:
   people carries obligations that feedback text does not, so the first
   contribution walks through who you are and on what basis you hold the
   footage. It is remembered afterwards.
+
+  If you tried to contribute a clip before 2026-08-05 and got *"That
+  contribution package could not be written"*, that was our bug, not anything
+  you did. Contributing had never worked from an installed build -- a file the
+  packaging step needed was missing from the installer, and because sending
+  feedback did not use that file, feedback kept working and hid it. Fixed, and
+  the build now refuses to produce an installer with that file missing. Please
+  do try again.
 
 ## What Mimir will not do
 
