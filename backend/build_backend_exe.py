@@ -149,6 +149,66 @@ EXCLUDED_MODULES = [
 ]
 
 
+def bundled_data_files(name: str) -> list[tuple[Path, str]]:
+    """Data files this executable needs on disk at runtime, as (source, destination).
+
+    PyInstaller freezes imported *modules*. Anything read as a file -- a JSON
+    list beside a module, a model, a licence -- is invisible to it unless it is
+    named here, and the resulting failure only ever happens in a packaged
+    build, because from source the file is simply there.
+
+    Kept as one function so `verify_bundled_data` can check that every entry
+    actually landed in the archive. Building the list in one place and
+    verifying it in another is the point: an --add-data with a mistyped
+    destination is otherwise indistinguishable from a correct one until a user
+    hits it.
+    """
+
+    files: list[tuple[Path, str]] = []
+
+    # dataset_package.py reads training_exclusions.json from beside itself
+    # (EXCLUSIONS_PATH = Path(__file__).with_name(...)). Nothing bundled it, so
+    # the frozen exe unpacked into _MEIxxxx without it and every contribution
+    # died with "Invalid JSON file ... training_exclusions.json: No such file".
+    #
+    # This is why contributions never once worked from a packaged build while
+    # feedback did: export-feedback does not touch the exclusion list, and
+    # running from source always finds the file on disk, so it only ever broke
+    # for real users and never in development.
+    if name in {"mimir-core-v2-dataset", "mimir-core-v2-release-check"}:
+        exclusions = ROOT / "mimir_core_v2" / "training_exclusions.json"
+        if not exclusions.exists():
+            raise PackagingError(f"Training exclusions list is missing: {exclusions}")
+        files.append((exclusions, "mimir_core_v2"))
+
+    manifest_data: dict[str, object] = {}
+    if name in {"mimir-core-v2-scan", "mimir-core-v2-release-check"}:
+        manifest = ROOT / "mimir_core_v2" / "model_manifest.json"
+        if not manifest.exists():
+            raise PackagingError(f"Model manifest is missing: {manifest}")
+        files.append((manifest, "mimir_core_v2"))
+        try:
+            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PackagingError(f"Model manifest is invalid: {exc}") from exc
+
+        license_name = str(manifest_data.get("license_file") or "")
+        if license_name:
+            license_path = ROOT / license_name
+            if not license_path.exists():
+                raise PackagingError(f"Required model license is missing: {license_path}")
+            files.append((license_path, str(Path(license_name).parent).replace("\\", "/") or "."))
+
+    if name == "mimir-core-v2-scan":
+        for model_name in manifest_data.get("model_files", []):
+            model_path = ROOT / str(model_name)
+            if not model_path.exists():
+                raise PackagingError(f"Required release model is missing: {model_path}")
+            files.append((model_path, str(Path(str(model_name)).parent).replace("\\", "/") or "."))
+
+    return files
+
+
 def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
     command = [
         sys.executable,
@@ -169,48 +229,11 @@ def pyinstaller_command(name: str, entrypoint: Path) -> list[str]:
     ]
     for module in EXCLUDED_MODULES:
         command[-1:-1] = ["--exclude-module", module]
-    # dataset_package.py reads training_exclusions.json from beside itself
-    # (EXCLUSIONS_PATH = Path(__file__).with_name(...)). PyInstaller bundles
-    # imported *modules*, never data files sitting next to them, so the frozen
-    # exe unpacked into _MEIxxxx without it and every contribution died with
-    # "Invalid JSON file ... training_exclusions.json: No such file".
-    #
-    # This is why contributions never once worked from a packaged build while
-    # feedback did: export-feedback does not touch the exclusion list, and
-    # running from source always finds the file on disk, so it only ever broke
-    # for real users and never in development.
-    if name in {"mimir-core-v2-dataset", "mimir-core-v2-release-check"}:
-        exclusions = ROOT / "mimir_core_v2" / "training_exclusions.json"
-        if not exclusions.exists():
-            raise PackagingError(f"Training exclusions list is missing: {exclusions}")
-        command[-1:-1] = ["--add-data", f"{exclusions};mimir_core_v2"]
 
-    manifest_data: dict[str, object] = {}
-    if name in {"mimir-core-v2-scan", "mimir-core-v2-release-check"}:
-        manifest = ROOT / "mimir_core_v2" / "model_manifest.json"
-        if not manifest.exists():
-            raise PackagingError(f"Model manifest is missing: {manifest}")
-        command[-1:-1] = ["--add-data", f"{manifest};mimir_core_v2"]
-        try:
-            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise PackagingError(f"Model manifest is invalid: {exc}") from exc
-
-        license_name = str(manifest_data.get("license_file") or "")
-        if license_name:
-            license_path = ROOT / license_name
-            if not license_path.exists():
-                raise PackagingError(f"Required model license is missing: {license_path}")
-            destination = str(Path(license_name).parent).replace("\\", "/") or "."
-            command[-1:-1] = ["--add-data", f"{license_path};{destination}"]
+    for source, destination in bundled_data_files(name):
+        command[-1:-1] = ["--add-data", f"{source};{destination}"]
 
     if name == "mimir-core-v2-scan":
-        for model_name in manifest_data.get("model_files", []):
-            model_path = ROOT / str(model_name)
-            if not model_path.exists():
-                raise PackagingError(f"Required release model is missing: {model_path}")
-            destination = str(Path(str(model_name)).parent).replace("\\", "/") or "."
-            command[-1:-1] = ["--add-data", f"{model_path};{destination}"]
         command[-1:-1] = ["--hidden-import", "onnxruntime", "--collect-binaries", "onnxruntime"]
     return command
 
@@ -221,15 +244,19 @@ def build_executable(name: str, entrypoint: Path) -> None:
     if not exe_path.exists():
         raise PackagingError(f"Expected executable was not created: {exe_path}")
     verify_analysis_toc(name)
+    verify_bundled_data(name)
     print(f"created: {exe_path}")
 
 
-def verify_analysis_toc(name: str) -> None:
+def analysis_toc_text(name: str) -> str:
     toc_path = WORK_DIR / name / name / "Analysis-00.toc"
     if not toc_path.exists():
         raise PackagingError(f"PyInstaller analysis manifest is missing: {toc_path}")
+    return toc_path.read_text(encoding="utf-8", errors="replace")
 
-    toc_text = toc_path.read_text(encoding="utf-8", errors="replace").lower()
+
+def verify_analysis_toc(name: str) -> None:
+    toc_text = analysis_toc_text(name).lower()
     leaked = []
     for module_name in FORBIDDEN_RELEASE_MODULES:
         markers = (f"'{module_name}'", f"'{module_name}.", f"\\{module_name}\\")
@@ -238,6 +265,34 @@ def verify_analysis_toc(name: str) -> None:
     if leaked:
         raise PackagingError(
             f"{name}.exe includes training-only modules: {', '.join(leaked)}"
+        )
+
+
+def verify_bundled_data(name: str) -> None:
+    """Confirm each declared data file is really in the archive, at its destination.
+
+    Declaring --add-data is not proof it worked. A mistyped destination
+    produces a build that succeeds, an exe that starts, and a runtime failure
+    only the user sees -- the same shape as the missing exclusion list, just
+    one step further along. The analysis manifest records the destination
+    PyInstaller actually used, so it is the thing worth checking.
+    """
+
+    # The manifest is Python reprs, so a separator appears in the text as two
+    # characters. Matching a single one silently finds nothing and turns this
+    # check into a no-op that always passes.
+    toc_text = analysis_toc_text(name)
+    missing = []
+    for source, destination in bundled_data_files(name):
+        expected = source.name if destination == "." else f"{destination}/{source.name}"
+        as_repr = expected.replace("/", "\\\\")
+        if f"'{as_repr}'" not in toc_text:
+            missing.append(expected.replace("/", "\\"))
+    if missing:
+        raise PackagingError(
+            f"{name}.exe was built without these bundled data files: {', '.join(missing)}. "
+            "They were passed with --add-data but did not reach the archive, so the frozen "
+            "exe will fail at runtime the moment it reads one."
         )
 
 
