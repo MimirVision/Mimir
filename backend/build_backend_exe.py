@@ -55,6 +55,7 @@ CORE_MODULES = [
     ROOT / "mimir_core_v2" / "output_writer.py",
     ROOT / "mimir_core_v2" / "validators.py",
     ROOT / "mimir_core_v2" / "dataset_package.py",
+    ROOT / "mimir_core_v2" / "recycle_bin.py",
     ROOT / "mimir_core_v2" / "cvat_client.py",
 ]
 
