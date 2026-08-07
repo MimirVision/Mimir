@@ -123,6 +123,21 @@ struct StorageActionResult {
 ///
 /// `bytes` means what is there for a listing and what was freed for an empty,
 /// which is the number each caller wants in each case.
+/// The result of bringing footage in off removable media.
+#[derive(Serialize)]
+struct ImportReport {
+    ok: bool,
+    destination: String,
+    files_found: u64,
+    bytes_found: u64,
+    files_copied: u64,
+    source_folders_removed: u64,
+    message: String,
+    report_json: String,
+    stdout: String,
+    stderr: String,
+}
+
 #[derive(Serialize)]
 struct TrashReport {
     ok: bool,
@@ -2210,6 +2225,171 @@ fn run_trash_command(
     Ok((output.status.success(), report_json, stdout, stderr))
 }
 
+fn import_footage_sync(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    source: String,
+    clear_source: bool,
+    dry_run: bool,
+) -> Result<ImportReport, ScanFailure> {
+    if source.trim().is_empty() {
+        return Err(ScanFailure::new("Choose a folder to import first."));
+    }
+    let source_path = PathBuf::from(&source);
+    if !source_path.is_dir() {
+        return Err(ScanFailure::new(
+            "That folder could not be found. If it is on a USB drive, check the drive is still connected.",
+        ));
+    }
+
+    let runtime = resolve_core_v2_actions_runtime(&app)?;
+    let mut command = backend_command(&runtime);
+    if runtime.is_python_fallback() {
+        command.arg(DEV_CORE_V2_ACTION_SCRIPT);
+    }
+
+    let output_dir = active_output_dir(&runtime);
+    let report_path = output_dir.join("last_import_report.json");
+    command
+        .arg("--import-footage")
+        .arg(&source_path)
+        .arg("--report")
+        .arg(&report_path);
+    if clear_source {
+        command.arg("--clear-source");
+    }
+    if dry_run {
+        command.arg("--dry-run");
+    }
+
+    let _ = fs::remove_file(&report_path);
+
+    // Streamed rather than collected: a 49 GB import runs for twenty minutes,
+    // and a progress bar that only appears at the end is not a progress bar.
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|error| ScanFailure::new(format!("Import could not start. {}", error)))?;
+
+    let stdout_pipe = child
+        .stdout
+        .take()
+        .ok_or_else(|| ScanFailure::new("Import produced no output."))?;
+
+    let mut stdout = String::new();
+    for line_result in BufReader::new(stdout_pipe).lines() {
+        let line = line_result.map_err(|error| ScanFailure::new(error.to_string()))?;
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("MIMIR_IMPORT") {
+            let _ = window.emit(
+                "mimir-import-progress",
+                ScanProgressLine {
+                    line: trimmed.to_string(),
+                },
+            );
+        }
+        stdout.push_str(&line);
+        stdout.push('\n');
+    }
+
+    let status = child
+        .wait()
+        .map_err(|error| ScanFailure::new(format!("Import did not finish cleanly. {}", error)))?;
+    let mut stderr = String::new();
+    if let Some(mut pipe) = child.stderr.take() {
+        let _ = pipe.read_to_string(&mut stderr);
+    }
+
+    let report_json = fs::read_to_string(&report_path).unwrap_or_else(|_| stdout.clone());
+    if !status.success() && !report_path.exists() {
+        return Err(ScanFailure::with_output(
+            "Importing the footage failed.",
+            stdout,
+            stderr,
+        ));
+    }
+
+    let parsed: Value = serde_json::from_str(&report_json).unwrap_or_else(|_| json!({}));
+    let ok = parsed.get("ok").and_then(Value::as_bool).unwrap_or(false);
+    let number = |key: &str| parsed.get(key).and_then(Value::as_u64).unwrap_or(0);
+    let copied = number("files_copied");
+    let skipped = number("files_skipped");
+    let removed = number("source_folders_removed");
+    let bytes = number("bytes_copied");
+
+    let message = if dry_run {
+        format!(
+            "{} clip{} ({}) ready to import.",
+            number("files_found"),
+            if number("files_found") == 1 { "" } else { "s" },
+            format_bytes(number("bytes_found"))
+        )
+    } else if !ok {
+        // Deliberately specific. "Import failed" would imply nothing arrived,
+        // when in fact the verified files did and only the failures were left
+        // on the drive -- which is the difference between "try again" and
+        // "your footage is gone".
+        format!(
+            "{} of {} files could not be copied and were left on the drive.",
+            parsed
+                .get("failures")
+                .and_then(Value::as_array)
+                .map(|items| items.len())
+                .unwrap_or(0),
+            number("files_found")
+        )
+    } else if clear_source {
+        format!(
+            "Imported {} ({} copied, {} already here). {} folder{} cleared from the drive.",
+            format_bytes(bytes),
+            copied,
+            skipped,
+            removed,
+            if removed == 1 { "" } else { "s" }
+        )
+    } else {
+        format!("Copied {} ({} files). The drive was left untouched.", format_bytes(bytes), copied)
+    };
+
+    Ok(ImportReport {
+        ok,
+        destination: parsed
+            .get("destination")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        files_found: number("files_found"),
+        bytes_found: number("bytes_found"),
+        files_copied: copied,
+        source_folders_removed: removed,
+        message,
+        report_json,
+        stdout,
+        stderr,
+    })
+}
+
+#[tauri::command]
+async fn import_footage(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    source: String,
+    clear_source: Option<bool>,
+    dry_run: Option<bool>,
+) -> Result<ImportReport, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        import_footage_sync(
+            app,
+            window,
+            source,
+            clear_source.unwrap_or(false),
+            dry_run.unwrap_or(false),
+        )
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
 #[tauri::command]
 async fn list_mimir_trash(app: tauri::AppHandle) -> Result<TrashReport, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -3758,6 +3938,7 @@ fn main() {
             run_core_v2_storage_action,
             list_mimir_trash,
             empty_mimir_trash,
+            import_footage,
             save_incident_note,
             save_manual_status,
             save_key_moment_correction,

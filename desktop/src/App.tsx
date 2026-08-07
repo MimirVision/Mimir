@@ -882,6 +882,10 @@ export default function App() {
       <div className="relative h-screen overflow-y-auto">
         <ImportPanel
           selectedFolder={selectedFolder}
+          // Repoints the scan at the imported copy. selectFolder also re-counts
+          // the clips, so the panel's "N clips found" reflects what will
+          // actually be scanned rather than what was on the stick.
+          onFolderImported={selectFolder}
           isDraggingFolder={isDraggingFolder}
           onChooseFolder={chooseFolder}
           detectedDrive={scanState === 'running' ? null : detectedTeslaCamDrive}
