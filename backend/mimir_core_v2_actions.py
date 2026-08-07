@@ -1,7 +1,26 @@
 """Safe grouped storage actions for Mimir Core v2.
 
-This script only operates after review. It never permanently deletes files:
-"trash" means moving clips into the Mimir Library trash folder.
+This script only operates after review.
+
+Until 2026-08-05 it also promised never to permanently delete anything, and
+"trash" meant moving clips into a folder inside the Mimir Library. That was
+safe and it was not what people mean by trash: nothing ever emptied the folder,
+so clips stopped taking up space on the USB stick and started taking it up on
+the system drive instead, permanently. The trash on this developer's machine
+had reached 2.5 GB against 40 GB of free space.
+
+So deletion is now real, and the care went into making it recoverable and
+specific rather than into refusing to do it:
+
+- The Recycle Bin is the default, so a mistake is undone the way Windows users
+  already know how. A failure there is reported, never quietly downgraded to
+  an unlink.
+- A caller can ask for a true delete when they want the space back now.
+- deletion_targets() reports exactly what would go, and how many bytes, so a
+  confirmation can state facts instead of asking "are you sure?".
+- Deleting reaches the clips, the source event folder, *and* the thumbnails
+  Mimir generated into its own session directory -- which the old move-to-trash
+  left behind.
 """
 
 from __future__ import annotations
@@ -16,6 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mimir_core_v2 import recycle_bin
 from mimir_core_v2.runtime_paths import default_output_dir
 
 
@@ -764,6 +784,250 @@ def perform_action(
     return report
 
 
+def derived_artifacts_for_incident(incident: dict[str, Any]) -> list[Path]:
+    """Thumbnails and contact sheets Mimir generated for this incident.
+
+    These live in the session output directory, not beside the footage, so
+    removing the event folder leaves them behind. Individually they are a few
+    kilobytes; across a 656-incident session they are not, and leaving them
+    means a "deleted" incident still has a picture of itself on disk.
+    """
+
+    seen: set[str] = set()
+    artifacts: list[Path] = []
+    for key in ("thumbnail", "hero_thumbnail", "contact_sheet"):
+        path = as_path(clean_text(incident.get(key)))
+        if path is None:
+            continue
+        key_text = path_key(str(path))
+        if key_text in seen:
+            continue
+        seen.add(key_text)
+        artifacts.append(path)
+    return artifacts
+
+
+def deletion_targets(session: dict[str, Any], incident: dict[str, Any]) -> dict[str, Any]:
+    """Everything one incident owns, and what deleting it would actually reach.
+
+    Separated from the deleting so a confirmation dialog can state the real
+    numbers. "Delete 12 clips (2.3 GB)" is a decision someone can make; "Are
+    you sure?" is not.
+    """
+
+    clips: list[Path] = []
+    for record in collect_incident_files(incident):
+        path = as_path(record.get("path"))
+        if path is not None and path.exists():
+            clips.append(path)
+
+    folder, folder_reason = source_folder_removal_eligibility(session, incident)
+    artifacts = [path for path in derived_artifacts_for_incident(incident) if path.exists()]
+
+    total = 0
+    for path in clips + artifacts:
+        try:
+            total += path.stat().st_size
+        except OSError:
+            pass
+    if folder is not None:
+        for child in folder.rglob("*"):
+            try:
+                if child.is_file():
+                    total += child.stat().st_size
+            except OSError:
+                pass
+
+    return {
+        "incident_id": incident.get("id"),
+        "event_group_id": incident.get("event_group_id"),
+        "clips": [str(path) for path in clips],
+        "source_folder": str(folder) if folder is not None else "",
+        "source_folder_reason": folder_reason,
+        "derived_artifacts": [str(path) for path in artifacts],
+        "bytes": total,
+    }
+
+
+def _remove_paths(paths: list[Path], use_recycle_bin: bool) -> list[dict[str, Any]]:
+    """Remove paths, either to the Recycle Bin or for real.
+
+    A Recycle Bin failure is reported, never silently downgraded to an unlink.
+    Someone who chose the recoverable option has to be able to trust that they
+    got it -- quietly hard-deleting on their behalf is the one behaviour that
+    would make this feature worse than not having it.
+    """
+
+    if use_recycle_bin:
+        if not recycle_bin.available():
+            return [
+                {"path": str(path), "ok": False, "reason": "the Recycle Bin is only available on Windows"}
+                for path in paths
+            ]
+        return [
+            {"path": result.path, "ok": result.ok, "reason": result.reason, "recycled": result.ok}
+            for result in recycle_bin.send_to_recycle_bin(paths)
+        ]
+
+    results: list[dict[str, Any]] = []
+    for path in paths:
+        if not path.exists():
+            results.append({"path": str(path), "ok": True, "reason": "already gone", "recycled": False})
+            continue
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            results.append({"path": str(path), "ok": True, "reason": "", "recycled": False})
+        except OSError as exc:
+            results.append({"path": str(path), "ok": False, "reason": str(exc), "recycled": False})
+    return results
+
+
+def delete_incidents(
+    session: dict[str, Any],
+    incidents: list[dict[str, Any]],
+    use_recycle_bin: bool,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Delete the footage and artifacts for the given incidents.
+
+    Unlike move_to_trash this is not reversible by Mimir. With the Recycle Bin
+    it stays reversible by Windows; without it, it is gone.
+
+    Note there is no batch rollback here, unlike perform_action. Rolling back a
+    delete would mean recreating files that no longer exist, so a partial
+    failure is reported honestly and the incident keeps whatever survived,
+    rather than pretending the whole batch failed.
+    """
+
+    report = {
+        "action": "delete_permanently",
+        "generated_at": now_iso(),
+        "dry_run": dry_run,
+        "recycle_bin": use_recycle_bin,
+        "requested": len(incidents),
+        "incidents": [],
+        "failures": [],
+        "bytes_deleted": 0,
+        "ok": True,
+    }
+
+    for incident in incidents:
+        targets = deletion_targets(session, incident)
+        entry = dict(targets)
+        entry["results"] = []
+
+        if dry_run:
+            entry["would_delete"] = True
+            report["incidents"].append(entry)
+            report["bytes_deleted"] += targets["bytes"]
+            continue
+
+        paths = [Path(p) for p in targets["clips"]]
+        paths.extend(Path(p) for p in targets["derived_artifacts"])
+        if targets["source_folder"]:
+            paths.append(Path(targets["source_folder"]))
+
+        results = _remove_paths(paths, use_recycle_bin)
+        entry["results"] = results
+
+        failed = [item for item in results if not item.get("ok")]
+        for item in failed:
+            failure = dict(item)
+            failure["incident_id"] = incident.get("id")
+            report["failures"].append(failure)
+
+        if not failed:
+            report["bytes_deleted"] += targets["bytes"]
+            incident["user_deleted"] = True
+            incident["storage_state"] = "deleted"
+            incident["deleted_at"] = now_iso()
+            incident["deleted_to_recycle_bin"] = use_recycle_bin
+            incident["video_exists"] = False
+            incident["trash_video_path"] = None
+
+        report["incidents"].append(entry)
+
+    report["ok"] = not report["failures"]
+    return report
+
+
+def trash_contents() -> dict[str, Any]:
+    """What is sitting in Mimir Trash right now."""
+
+    entries: list[dict[str, Any]] = []
+    total = 0
+    if TRASH_ROOT.is_dir():
+        for path in sorted(TRASH_ROOT.rglob("*")):
+            if not path.is_file():
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = 0
+            total += size
+            entries.append({"path": str(path), "name": path.name, "bytes": size})
+    return {"root": str(TRASH_ROOT), "files": entries, "count": len(entries), "bytes": total}
+
+
+def empty_trash(use_recycle_bin: bool, dry_run: bool) -> dict[str, Any]:
+    """Empty the Mimir Trash folder.
+
+    Trash was a one-way door: clips went in and nothing ever took them out, so
+    the folder only grew. On this developer's machine it had reached 2.5 GB on
+    a system drive with 40 GB free, which is how a feature meant to free space
+    ends up consuming it.
+    """
+
+    contents = trash_contents()
+    report = {
+        "action": "empty_trash",
+        "generated_at": now_iso(),
+        "dry_run": dry_run,
+        "recycle_bin": use_recycle_bin,
+        "root": contents["root"],
+        "files_found": contents["count"],
+        "bytes_found": contents["bytes"],
+        "results": [],
+        "failures": [],
+        "ok": True,
+    }
+
+    resolved = TRASH_ROOT.resolve() if TRASH_ROOT.exists() else TRASH_ROOT
+    library = LIBRARY_ROOT.resolve() if LIBRARY_ROOT.exists() else LIBRARY_ROOT
+    # Emptying a folder is one configuration mistake away from emptying a drive.
+    # --library-root is user-supplied, so this is not paranoia.
+    if resolved == library or library not in resolved.parents:
+        report["ok"] = False
+        report["failures"].append(
+            {"path": str(resolved), "ok": False, "reason": "refusing to empty a folder that is not inside the Mimir Library"}
+        )
+        return report
+    if resolved.parent == resolved:
+        report["ok"] = False
+        report["failures"].append({"path": str(resolved), "ok": False, "reason": "refusing to empty a drive root"})
+        return report
+
+    if not TRASH_ROOT.is_dir() or not contents["count"]:
+        return report
+
+    if dry_run:
+        report["would_delete"] = contents["count"]
+        return report
+
+    # The entries directly under the trash root, so one call handles a folder
+    # and everything inside it.
+    top_level = sorted(TRASH_ROOT.iterdir())
+    results = _remove_paths(top_level, use_recycle_bin)
+    report["results"] = results
+    report["failures"] = [item for item in results if not item.get("ok")]
+    report["ok"] = not report["failures"]
+    report["bytes_deleted"] = contents["bytes"] if report["ok"] else 0
+    return report
+
+
 def print_incidents(session: dict[str, Any]) -> int:
     incidents = session.get("incidents")
     if not isinstance(incidents, list):
@@ -796,6 +1060,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--move-to-library", action="store_true", help="Move selected incidents into Mimir Library.")
     parser.add_argument("--move-to-trash", action="store_true", help="Move selected incidents into Mimir Trash.")
     parser.add_argument("--restore-from-trash", action="store_true", help="Restore selected incidents from Mimir Trash.")
+    parser.add_argument("--delete-permanently", action="store_true", help="Delete selected incidents: clips, source event folder, and generated thumbnails.")
+    parser.add_argument("--empty-trash", action="store_true", help="Remove everything currently in Mimir Trash.")
+    parser.add_argument("--list-trash", action="store_true", help="Report what is in Mimir Trash without changing anything.")
+    # Recoverable by default. Choosing to bypass the Recycle Bin has to be
+    # something a caller says out loud, not something it gets by omission.
+    parser.add_argument(
+        "--no-recycle-bin",
+        action="store_true",
+        help="Delete for real instead of sending to the Recycle Bin. Frees space immediately; nothing is recoverable.",
+    )
     parser.add_argument("--report", default="", help="Optional action report path. Defaults beside the selected session.")
     parser.add_argument("--journal", default="", help="Optional transaction journal path. Defaults beside the selected session.")
     parser.add_argument("--library-root", default="", help="Optional Mimir Library root override.")
@@ -829,9 +1103,50 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_incidents:
         return print_incidents(session)
 
+    use_recycle_bin = not args.no_recycle_bin
+
+    # Trash-wide operations act on a folder rather than on selected incidents,
+    # so they are handled before the incident-selection rules below.
+    if args.list_trash:
+        print(json.dumps(trash_contents(), indent=2))
+        return 0
+
+    if args.empty_trash:
+        report = empty_trash(use_recycle_bin, args.dry_run)
+        try:
+            write_json(report_path, report)
+        except OSError as exc:
+            print(f"Trash emptied but report writing failed: {exc}")
+            return 1
+        print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
+
+    if args.delete_permanently:
+        if not (args.incident_id or args.incident_ids or args.status):
+            print("Select incidents with --incident-id, --incident-ids, or --status.")
+            return 1
+        selected = selected_incidents(session, args)
+        report = delete_incidents(session, selected, use_recycle_bin, args.dry_run)
+        report["updated_session_path"] = str(session_path)
+        try:
+            # Written whenever anything was deleted, including a partial batch:
+            # the session must not keep claiming a clip exists once its file is
+            # gone, or the viewer offers playback of nothing.
+            if not args.dry_run and report["incidents"]:
+                write_json(session_path, session)
+            write_json(report_path, report)
+        except OSError as exc:
+            print(f"Delete completed but report/session writing failed: {exc}")
+            return 1
+        print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
+
     requested_actions = [args.move_to_library, args.move_to_trash, args.restore_from_trash]
     if sum(1 for selected in requested_actions if selected) != 1:
-        print("Choose exactly one action: --move-to-library, --move-to-trash, or --restore-from-trash.")
+        print(
+            "Choose exactly one action: --move-to-library, --move-to-trash, --restore-from-trash, "
+            "--delete-permanently, or --empty-trash."
+        )
         return 1
 
     if not (args.incident_id or args.incident_ids or args.status):
