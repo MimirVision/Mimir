@@ -61,8 +61,30 @@ GPU, detection falls back to CPU and runs roughly 10x slower** -- a large dump
 can take hours rather than minutes. The system check on the import screen tells
 you which one you are getting.
 
-Reading footage off a USB stick is often the real bottleneck. Copying to your
-internal drive first is usually faster overall.
+## Copy the footage off the USB drive before scanning
+
+Reading footage off a USB stick is often the real bottleneck, so copying to
+your internal drive first is usually faster overall. That was the whole of this
+advice until 2026-08-05, when it turned into something stronger.
+
+**Scanning directly from a Tesla USB drive has crashed Windows itself.** On the
+development machine, three `DRIVER_POWER_STATE_FAILURE` blue screens happened
+during large scans, minutes in. That bugcheck means a storage device stopped
+answering the operating system, and the only device showing I/O retries in the
+event log was the Tesla drive. A scan reads tens of gigabytes in one sustained
+run, which is a far heavier load than these drives normally see.
+
+This is not Mimir corrupting anything — nothing is written to the drive, and no
+footage was lost. But a scan is the workload that provokes it.
+
+**So: copy `TeslaCam` (or just `SentryClips`) to your internal drive, and scan
+that.** If you have already hit this, disabling *USB selective suspend* in
+Windows power settings is a known mitigation for this class of crash, and
+trying a different port or cable is worth a go.
+
+Seen on one machine so far. If it happens to you, please report it -- knowing
+whether this is one bad drive or something everyone hits changes what we do
+about it.
 
 ## Windows will warn you on first run
 
