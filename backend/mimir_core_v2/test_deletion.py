@@ -129,6 +129,34 @@ class DeletionScopeTest(unittest.TestCase):
         self.assertEqual(targets["source_folder"], "")
         self.assertIn("another incident", targets["source_folder_reason"])
 
+    def test_a_sibling_that_is_already_gone_no_longer_protects_the_folder(self) -> None:
+        """Otherwise a shared folder can never be cleared off the card.
+
+        A Tesla event folder holds several minute-long clips and Mimir groups
+        on (folder, timestamp), so one folder routinely becomes two or three
+        incidents. If any sibling counts as a blocker regardless of its state,
+        the user can empty every incident out of a folder and still be left
+        with the folder, its event.json and its thumbnail on the USB drive.
+        """
+
+        sibling = dict(self.incident)
+        sibling["id"] = "incident_0200"
+        sibling["event_group_id"] = "group_0200"
+        session = {"incidents": [self.incident, sibling]}
+
+        # While the sibling still holds footage there, the folder is protected.
+        self.assertEqual(actions.deletion_targets(session, self.incident)["source_folder"], "")
+
+        # Once its clips have been trashed, it has nothing left to protect.
+        sibling["user_deleted"] = True
+        sibling["storage_state"] = "trash"
+
+        targets = actions.deletion_targets(session, self.incident)
+        self.assertEqual(targets["source_folder"], str(self.folder))
+
+        actions.delete_incidents(session, [self.incident], use_recycle_bin=False, dry_run=False)
+        self.assertFalse(self.folder.exists(), "The event folder stayed on the drive.")
+
     def test_a_flat_recentclips_layout_never_has_its_folder_removed(self) -> None:
         # RecentClips is one directory holding every clip on the card. Deleting
         # "the event folder" there would delete the whole recording buffer.

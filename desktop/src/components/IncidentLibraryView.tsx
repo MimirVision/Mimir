@@ -484,6 +484,152 @@ function SelectionToolbar({
   )
 }
 
+interface TrashReport {
+  ok: boolean
+  root: string
+  count: number
+  bytes: number
+  message: string
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${bytes} bytes`
+}
+
+/**
+ * How much space Mimir Trash is using, and the button that reclaims it.
+ *
+ * Trash used to be a one-way door: clips went in and nothing took them out, so
+ * footage stopped occupying the USB stick and started occupying the system
+ * drive instead, permanently. The size is shown rather than hidden behind the
+ * button because it is the whole reason to press it.
+ */
+function TrashPanel({ onEmptied }: { onEmptied: () => Promise<MimirSession | null> }) {
+  const [report, setReport] = useState<TrashReport | null>(null)
+  const [error, setError] = useState<DescribedError | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [skipRecycleBin, setSkipRecycleBin] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const load = async () => {
+    try {
+      setReport(await invoke<TrashReport>('list_mimir_trash'))
+    } catch (cause) {
+      setError(describeError(cause, 'Mimir Trash could not be read.'))
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const empty = async () => {
+    setBusy(true)
+    setError(null)
+    setMessage('')
+    try {
+      const result = await invoke<TrashReport>('empty_mimir_trash', { useRecycleBin: !skipRecycleBin })
+      if (result.ok) {
+        setMessage(result.message)
+      } else {
+        setError(describeError(result.message, 'Mimir Trash could not be emptied.'))
+      }
+      setConfirming(false)
+      setSkipRecycleBin(false)
+      await load()
+      // Emptying removes the files a trashed incident still points at, so the
+      // session has to be re-read or the cards keep offering restore.
+      await onEmptied()
+    } catch (cause) {
+      setError(describeError(cause, 'Mimir Trash could not be emptied.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!report && !error) return null
+
+  return (
+    <div className="mb-4 rounded-xl border border-white/[0.06] bg-white/[0.015] p-4">
+      <ErrorNotice error={error} info={message} className="mb-3" />
+
+      {report && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-[13.5px] font-semibold text-[var(--mimir-text)]">
+              {report.count === 0
+                ? 'Mimir Trash is empty'
+                : `${report.count} file${report.count === 1 ? '' : 's'} using ${formatBytes(report.bytes)}`}
+            </div>
+            <p className="mt-1 text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
+              {report.count === 0
+                ? 'Nothing here is taking up space on this PC.'
+                : 'These clips are off your USB drive but still on this computer. Emptying the trash is what actually frees the space.'}
+            </p>
+          </div>
+
+          {report.count > 0 && !confirming && (
+            <button
+              onClick={() => setConfirming(true)}
+              disabled={busy}
+              className="h-9 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3.5 text-[12.5px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.075] disabled:opacity-60"
+            >
+              Empty Mimir Trash
+            </button>
+          )}
+        </div>
+      )}
+
+      {confirming && report && (
+        <div className="mt-3.5 rounded-lg border border-red-300/18 bg-red-500/[0.05] p-3.5">
+          <p className="text-[12.5px] leading-5 text-[var(--mimir-text)]">
+            Empty {report.count} file{report.count === 1 ? '' : 's'} ({formatBytes(report.bytes)})?
+            {' '}The clips in here were already removed from your USB drive, so this is the last copy.
+          </p>
+
+          <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={skipRecycleBin}
+              onChange={event => setSkipRecycleBin(event.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 accent-[var(--mimir-status-red)]"
+            />
+            <span className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+              <span className="font-semibold text-[var(--mimir-text)]">Skip the Recycle Bin.</span>{' '}
+              Frees the {formatBytes(report.bytes)} straight away. Otherwise the files go to the
+              Recycle Bin and the space comes back when you empty that.
+            </span>
+          </label>
+
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              onClick={() => {
+                setConfirming(false)
+                setSkipRecycleBin(false)
+              }}
+              disabled={busy}
+              className="h-9 rounded-lg bg-white/[0.04] px-3.5 text-[12.5px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void empty()}
+              disabled={busy}
+              className="h-9 rounded-lg border border-red-300/20 bg-red-500/12 px-3.5 text-[12.5px] font-semibold text-red-100 transition hover:bg-red-500/18 disabled:cursor-wait disabled:opacity-60"
+            >
+              {busy ? 'Emptying...' : skipRecycleBin ? 'Delete permanently' : 'Empty trash'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EmptyLibraryState({ filter, incidentCount }: { filter: LibraryFilter; incidentCount: number }) {
   const copy = (() => {
     if (filter === 'ALL' && incidentCount === 0) {
@@ -1268,6 +1414,8 @@ export function IncidentLibraryView({
           </h2>
           <p className="text-[13px] text-[var(--mimir-text-subtle)]">{filterDescription}</p>
         </div>
+
+        {filter === 'TRASH' && <TrashPanel onEmptied={onReloadSession} />}
 
         {visibleIncidents.length === 0 ? (
           <EmptyLibraryState filter={filter} incidentCount={incidentCount} />
