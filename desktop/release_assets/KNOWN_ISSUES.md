@@ -77,8 +77,19 @@ run, which is a far heavier load than these drives normally see.
 This is not Mimir corrupting anything — nothing is written to the drive, and no
 footage was lost. But a scan is the workload that provokes it.
 
-**So: copy `TeslaCam` (or just `SentryClips`) to your internal drive, and scan
-that.** If you have already hit this, disabling *USB selective suspend* in
+**Mimir can now do the copying for you.** After you pick a folder, the import
+screen offers **Copy footage to this PC**. It copies each file, reads it back,
+and checks it byte for byte, then scans the local copy. Verification costs
+about 5% on top of the copy -- roughly one minute on a 49 GB import -- which is
+not a reason to skip it.
+
+There is a checkbox to **clear the drive afterwards**. Nothing is removed until
+its copy has been verified, and any file that does not match is left exactly
+where it is. If some files fail, the ones that succeeded are cleared and the
+rest stay, so the drive is never made to look empty while it still holds
+footage you have not got a copy of.
+
+If you have already hit the blue screen, disabling *USB selective suspend* in
 Windows power settings is a known mitigation for this class of crash, and
 trying a different port or cable is worth a go.
 
