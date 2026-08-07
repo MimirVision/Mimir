@@ -68,22 +68,26 @@ That is it. No account, no sign-up, no licence key, nothing to configure.
 
 ### 1. Get your footage onto your PC first
 
-**Copy the folders off the USB stick before scanning.** Do not scan directly
-from the drive still plugged into your car's dashcam port.
-
-This matters more than it sounds like it should:
+**Do not scan directly from the USB stick.** This matters more than it sounds
+like it should:
 
 - It is genuinely faster. Reading video off a USB stick is usually the slowest
   part of the whole process.
 - Sustained heavy reading is hard on these drives. On at least one machine,
   scanning straight from the Tesla USB drive has caused Windows itself to crash
   — a `DRIVER_POWER_STATE_FAILURE` blue screen, which is Windows' way of saying
-  a storage device stopped answering. Copying the files first avoids the whole
-  problem.
+  a storage device stopped answering.
 
-Copy the `TeslaCam` folder — or just the `SentryClips` folder inside it — to
-somewhere on your internal drive. Make sure you have room; a full drive's worth
-of footage can be 50 GB or more.
+**Mimir will do this for you.** Point it at the drive and use **Copy footage to
+this PC** on the import screen. Every file is copied, read back, and checked
+byte for byte before Mimir considers it safe.
+
+There is a checkbox to clear the drive afterwards, which is how you get the
+stick empty and back in the car in one step. Nothing is deleted until its copy
+has been verified — any file that does not match is left exactly where it is.
+
+Make sure you have room first; a full drive's worth of footage can be 50 GB or
+more. You can also copy the folders across yourself if you would rather.
 
 ### 2. Point Mimir at the folder and scan
 
