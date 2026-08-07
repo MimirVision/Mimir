@@ -3,143 +3,379 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mimir Beta</title>
+    <title>Mimir — Find the moments worth watching</title>
+    <meta
+      name="description"
+      content="Mimir scans your Tesla Sentry footage on your own PC and sorts hundreds of clips down to the few worth watching. Free beta. Nothing leaves your computer."
+    />
+    <meta name="theme-color" content="#050606" />
+    <link rel="icon" href="./mimir-mark.png" />
+    <!-- Blocking and before the stylesheet, on purpose. It marks the document
+         as scriptable before first paint, which is what lets the CSS hide
+         reveal targets without a flash, and lets the page stay fully visible
+         when JavaScript is off or fails. -->
+    <script>
+      document.documentElement.classList.add('js');
+    </script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main>
-      <nav class="nav" aria-label="Main navigation">
-        <div class="brand">Mimir</div>
-        <a href="#beta-guide">Beta guide</a>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="nav" id="nav">
+      <a class="brand" href="#top">
+        <img src="./mimir-mark.png" alt="" width="28" height="28" />
+        <span>Mimir</span>
+      </a>
+      <nav aria-label="Sections">
+        <a href="#how">How it works</a>
+        <a href="#honest">Honest limits</a>
+        <a href="#privacy">Privacy</a>
       </nav>
+      <a class="button button--small" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">
+        Download
+      </a>
+    </header>
 
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Free public beta</p>
-          <h1>Mimir</h1>
-          <h2>Find the moments worth watching.</h2>
-          <p class="subtitle">
-            AI incident review for vehicle footage. Scan locally, review incidents, and stay in control of every clip.
-          </p>
-          <p class="subtitle">
-            Free, no account, nothing leaves your PC unless you choose to send feedback or contribute footage — and
-            even then, it's encrypted before it does. It's still early beta software — see the beta guide below for
-            exactly what that means before you rely on it.
-          </p>
-          <div class="actions">
-            <!--
-              Points at the GitHub Release asset, which is what makes downloads
-              countable: GitHub reports a download count per asset and
-              scripts/download_stats.py records it over time. A relative
-              ./MimirSetup.exe also works if you hand someone the folder
-              directly, but nothing is counted that way -- and with no
-              telemetry in the app, this number is the only usage signal that
-              exists at all.
-
-              Requires a published (not draft) release carrying the asset.
-              release.yml drafts one on a v* tag; publishing is a manual step.
-            -->
-            <a class="button primary" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">Download for Windows</a>
-            <a class="button secondary" href="#beta-guide">View beta guide</a>
-          </div>
+    <main id="main">
+      <!-- ================= HERO ================= -->
+      <section class="hero" id="top">
+        <div class="hero__media" aria-hidden="true">
+          <img src="./incident-hero.jpg" alt="" />
+          <div class="hero__scrim"></div>
+          <div class="hero__grain"></div>
         </div>
 
-        <div class="product-preview" aria-label="Mimir product screenshot placeholder">
-          <div class="preview-topbar">
-            <span></span>
-            <span></span>
-            <span></span>
+        <div class="hero__inner">
+          <p class="eyebrow" data-reveal>Free public beta · Windows</p>
+          <h1 class="hero__title" data-reveal style="--delay: 60ms">
+            Find the moments<br />worth watching.
+          </h1>
+          <p class="lede" data-reveal style="--delay: 140ms">
+            Sentry Mode records everything. Mimir watches it back for you, on your own computer, and
+            tells you which few clips actually matter.
+          </p>
+
+          <div class="actions" data-reveal style="--delay: 220ms">
+            <a class="button button--primary" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">
+              Download for Windows
+              <span class="button__meta">197 MB · Windows 10 / 11</span>
+            </a>
+            <a class="button button--ghost" href="#how">See how it works</a>
           </div>
-          <div class="preview-video">
-            <div class="play-mark"></div>
-            <div class="preview-badge">Important</div>
-          </div>
-          <div class="preview-timeline">
-            <div class="timeline-line"></div>
-            <span class="marker neutral"></span>
-            <span class="marker amber"></span>
-            <span class="marker red"></span>
-            <span class="marker neutral right"></span>
-          </div>
-          <div class="preview-cards">
-            <div>
-              <strong>Possible contact</strong>
-              <span>Review recommended</span>
+
+          <p class="hero__foot" data-reveal style="--delay: 300ms">
+            No account. No subscription. Nothing uploaded.
+          </p>
+        </div>
+
+        <div class="scroll-hint" aria-hidden="true">
+          <span></span>
+        </div>
+      </section>
+
+      <!-- ================= THE PROBLEM ================= -->
+      <section class="section section--tight" id="problem">
+        <div class="wrap">
+          <div class="counter" data-reveal>
+            <div class="counter__col">
+              <div class="counter__num" data-count-to="679">0</div>
+              <div class="counter__label">clips in a week of Sentry footage</div>
             </div>
-            <div>
-              <strong>Evidence</strong>
-              <span>Local scan complete</span>
+            <div class="counter__arrow" aria-hidden="true">
+              <svg viewBox="0 0 48 16" fill="none" stroke="currentColor" stroke-width="1.25">
+                <path d="M0 8h44" />
+                <path d="M38 2l6 6-6 6" />
+              </svg>
+            </div>
+            <div class="counter__col counter__col--accent">
+              <div class="counter__num" data-count-to="11">0</div>
+              <div class="counter__label">worth opening</div>
+            </div>
+          </div>
+          <p class="counter__caption" data-reveal style="--delay: 120ms">
+            Measured on a real 679-clip dump. The rest is wind, rain, passing cars, and a cat.
+          </p>
+        </div>
+      </section>
+
+      <!-- ================= SORTING DEMO ================= -->
+      <section class="section" id="sorting">
+        <div class="wrap">
+          <p class="kicker" data-reveal>What it does</p>
+          <h2 class="h2" data-reveal style="--delay: 60ms">Every clip, sorted into three piles.</h2>
+          <p class="body" data-reveal style="--delay: 120ms">
+            Mimir looks at motion, objects, and where they are relative to your car, then puts each
+            event where it belongs. You start at the top and stop when it gets boring.
+          </p>
+
+          <div class="buckets" data-sort-demo>
+            <div class="bucket bucket--important" data-reveal>
+              <div class="bucket__head">
+                <span class="dot dot--red" aria-hidden="true"></span>
+                <span>Important</span>
+              </div>
+              <div class="bucket__body">
+                <div class="chip" style="--i: 0"></div>
+              </div>
+              <p class="bucket__note">Look at this now</p>
+            </div>
+
+            <div class="bucket bucket--review" data-reveal style="--delay: 90ms">
+              <div class="bucket__head">
+                <span class="dot dot--amber" aria-hidden="true"></span>
+                <span>Review</span>
+              </div>
+              <div class="bucket__body">
+                <div class="chip" style="--i: 0"></div>
+                <div class="chip" style="--i: 1"></div>
+                <div class="chip" style="--i: 2"></div>
+                <div class="chip" style="--i: 3"></div>
+              </div>
+              <p class="bucket__note">Probably nothing, worth a glance</p>
+            </div>
+
+            <div class="bucket bucket--ignore" data-reveal style="--delay: 180ms">
+              <div class="bucket__head">
+                <span class="dot dot--slate" aria-hidden="true"></span>
+                <span>Ignore</span>
+              </div>
+              <div class="bucket__body bucket__body--dense">
+                <div class="chip" style="--i: 0"></div>
+                <div class="chip" style="--i: 1"></div>
+                <div class="chip" style="--i: 2"></div>
+                <div class="chip" style="--i: 3"></div>
+                <div class="chip" style="--i: 4"></div>
+                <div class="chip" style="--i: 5"></div>
+                <div class="chip" style="--i: 6"></div>
+                <div class="chip" style="--i: 7"></div>
+                <div class="chip" style="--i: 8"></div>
+                <div class="chip" style="--i: 9"></div>
+                <div class="chip" style="--i: 10"></div>
+                <div class="chip" style="--i: 11"></div>
+              </div>
+              <p class="bucket__note">Left alone, never deleted</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="section-grid" aria-label="Mimir beta details">
-        <article>
-          <p class="section-kicker">How it works</p>
-          <h3>From folder to review timeline.</h3>
-          <ul>
-            <li>Choose footage folder</li>
-            <li>Scan locally</li>
-            <li>Review incidents</li>
-            <li>Move or trash clips manually</li>
-          </ul>
-        </article>
+      <!-- ================= HOW ================= -->
+      <section class="section section--alt" id="how">
+        <div class="wrap">
+          <p class="kicker" data-reveal>How it works</p>
+          <h2 class="h2" data-reveal style="--delay: 60ms">Four steps, then you are reviewing.</h2>
 
-        <article>
-          <p class="section-kicker">Safety</p>
-          <h3>You stay in control.</h3>
-          <ul>
-            <li>No automatic deletion</li>
-            <li>Manual status control</li>
-            <li>Local processing so you stay in control of your privacy</li>
-          </ul>
-        </article>
+          <ol class="steps">
+            <li class="step" data-reveal>
+              <span class="step__n">01</span>
+              <h3>Copy the footage across</h3>
+              <p>
+                Drag <code>TeslaCam</code> off the USB stick onto your drive. Scanning straight from
+                the stick is slow, and hard on the drive.
+              </p>
+            </li>
+            <li class="step" data-reveal style="--delay: 80ms">
+              <span class="step__n">02</span>
+              <h3>Point Mimir at the folder</h3>
+              <p>
+                It tells you what hardware it found and roughly how long this will take before you
+                commit to anything.
+              </p>
+            </li>
+            <li class="step" data-reveal style="--delay: 160ms">
+              <span class="step__n">03</span>
+              <h3>Let it scan</h3>
+              <p>
+                About 25 minutes for a full 679-clip dump on a machine with a graphics card. Go and
+                do something else.
+              </p>
+            </li>
+            <li class="step" data-reveal style="--delay: 240ms">
+              <span class="step__n">04</span>
+              <h3>Review what surfaced</h3>
+              <p>
+                Each clip has a timeline marking where Mimir thinks something happened, so you jump
+                straight there instead of watching the whole minute.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
 
-        <article id="beta-guide">
-          <p class="section-kicker">Beta notes</p>
-          <h3>Honest about where detection stands.</h3>
-          <ul>
-            <li>Ships with a stock, general-purpose detector, not yet fine-tuned on real Sentry footage</li>
-            <li>
-              <strong>It over-flags.</strong> Of the beta feedback so far, most clips Mimir rated Important were rated
-              lower by the person who looked at them. Treat Important as "look at this", not "something happened" - and
-              telling us when it's wrong is the single most useful thing you can do, because the detector can't improve
-              without examples.
-            </li>
-            <li>
-              Two rules were tightened on 5 August after reading that feedback back, both cases of motion near the car
-              being mistaken for something touching it. Replayed against the feedback, it removes 17 of the 18 Important
-              calls a human rejected and keeps the one they agreed with - dropping them to Review, so nothing is hidden.
-              That is 19 clips written in by people who thought something looked wrong, so it's a hint, not an accuracy
-              claim. <strong>It should over-flag less than it did. It still over-flags.</strong>
-            </li>
-            <li>Rear-end contact and door-ding detection are the current priority to improve</li>
-            <li>Report what it gets wrong: <a href="mailto:feedback.mimir@gmail.com">feedback.mimir@gmail.com</a></li>
-          </ul>
-        </article>
+      <!-- ================= HONEST ================= -->
+      <section class="section" id="honest">
+        <div class="wrap wrap--narrow">
+          <p class="kicker" data-reveal>Where it stands</p>
+          <h2 class="h2" data-reveal style="--delay: 60ms">It over-flags. Here are the numbers.</h2>
 
-        <article>
-          <p class="section-kicker">Before you download</p>
-          <h3>What it needs to run.</h3>
-          <ul>
-            <li>Windows 10 or 11, 64-bit; ~197 MB download, ~325 MB installed</li>
-            <li>Scanning and review are fully offline - your footage never leaves the PC on its own</li>
-            <li>Internet is used only if you choose to send feedback or a contribution, and for install if Windows is missing the WebView2 runtime (Windows 11 already includes it)</li>
-            <li>No account, and no Ollama unless you want the optional local AI second opinion</li>
-            <li>
-              A DirectX 12 GPU is not required, but it matters: object detection is over half the scan time and runs
-              roughly 10x slower on CPU. With a GPU expect around 25 minutes for a full 679-clip TeslaCam dump; without
-              one, budget hours. The app's system check tells you which you have before you start.
-            </li>
-            <li>
-              The installer is not code-signed yet, so Windows SmartScreen shows a blue "Windows protected your PC"
-              box. Click <strong>More info</strong>, then <strong>Run anyway</strong>. That warning is accurate - it
-              means the publisher is unverified, not that the file is safe. Certificates cost money and this is free.
-            </li>
+          <p class="body" data-reveal style="--delay: 120ms">
+            Of the beta feedback so far, <strong>18 of 19 clips Mimir called Important were rated
+            lower</strong> by the person who actually watched them. That is not a measured error
+            rate — people write in when something is wrong, not when it is right — but the direction
+            is not in doubt.
+          </p>
+
+          <div class="note" data-reveal style="--delay: 180ms">
+            <p>
+              Two rules were tightened in August 2026 after reading that feedback back. Replayed
+              against it, the change removes <strong>17 of the 18</strong> Important calls a human
+              rejected, and keeps the one they agreed with. Those clips drop to Review, not Ignore,
+              so nothing is hidden from you.
+            </p>
+            <p class="note__foot">
+              It should over-flag less than it did. It still over-flags. Treat Important as
+              <em>“look at this”</em>, not <em>“something happened”</em>.
+            </p>
+          </div>
+
+          <p class="body" data-reveal style="--delay: 240ms">
+            Telling Mimir when it is wrong is the single most useful thing a tester can do. The
+            detector cannot improve without examples, and a clip it misjudged is worth more than a
+            hundred it got right.
+          </p>
+
+          <ul class="limits" data-reveal style="--delay: 300ms">
+            <li>It cannot prove contact happened. Two shapes overlapping is not evidence of touching.</li>
+            <li>It does not identify people or read number plates. Deliberately, permanently.</li>
+            <li>It never deletes or moves anything on its own.</li>
           </ul>
-        </article>
+        </div>
+      </section>
+
+      <!-- ================= PRIVACY ================= -->
+      <section class="section section--alt" id="privacy">
+        <div class="wrap wrap--narrow">
+          <p class="kicker" data-reveal>Privacy</p>
+          <h2 class="h2" data-reveal style="--delay: 60ms">Your footage never leaves your PC.</h2>
+          <p class="body" data-reveal style="--delay: 120ms">
+            Not as a promise about how we handle uploads — as a description of what the software
+            does. Scanning happens entirely on your machine. There is no account, no cloud, no
+            telemetry, and no analytics.
+          </p>
+
+          <div class="cards">
+            <div class="card" data-reveal>
+              <h3>Two things can leave</h3>
+              <p>
+                Written feedback about a verdict, and — separately — a clip you explicitly choose to
+                contribute. Both only when you press a button.
+              </p>
+            </div>
+            <div class="card" data-reveal style="--delay: 90ms">
+              <h3>Encrypted before it moves</h3>
+              <p>
+                Anything you do send is encrypted on your own machine first, with a key held by the
+                intake, not by the network in between.
+              </p>
+            </div>
+            <div class="card" data-reveal style="--delay: 180ms">
+              <h3>Nothing is automatic</h3>
+              <p>
+                No background sync, no opt-out buried in settings. If you never press the button,
+                nothing is ever sent.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= BEFORE YOU DOWNLOAD ================= -->
+      <section class="section" id="requirements">
+        <div class="wrap wrap--narrow">
+          <p class="kicker" data-reveal>Before you download</p>
+          <h2 class="h2" data-reveal style="--delay: 60ms">What it needs, and what it will do to you.</h2>
+
+          <dl class="specs" data-reveal style="--delay: 120ms">
+            <div>
+              <dt>Operating system</dt>
+              <dd>Windows 10 or 11, 64-bit. No macOS or Linux build.</dd>
+            </div>
+            <div>
+              <dt>Graphics</dt>
+              <dd>
+                Optional, but it matters. Object detection is over half the scan time and runs
+                roughly 10× slower on the processor alone. With a DirectX 12 GPU, expect about 25
+                minutes for a full dump; without one, budget hours. Mimir tells you which you have
+                before you start.
+              </dd>
+            </div>
+            <div>
+              <dt>Disk</dt>
+              <dd>About 325 MB installed, plus room for the footage you copy over.</dd>
+            </div>
+            <div>
+              <dt>Internet</dt>
+              <dd>
+                Only if Windows is missing the WebView2 runtime at install time, and if you choose to
+                send feedback. Scanning and review are fully offline.
+              </dd>
+            </div>
+            <div>
+              <dt>Prerequisites</dt>
+              <dd>None. No Python, no runtimes to install, no account to create.</dd>
+            </div>
+          </dl>
+
+          <div class="warning" data-reveal style="--delay: 180ms">
+            <h3>Windows will warn you on first run</h3>
+            <p>
+              The installer is not code-signed yet, so SmartScreen shows a blue
+              <em>“Windows protected your PC”</em> box. Click <strong>More info</strong>, then
+              <strong>Run anyway</strong>.
+            </p>
+            <p>
+              That warning is accurate and worth understanding rather than clicking past. Windows
+              checks whether an installer was signed by a verified publisher. Mimir is not signed,
+              because a certificate costs several hundred dollars a year and this is free. So Windows
+              correctly reports that it does not know who made this — not that the file is dangerous.
+              If that is not good enough, the
+              <a href="https://github.com/QIKenway/Mimir#building-from-source">source builds</a>
+              are right there.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= CTA ================= -->
+      <section class="cta" id="get">
+        <div class="wrap wrap--narrow">
+          <h2 class="h2 h2--center" data-reveal>Try it on a week of your own footage.</h2>
+          <p class="body body--center" data-reveal style="--delay: 80ms">
+            It is free, it runs offline, and the worst case is that you close it again.
+          </p>
+          <div class="actions actions--center" data-reveal style="--delay: 160ms">
+            <a class="button button--primary" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">
+              Download for Windows
+              <span class="button__meta">197 MB · Windows 10 / 11</span>
+            </a>
+            <a class="button button--ghost" href="https://github.com/QIKenway/Mimir">Read the docs</a>
+          </div>
+        </div>
       </section>
     </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div class="footer__row">
+          <div class="footer__brand">
+            <img src="./mimir-mark.png" alt="" width="24" height="24" />
+            <span>Mimir</span>
+          </div>
+          <nav class="footer__links" aria-label="Footer">
+            <a href="https://github.com/QIKenway/Mimir">GitHub</a>
+            <a href="https://github.com/QIKenway/Mimir/blob/main/desktop/release_assets/KNOWN_ISSUES.md">Known issues</a>
+            <a href="https://github.com/QIKenway/Mimir/issues">Report a bug</a>
+            <a href="mailto:feedback.mimir@gmail.com">Email</a>
+          </nav>
+        </div>
+        <p class="footer__legal">
+          Not affiliated with, endorsed by, or sponsored by Tesla, Inc. Tesla, Sentry Mode, and
+          TeslaCam are trademarks of Tesla, Inc. Screenshot is the author’s own dashcam footage.
+        </p>
+      </div>
+    </footer>
+
+    <script src="./main.js" defer></script>
   </body>
 </html>
