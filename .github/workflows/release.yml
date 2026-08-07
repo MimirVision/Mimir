@@ -176,6 +176,38 @@ jobs:
           "size=$sizeMb MB"         | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "Built $($exe.Name) -- $sizeMb MB, SHA256 $sha"
 
+      # The update manifest the installed app polls. tauri.conf.json points
+      # its updater at releases/latest/download/latest.json, so without this
+      # file every client gets a 404 and silently never updates -- the same
+      # fixed-asset-name mechanism as MimirSetup.exe above.
+      #
+      # The URL here must be the VERSIONED asset, not MimirSetup.exe: the
+      # signature is over those exact bytes, and pinning the update to a
+      # specific build is the point. MimirSetup.exe is for humans clicking a
+      # download link, and it moves when a new release is published.
+      - name: Write the update manifest
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = if ('${{ github.event.inputs.tag }}') { '${{ github.event.inputs.tag }}' } else { '${{ github.ref_name }}' }
+          $exe = Split-Path -Leaf '${{ steps.installer.outputs.path }}'
+          $manifest = [ordered]@{
+            version   = $version
+            notes     = "See the release notes for what changed."
+            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                signature = (Get-Content -LiteralPath '${{ steps.installer.outputs.signature }}' -Raw).Trim()
+                url       = "https://github.com/${{ github.repository }}/releases/download/$tag/$exe"
+              }
+            }
+          }
+          $path = Join-Path (Split-Path -Parent '${{ steps.installer.outputs.path }}') "latest.json"
+          $manifest | ConvertTo-Json -Depth 5 | Out-File -FilePath $path -Encoding utf8 -NoNewline
+          "manifest=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Get-Content $path
+        id: manifest
+
       # Proves the packaged sidecar runs, rather than only that it compiled.
       # A sidecar that builds but cannot start has shipped from here before.
       - name: Smoke-test the packaged sidecar
@@ -197,9 +229,23 @@ jobs:
           draft: true
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Mimir ${{ github.event.inputs.tag || github.ref_name }}
-          files: ${{ steps.installer.outputs.path }}
+          # MimirSetup.exe is what the README and download page link to.
+          # The versioned exe and its .sig are what the updater pulls, named in
+          # latest.json. All four have to be on the release or one of those two
+          # paths breaks.
+          files: |
+            ${{ steps.installer.outputs.stable }}
+            ${{ steps.installer.outputs.path }}
+            ${{ steps.installer.outputs.signature }}
+            ${{ steps.manifest.outputs.manifest }}
           body: |
             Free public beta. Windows 10/11, 64-bit.
 
-            **${{ steps.installer.outputs.size }}**
+            **[Download MimirSetup.exe](https://github.com/${{ github.repository }}/releases/latest/download/MimirSetup.exe)** -- ${{ steps.installer.outputs.size }}
+
             SHA-256: `${{ steps.installer.outputs.sha256 }}`
+
+            Windows will show a "Windows protected your PC" warning, because the
+            installer is not code-signed yet. Click **More info**, then **Run
+            anyway**. See the [README](https://github.com/${{ github.repository }}#installing)
+            for what that warning actually means.
