@@ -1109,6 +1109,31 @@ def main(argv: list[str] | None = None) -> int:
     report_path = Path(args.report) if args.report else session_path.parent / "last_action_report.json"
     journal_path = Path(args.journal) if args.journal else session_path.parent / "storage_action_journal.json"
 
+    use_recycle_bin = not args.no_recycle_bin
+
+    # Handled before the session is loaded, because they do not use one.
+    #
+    # These act on a folder, not on selected incidents. Requiring a readable
+    # session anyway made "Empty Mimir Trash" fail with "Session file not
+    # found" on any machine whose latest_session.json is missing -- a fresh
+    # install, or a user whose scans went to a different output directory --
+    # and the desktop app does not pass --session for these at all, so it hit
+    # the default path every time. Caught by running the packaged binary
+    # rather than the source.
+    if args.list_trash:
+        print(json.dumps(trash_contents(), indent=2))
+        return 0
+
+    if args.empty_trash:
+        report = empty_trash(use_recycle_bin, args.dry_run)
+        try:
+            write_json(report_path, report)
+        except OSError as exc:
+            print(f"Trash emptied but report writing failed: {exc}")
+            return 1
+        print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
+
     try:
         session = load_json(session_path)
     except FileNotFoundError:
@@ -1123,24 +1148,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list_incidents:
         return print_incidents(session)
-
-    use_recycle_bin = not args.no_recycle_bin
-
-    # Trash-wide operations act on a folder rather than on selected incidents,
-    # so they are handled before the incident-selection rules below.
-    if args.list_trash:
-        print(json.dumps(trash_contents(), indent=2))
-        return 0
-
-    if args.empty_trash:
-        report = empty_trash(use_recycle_bin, args.dry_run)
-        try:
-            write_json(report_path, report)
-        except OSError as exc:
-            print(f"Trash emptied but report writing failed: {exc}")
-            return 1
-        print(json.dumps(report, indent=2))
-        return 0 if report["ok"] else 1
 
     if args.delete_permanently:
         if not (args.incident_id or args.incident_ids or args.status):

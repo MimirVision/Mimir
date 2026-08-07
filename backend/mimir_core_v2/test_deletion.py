@@ -250,6 +250,56 @@ class EmptyTrashTest(unittest.TestCase):
         self.assertEqual(report["files_found"], 0)
 
 
+class TrashCommandsWithoutASessionTest(unittest.TestCase):
+    """The trash commands must not need a session file they never read.
+
+    The desktop app calls these with no --session at all, so they land on the
+    default path. Requiring it to be present and valid meant "Empty Mimir
+    Trash" failed with "Session file not found" on any machine without a
+    latest_session.json -- a fresh install, or anyone whose scans went to a
+    different output directory.
+
+    Found by running the packaged binary rather than the source, which is the
+    only place the default path is the one that actually gets used.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.library = self.root / "library"
+        self.trash = self.library / "_Mimir Trash"
+        self.trash.mkdir(parents=True)
+        (self.trash / "front.mp4").write_bytes(b"x" * 2048)
+        self.missing_session = self.root / "does-not-exist" / "session.json"
+
+    def test_list_trash_works_with_no_session_file(self) -> None:
+        code = actions.main(
+            [
+                "--session", str(self.missing_session),
+                "--library-root", str(self.library),
+                "--list-trash",
+            ]
+        )
+        self.assertEqual(code, 0, "list-trash failed because a session file was absent.")
+
+    def test_empty_trash_works_with_no_session_file(self) -> None:
+        report_path = self.root / "report.json"
+        code = actions.main(
+            [
+                "--session", str(self.missing_session),
+                "--library-root", str(self.library),
+                "--empty-trash",
+                "--no-recycle-bin",
+                "--report", str(report_path),
+            ]
+        )
+
+        self.assertEqual(code, 0, "empty-trash failed because a session file was absent.")
+        self.assertEqual(list(self.trash.iterdir()), [])
+        self.assertTrue(json.loads(report_path.read_text(encoding="utf-8"))["ok"])
+
+
 class RecycleBinHonestyTest(unittest.TestCase):
     def test_a_recycle_bin_failure_is_never_downgraded_to_a_real_delete(self) -> None:
         """Someone who chose the recoverable option has to actually get it."""
