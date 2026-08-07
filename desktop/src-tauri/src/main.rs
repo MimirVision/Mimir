@@ -119,6 +119,22 @@ struct StorageActionResult {
     stderr: String,
 }
 
+/// What is in Mimir Trash, or what emptying it did.
+///
+/// `bytes` means what is there for a listing and what was freed for an empty,
+/// which is the number each caller wants in each case.
+#[derive(Serialize)]
+struct TrashReport {
+    ok: bool,
+    root: String,
+    count: u64,
+    bytes: u64,
+    message: String,
+    report_json: String,
+    stdout: String,
+    stderr: String,
+}
+
 #[derive(Serialize)]
 struct IncidentFeedbackResult {
     ok: bool,
@@ -2134,13 +2150,168 @@ async fn cancel_local_scan(
     Ok(status.success())
 }
 
+/// Bytes as something a person reads, for messages about freed space.
+fn format_bytes(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+    let value = bytes as f64;
+    if value >= GB {
+        format!("{:.1} GB", value / GB)
+    } else if value >= MB {
+        format!("{:.0} MB", value / MB)
+    } else if value >= KB {
+        format!("{:.0} KB", value / KB)
+    } else {
+        format!("{} bytes", bytes)
+    }
+}
+
+/// Shared plumbing for the two trash-wide commands.
+///
+/// Neither takes an incident, so they cannot reuse the storage-action command,
+/// and both need the same runtime resolution and report handling.
+fn run_trash_command(
+    app: &tauri::AppHandle,
+    args: &[&str],
+) -> Result<(bool, String, String, String), ScanFailure> {
+    let runtime = resolve_core_v2_actions_runtime(app)?;
+    let mut command = backend_command(&runtime);
+    if runtime.is_python_fallback() {
+        command.arg(DEV_CORE_V2_ACTION_SCRIPT);
+    }
+
+    let output_dir = active_output_dir(&runtime);
+    let report_path = output_dir.join("last_trash_report.json");
+    command.arg("--report").arg(&report_path);
+    for arg in args {
+        command.arg(arg);
+    }
+
+    let _ = fs::remove_file(&report_path);
+
+    let output = command
+        .output()
+        .map_err(|error| ScanFailure::new(format!("Trash action could not start. {}", error)))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    // --list-trash prints to stdout and writes no report, so stdout is the
+    // fallback rather than an error case.
+    let report_json = fs::read_to_string(&report_path).unwrap_or_else(|_| stdout.clone());
+
+    if !output.status.success() && report_json.trim().is_empty() {
+        return Err(ScanFailure::with_output(
+            "Could not read Mimir Trash.",
+            stdout,
+            stderr,
+        ));
+    }
+
+    Ok((output.status.success(), report_json, stdout, stderr))
+}
+
+#[tauri::command]
+async fn list_mimir_trash(app: tauri::AppHandle) -> Result<TrashReport, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (_, report_json, stdout, stderr) = run_trash_command(&app, &["--list-trash"])?;
+        let parsed: Value = serde_json::from_str(&report_json).unwrap_or_else(|_| json!({}));
+        Ok(TrashReport {
+            ok: true,
+            root: parsed
+                .get("root")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            count: parsed.get("count").and_then(Value::as_u64).unwrap_or(0),
+            bytes: parsed.get("bytes").and_then(Value::as_u64).unwrap_or(0),
+            message: String::new(),
+            report_json,
+            stdout,
+            stderr,
+        })
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
+#[tauri::command]
+async fn empty_mimir_trash(
+    app: tauri::AppHandle,
+    use_recycle_bin: Option<bool>,
+) -> Result<TrashReport, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut args = vec!["--empty-trash"];
+        if use_recycle_bin == Some(false) {
+            args.push("--no-recycle-bin");
+        }
+        let (_, report_json, stdout, stderr) = run_trash_command(&app, &args)?;
+        let parsed: Value = serde_json::from_str(&report_json).unwrap_or_else(|_| json!({}));
+        let ok = parsed.get("ok").and_then(Value::as_bool).unwrap_or(false);
+        let found = parsed
+            .get("files_found")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let freed = parsed
+            .get("bytes_deleted")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let recycled = parsed
+            .get("recycle_bin")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+
+        let message = if !ok {
+            parsed
+                .get("failures")
+                .and_then(Value::as_array)
+                .and_then(|items| items.first())
+                .and_then(|item| item.get("reason"))
+                .and_then(Value::as_str)
+                .unwrap_or("Mimir Trash could not be emptied.")
+                .to_string()
+        } else if found == 0 {
+            "Mimir Trash is already empty.".to_string()
+        } else if recycled {
+            format!(
+                "Moved {} item{} to the Windows Recycle Bin. Empty it there to free the space.",
+                found,
+                if found == 1 { "" } else { "s" }
+            )
+        } else {
+            format!("Deleted {} items. {} freed.", found, format_bytes(freed))
+        };
+
+        Ok(TrashReport {
+            ok,
+            root: parsed
+                .get("root")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            count: found,
+            bytes: freed,
+            message,
+            report_json,
+            stdout,
+            stderr,
+        })
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
 fn run_core_v2_storage_action_sync(
     app: tauri::AppHandle,
     session_path: Option<String>,
     incident_id: String,
     action: String,
+    use_recycle_bin: Option<bool>,
 ) -> Result<StorageActionResult, ScanFailure> {
-    if action != "move_to_library" && action != "move_to_trash" && action != "restore_from_trash" {
+    if action != "move_to_library"
+        && action != "move_to_trash"
+        && action != "restore_from_trash"
+        && action != "delete_permanently"
+    {
         return Err(ScanFailure::new("Unsupported storage action."));
     }
     // Forwarded as `--incident-id <value>` to the actions CLI.
@@ -2175,6 +2346,14 @@ fn run_core_v2_storage_action_sync(
         command.arg("--move-to-library");
     } else if action == "move_to_trash" {
         command.arg("--move-to-trash");
+    } else if action == "delete_permanently" {
+        command.arg("--delete-permanently");
+        // Recoverable unless the caller explicitly asked otherwise. `None`
+        // means the frontend did not say, and the safe reading of silence is
+        // the Recycle Bin -- an unlink has to be asked for.
+        if use_recycle_bin == Some(false) {
+            command.arg("--no-recycle-bin");
+        }
     } else {
         command.arg("--restore-from-trash");
     }
@@ -2214,6 +2393,26 @@ fn run_core_v2_storage_action_sync(
         "Moved to Mimir Trash.".to_string()
     } else if ok && action == "restore_from_trash" {
         "Restored from Mimir Trash.".to_string()
+    } else if ok && action == "delete_permanently" {
+        // Says which of the two things actually happened. "Deleted" would be
+        // wrong for the Recycle Bin -- the space is not back yet -- and
+        // pretending otherwise is how someone ends up hunting for missing disk
+        // space that is sitting in the bin.
+        let recycled = parsed
+            .get("recycle_bin")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        if recycled {
+            "Deleted. The files are in the Windows Recycle Bin.".to_string()
+        } else {
+            let freed = parsed
+                .get("bytes_deleted")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            format!("Deleted permanently. {} freed.", format_bytes(freed))
+        }
+    } else if action == "delete_permanently" {
+        "Some files could not be deleted.".to_string()
     } else if moved_count > 0 && failed_count > 0 {
         "Some files could not be moved.".to_string()
     } else {
@@ -2239,9 +2438,10 @@ async fn run_core_v2_storage_action(
     session_path: Option<String>,
     incident_id: String,
     action: String,
+    use_recycle_bin: Option<bool>,
 ) -> Result<StorageActionResult, ScanFailure> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_core_v2_storage_action_sync(app, session_path, incident_id, action)
+        run_core_v2_storage_action_sync(app, session_path, incident_id, action, use_recycle_bin)
     })
     .await
     .map_err(|error| ScanFailure::new(error.to_string()))?
@@ -3556,6 +3756,8 @@ fn main() {
             run_local_scan,
             cancel_local_scan,
             run_core_v2_storage_action,
+            list_mimir_trash,
+            empty_mimir_trash,
             save_incident_note,
             save_manual_status,
             save_key_moment_correction,

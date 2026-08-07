@@ -376,10 +376,31 @@ def source_folder_removal_eligibility(session: dict[str, Any], incident: dict[st
         if other_id == this_id:
             continue
         other_folder = as_path(clean_text(other.get("event_folder")))
-        if other_folder is not None and path_key(str(other_folder)) == path_key(str(resolved)):
-            return None, "another incident's clips share this source folder"
+        if other_folder is None or path_key(str(other_folder)) != path_key(str(resolved)):
+            continue
+        # An incident whose clips have already been trashed or deleted no
+        # longer has anything in this folder to protect.
+        #
+        # Without this the folder could never go. A Tesla event folder holds
+        # several minute-long clips, and Mimir groups on (folder, timestamp),
+        # so one folder routinely becomes two or three incidents -- on this
+        # developer's drive the very first one checked was shared. Each of them
+        # would forever point at a sibling that "still needs" the folder, so
+        # the user empties every incident out of it and the folder, its
+        # event.json and its thumbnail stay on the card regardless.
+        if _incident_files_already_removed(other):
+            continue
+        return None, "another incident's clips share this source folder"
 
     return resolved, ""
+
+
+def _incident_files_already_removed(incident: dict[str, Any]) -> bool:
+    """True when this incident no longer has footage in its source folder."""
+
+    if incident.get("user_deleted"):
+        return True
+    return clean_text(incident.get("storage_state")).lower() in {"trash", "library", "deleted"}
 
 
 def remove_incident_source_folder(session: dict[str, Any], incident: dict[str, Any], dry_run: bool) -> dict[str, Any]:

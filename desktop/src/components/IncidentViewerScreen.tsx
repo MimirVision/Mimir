@@ -2158,6 +2158,16 @@ export function IncidentViewerScreen({
   const [actionDetails, setActionDetails] = useState('')
   const [showLibraryConfirm, setShowLibraryConfirm] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  // Both reset every time the dialog opens, in openDeleteConfirm below.
+  // Remembering "skip the Recycle Bin" across incidents would turn one
+  // deliberate choice into a standing one, and the second unrecoverable
+  // delete would be a surprise.
+  const [deleteChoice, setDeleteChoice] = useState<'trash' | 'delete'>('trash')
+  const [useRecycleBin, setUseRecycleBin] = useState(true)
+  // Stated in the dialog because the action is not scoped to the clip on
+  // screen -- Mimir removes every camera angle in the event group together,
+  // and someone who thinks they are deleting one file should be told that.
+  const cameraClipCount = Array.isArray(incident.camera_clips) ? incident.camera_clips.length : 0
   const [showFilesDrawer, setShowFilesDrawer] = useState(false)
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [noteDraft, setNoteDraft] = useState(incident.user_note ?? '')
@@ -2235,19 +2245,25 @@ export function IncidentViewerScreen({
     setActionMessage(`Status changed to ${severityCopy(status)}.`)
   }
 
-  const runCoreV2StorageAction = async (action: 'move_to_library' | 'move_to_trash' | 'restore_from_trash') => {
+  const runCoreV2StorageAction = async (
+    action: 'move_to_library' | 'move_to_trash' | 'restore_from_trash' | 'delete_permanently',
+    useRecycleBin = true,
+  ) => {
     const busyKey: IncidentAction = action
     const successMessage = action === 'move_to_library'
       ? 'Moved to Mimir Library'
       : action === 'restore_from_trash'
         ? 'Restored from Mimir Trash'
-        : 'Moved to Mimir Trash'
+        : action === 'delete_permanently'
+          ? (useRecycleBin ? 'Deleted -- the files are in the Windows Recycle Bin' : 'Deleted permanently')
+          : 'Moved to Mimir Trash'
 
     // Captured before the action runs -- once this clip is actually trashed
     // it drops out of incidentList on the next reload, so "next" has to mean
     // next in the order the tester was looking at, not next in a list that
     // no longer contains this clip.
-    const nextAfterTrash = action === 'move_to_trash' ? adjacentIncident(1) ?? adjacentIncident(-1) : null
+    const removesFromList = action === 'move_to_trash' || action === 'delete_permanently'
+    const nextAfterTrash = removesFromList ? adjacentIncident(1) ?? adjacentIncident(-1) : null
 
     setBusyAction(busyKey)
     setActionError('')
@@ -2259,6 +2275,7 @@ export function IncidentViewerScreen({
         sessionPath: session?.session_archive_path || session?.output_path || null,
         incidentId: incidentActionId(incident),
         action,
+        useRecycleBin,
       })
       const report = parseStorageActionReport(result.report_json)
       const status = storageActionStatus(report)
@@ -2268,7 +2285,7 @@ export function IncidentViewerScreen({
       // A trashed clip is hard to keep track of if the viewer just sits on
       // it afterward -- move straight to whatever the tester would look at
       // next instead of making them go back to the grid and re-enter.
-      if (action === 'move_to_trash' && succeeded) {
+      if (removesFromList && succeeded) {
         const refreshedSession = await onReloadSession()
         const freshNext = nextAfterTrash && refreshedSession ? findIncident(refreshedSession, nextAfterTrash) : null
         if (freshNext) {
@@ -2794,7 +2811,11 @@ export function IncidentViewerScreen({
                 onSaveNote={saveNote}
                 onSetStatus={updateManualStatus}
                 onMoveToLibrary={() => setShowLibraryConfirm(true)}
-                onConfirmDelete={() => setShowDeleteConfirm(true)}
+                onConfirmDelete={() => {
+                  setDeleteChoice('trash')
+                  setUseRecycleBin(true)
+                  setShowDeleteConfirm(true)
+                }}
                 onRestoreFromTrash={() => void runCoreV2StorageAction('restore_from_trash')}
                 onOpenFiles={() => setShowFilesDrawer(true)}
                 onExportReport={() => void exportReport()}
@@ -2845,17 +2866,66 @@ export function IncidentViewerScreen({
       )}
 
       {showDeleteConfirm && (
-        <ModalOverlay label="Move this incident to Mimir Trash?" onClose={() => setShowDeleteConfirm(false)}>
-          <section className="w-full max-w-[460px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
+        <ModalOverlay label="Remove this incident?" onClose={() => setShowDeleteConfirm(false)}>
+          <section className="w-full max-w-[520px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
             <div className="text-[18px] font-semibold text-[var(--mimir-text)]">
-              Move this incident to Mimir Trash?
+              Remove this incident?
             </div>
             <p className="mt-3 text-[14px] leading-6 text-[var(--mimir-text-muted)]">
-              This moves the clips to Mimir Trash. It does not permanently delete them.
+              Either way this incident leaves your review list, and all
+              {' '}{Math.max(1, cameraClipCount)} camera angle{cameraClipCount === 1 ? '' : 's'} are handled together.
             </p>
-            <p className="mt-2 text-[13px] leading-5 text-[var(--mimir-text-subtle)]">
-              All camera angles for this incident will be moved together by Mimir.
-            </p>
+
+            {/* Two genuinely different outcomes, so they are laid out as
+                choices rather than as a scary button and a safe one. */}
+            <div className="mt-4 space-y-2.5">
+              <button
+                onClick={() => setDeleteChoice('trash')}
+                className={`w-full rounded-xl border p-3.5 text-left transition ${
+                  deleteChoice === 'trash'
+                    ? 'border-[var(--mimir-accent)]/45 bg-[var(--mimir-accent)]/[0.09]'
+                    : 'border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]'
+                }`}
+              >
+                <div className="text-[13.5px] font-semibold text-[var(--mimir-text)]">Move to Mimir Trash</div>
+                <p className="mt-1 text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
+                  Keeps the clips, on this PC, where you can restore them later. Frees the space on
+                  your USB drive but not on this computer.
+                </p>
+              </button>
+
+              <button
+                onClick={() => setDeleteChoice('delete')}
+                className={`w-full rounded-xl border p-3.5 text-left transition ${
+                  deleteChoice === 'delete'
+                    ? 'border-red-300/40 bg-red-500/[0.09]'
+                    : 'border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]'
+                }`}
+              >
+                <div className="text-[13.5px] font-semibold text-[var(--mimir-text)]">Delete</div>
+                <p className="mt-1 text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
+                  Removes the clips, the event folder, and Mimir&apos;s thumbnails. Goes to the
+                  Windows Recycle Bin, so you can still get it back from there.
+                </p>
+              </button>
+            </div>
+
+            {deleteChoice === 'delete' && (
+              <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
+                <input
+                  type="checkbox"
+                  checked={!useRecycleBin}
+                  onChange={event => setUseRecycleBin(!event.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 accent-[var(--mimir-status-red)]"
+                />
+                <span className="text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
+                  <span className="font-semibold text-[var(--mimir-text)]">Skip the Recycle Bin.</span>{' '}
+                  Frees the space immediately. Nothing can be recovered afterwards -- and if this
+                  footage is no longer on your USB drive, this is the only copy.
+                </span>
+              </label>
+            )}
+
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
@@ -2867,12 +2937,22 @@ export function IncidentViewerScreen({
               <button
                 onClick={() => {
                   setShowDeleteConfirm(false)
-                  void runCoreV2StorageAction('move_to_trash')
+                  if (deleteChoice === 'delete') {
+                    void runCoreV2StorageAction('delete_permanently', useRecycleBin)
+                  } else {
+                    void runCoreV2StorageAction('move_to_trash')
+                  }
                 }}
                 disabled={busyAction !== null}
-                className="h-10 rounded-lg border border-red-300/20 bg-red-500/12 px-4 text-[13px] font-semibold text-red-100 transition hover:bg-red-500/18 disabled:cursor-wait disabled:opacity-60"
+                className={`h-10 rounded-lg border px-4 text-[13px] font-semibold transition disabled:cursor-wait disabled:opacity-60 ${
+                  deleteChoice === 'delete'
+                    ? 'border-red-300/20 bg-red-500/12 text-red-100 hover:bg-red-500/18'
+                    : 'border-white/[0.12] bg-white/[0.06] text-[var(--mimir-text)] hover:bg-white/[0.1]'
+                }`}
               >
-                Move to Mimir Trash
+                {deleteChoice === 'delete'
+                  ? (useRecycleBin ? 'Delete' : 'Delete permanently')
+                  : 'Move to Mimir Trash'}
               </button>
             </div>
           </section>

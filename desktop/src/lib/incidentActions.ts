@@ -35,6 +35,9 @@ export type IncidentAction =
   | 'move_to_library'
   | 'move_to_trash'
   | 'restore_from_trash'
+  // Distinct from 'delete', which is the keyboard shortcut that opens the
+  // confirmation. This one is the irreversible thing the dialog can start.
+  | 'delete_permanently'
   | 'delete'
   | 'save_note'
   | 'save_feedback'
