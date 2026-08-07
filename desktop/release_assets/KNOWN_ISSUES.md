@@ -100,8 +100,21 @@ on the list.
   session with several hundred incidents scrolls poorly. Filtering helps.
 - **Some clips will not preview** even when the scan output is fine. The
   incident data is still correct; only playback fails.
-- **Move to Mimir Trash is recoverable, but there is no in-app restore button.**
-  The files are in a Mimir Trash folder and you can move them back by hand.
+- **Mimir Trash needs emptying, and now you can.** Trashing a clip moves it off
+  your USB drive onto this PC, which frees the stick but not the computer.
+  Until 2026-08-05 nothing ever emptied that folder, so it only grew -- 2.4 GB
+  on the development machine. The Trash view now shows what it is costing and
+  has an **Empty Mimir Trash** button.
+- **Deleting is now a real option.** The confirmation offers two things: move
+  to Trash (keeps the clips, restorable), or delete -- which removes the clips,
+  the Tesla event folder, and the thumbnails Mimir generated. Deleting sends
+  files to the Windows Recycle Bin by default, so a mistake is recoverable the
+  usual way. There is a checkbox to skip the bin and free the space
+  immediately; that one really is permanent.
+  - Worth knowing before you use it: a Tesla event folder usually holds several
+    clips, which Mimir splits into separate incidents. The folder is only
+    removed once nothing in it is still live, so deleting one incident of three
+    leaves the folder until the other two go as well.
 - **Windows 10/11, 64-bit only.** No macOS, no Linux, no 32-bit or ARM build.
   Requires WebView2, which is present on almost all current Windows installs.
 - **Optional local AI is off by default** and is a second opinion only. It can
