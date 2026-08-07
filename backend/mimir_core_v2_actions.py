@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from mimir_core_v2 import recycle_bin
+from mimir_core_v2 import footage_import, recycle_bin
 from mimir_core_v2.runtime_paths import default_output_dir
 
 
@@ -1084,6 +1084,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--delete-permanently", action="store_true", help="Delete selected incidents: clips, source event folder, and generated thumbnails.")
     parser.add_argument("--empty-trash", action="store_true", help="Remove everything currently in Mimir Trash.")
     parser.add_argument("--list-trash", action="store_true", help="Report what is in Mimir Trash without changing anything.")
+    parser.add_argument("--import-footage", default="", help="Copy footage from this folder into the library before scanning.")
+    parser.add_argument("--import-destination", default="", help="Where imported footage lands. Defaults to <library>/Footage.")
+    parser.add_argument(
+        "--clear-source",
+        action="store_true",
+        help="After every file is copied and verified byte for byte, remove it from the source drive.",
+    )
     # Recoverable by default. Choosing to bypass the Recycle Bin has to be
     # something a caller says out loud, not something it gets by omission.
     parser.add_argument(
@@ -1123,6 +1130,27 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_trash:
         print(json.dumps(trash_contents(), indent=2))
         return 0
+
+    # Also handled before the session load: an import happens before any scan
+    # exists, so there is no session to read.
+    if args.import_footage:
+        destination = (
+            Path(args.import_destination) if args.import_destination else LIBRARY_ROOT / "Footage"
+        )
+        report = footage_import.import_footage(
+            Path(args.import_footage),
+            destination,
+            remove_source=args.clear_source,
+            dry_run=args.dry_run,
+            on_progress=footage_import.emit_progress,
+        )
+        try:
+            write_json(report_path, report)
+        except OSError as exc:
+            print(f"Import finished but report writing failed: {exc}")
+            return 1
+        print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
 
     if args.empty_trash:
         report = empty_trash(use_recycle_bin, args.dry_run)
