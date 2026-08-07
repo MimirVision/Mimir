@@ -79,8 +79,8 @@
         <div class="wrap">
           <div class="counter" data-reveal>
             <div class="counter__col">
-              <div class="counter__num" data-count-to="679">0</div>
-              <div class="counter__label">clips in a week of Sentry footage</div>
+              <div class="counter__num" data-count-to="656">0</div>
+              <div class="counter__label">events in a week of Sentry footage</div>
             </div>
             <div class="counter__arrow" aria-hidden="true">
               <svg viewBox="0 0 48 16" fill="none" stroke="currentColor" stroke-width="1.25">
@@ -89,12 +89,14 @@
               </svg>
             </div>
             <div class="counter__col counter__col--accent">
-              <div class="counter__num" data-count-to="11">0</div>
-              <div class="counter__label">worth opening</div>
+              <div class="counter__num" data-count-to="378">0</div>
+              <div class="counter__label">ruled out for you</div>
             </div>
           </div>
           <p class="counter__caption" data-reveal style="--delay: 120ms">
-            Measured on a real 679-clip dump. The rest is wind, rain, passing cars, and a cat.
+            From a real 656-event dump: 378 dismissed as nothing, 278 put in front of a human. That
+            second number is too high and shrinking it is the current work — see
+            <a href="#honest">where it stands</a> before you decide this is for you.
           </p>
         </div>
       </section>
@@ -126,11 +128,17 @@
                 <span class="dot dot--amber" aria-hidden="true"></span>
                 <span>Review</span>
               </div>
+              <!-- Proportions track the real 656-event dump: roughly four in
+                   ten land here. Drawing a tidier ratio would be a nicer
+                   picture of a product that does not exist yet. -->
               <div class="bucket__body">
                 <div class="chip" style="--i: 0"></div>
                 <div class="chip" style="--i: 1"></div>
                 <div class="chip" style="--i: 2"></div>
                 <div class="chip" style="--i: 3"></div>
+                <div class="chip" style="--i: 4"></div>
+                <div class="chip" style="--i: 5"></div>
+                <div class="chip" style="--i: 6"></div>
               </div>
               <p class="bucket__note">Probably nothing, worth a glance</p>
             </div>
@@ -220,12 +228,19 @@
             <p>
               Two rules were tightened in August 2026 after reading that feedback back. Replayed
               against it, the change removes <strong>17 of the 18</strong> Important calls a human
-              rejected, and keeps the one they agreed with. Those clips drop to Review, not Ignore,
-              so nothing is hidden from you.
+              rejected, and keeps the one they agreed with.
+            </p>
+            <p>
+              But those clips dropped to Review rather than disappearing, and Review is where your
+              evening actually goes. On a real 656-event dump Mimir now rules out 378 and asks you
+              to look at <strong>278</strong>. Better than watching all 656. Nowhere near good
+              enough.
             </p>
             <p class="note__foot">
-              It should over-flag less than it did. It still over-flags. Treat Important as
-              <em>“look at this”</em>, not <em>“something happened”</em>.
+              Almost all of those 278 are flagged because something was near the car and something
+              moved — which, for a parked car, is most of the time. Separating that from actual
+              contact is the problem being worked on, and it needs a properly labelled set of
+              footage to measure against rather than more guessing.
             </p>
           </div>
 

@@ -40,8 +40,34 @@ IGNORE: the clip is still put in front of you, just not at the top.
 Take the improvement with the same salt as the original number. Nineteen clips,
 selected by people who wrote in because something looked wrong, is a hint --
 not a measured accuracy claim, and not a substitute for the evaluation set the
-model card requires and that does not exist yet. **It should over-flag less
-than it did. It still over-flags.**
+model card requires and that does not exist yet.
+
+**And it moved the problem rather than solving it.** Measured on 2026-08-08
+across every scan on the development machine (4,173 incidents), what you
+actually get on a full week of footage is roughly:
+
+| | out of 656 events |
+|---|---|
+| Ignored for you | 378 |
+| **Put in front of you** | **278** |
+| Marked Important | 0 |
+
+So Mimir rules out a bit over half, and asks you to look at the rest. Better
+than watching all 656. Nowhere near "ten instead of seven hundred", and Important
+has become a tier that essentially never fires.
+
+The cause is now understood precisely, which is worth saying plainly because it
+is not a mystery any more: almost every one of those 278 is flagged because
+something was near the car and something moved. On a parked car that is the
+permanent condition -- in a real dump, the "nearby vehicle" that triggers it
+fills 60% of the camera frame on average and sits against the bottom edge,
+which is the car's own bodywork or whatever is parked alongside, not something
+arriving.
+
+Fixing that changes how **every** incident is judged, and doing it on a hunch
+could bury a real hit-and-run. So it waits for a properly labelled set of
+footage to measure against. Contributing clips is what builds that set, and it
+is the reason the contribute button exists.
 
 **The single most useful thing you can do is tell us when it is wrong.** The
 detector cannot improve without examples, and a clip Mimir got wrong is worth
