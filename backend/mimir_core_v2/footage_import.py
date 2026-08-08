@@ -115,6 +115,96 @@ def _copy_and_hash(source: Path, destination: Path) -> str:
     return digest.hexdigest()
 
 
+def _mp4_boxes_reach_end(path: Path) -> bool:
+    """Walk an mp4's length-prefixed boxes and see if they land on the file end."""
+
+    import struct
+
+    size = path.stat().st_size
+    if size < 16:
+        return False
+    offset = 0
+    try:
+        with path.open("rb") as handle:
+            while offset < size:
+                handle.seek(offset)
+                header = handle.read(8)
+                if len(header) < 8:
+                    return False
+                box_size = struct.unpack(">I", header[:4])[0]
+                if box_size == 1:
+                    box_size = struct.unpack(">Q", handle.read(8))[0]
+                elif box_size == 0:
+                    return True  # box runs to EOF, which is a complete file
+                if box_size < 8:
+                    return False
+                offset += box_size
+    except OSError:
+        return False
+    return offset == size
+
+
+def reconcile_partial_copies(destination_root: Path) -> dict:
+    """Deal with staging files left by a copy that was killed mid-flight.
+
+    _copy_and_hash writes to `<name>.mimir-partial` and then os.replace()s it
+    into position, so an interrupted copy cannot be mistaken for a finished
+    one. Its cleanup runs on exception -- but a hard kill raises nothing, and
+    on this developer's machine the drive being read was causing
+    DRIVER_POWER_STATE_FAILURE bugchecks, so hard kills happened.
+
+    Nothing reconciled the leftovers, and 64 of them accumulated: 1.34 GB of
+    fully-written clips that no longer had a source to be re-copied from,
+    because the source had been cleared on a later successful pass. Every one
+    turned out to be a complete file that had simply never been renamed.
+
+    Three cases, and the ordering matters:
+
+      final exists      -> the partial is junk from a retry. Delete it.
+      source exists     -> prefer the source. Delete the partial, re-copy.
+      source is gone    -> the partial is the ONLY copy. Promote it if the
+                           container is intact, and say so, because it was
+                           never hash-verified against anything.
+    """
+
+    root = Path(destination_root)
+    report = {"deleted": 0, "recovered": 0, "unrecoverable": [], "warnings": []}
+    if not root.is_dir():
+        return report
+
+    for partial in sorted(root.rglob("*.mimir-partial")):
+        final = partial.with_name(partial.name[: -len(".mimir-partial")])
+
+        if final.exists():
+            try:
+                partial.unlink()
+                report["deleted"] += 1
+            except OSError as exc:
+                report["warnings"].append(f"could not remove {partial}: {exc}")
+            continue
+
+        if final.suffix.lower() == ".mp4" and not _mp4_boxes_reach_end(partial):
+            report["unrecoverable"].append(str(final))
+            report["warnings"].append(
+                f"{final.name} was left half-copied and its source is gone. "
+                "The incomplete data is still at "
+                f"{partial.name} if you want to look at it."
+            )
+            continue
+
+        try:
+            partial.rename(final)
+            report["recovered"] += 1
+            report["warnings"].append(
+                f"Recovered {final.name} from an interrupted copy. The file is complete, "
+                "but it could not be checked against its original because the source is gone."
+            )
+        except OSError as exc:
+            report["warnings"].append(f"could not recover {partial}: {exc}")
+
+    return report
+
+
 def plan_import(source: Path, destination: Path) -> ImportPlan:
     """Work out what would move, without touching anything."""
 
@@ -200,6 +290,11 @@ def import_footage(
 ) -> dict:
     """Copy footage in, verify it, and optionally clear the source."""
 
+    # Before anything else: clear up after a previous run that was killed.
+    # Doing this first means a partial cannot be mistaken for a finished copy
+    # by the size check further down.
+    reconciled = reconcile_partial_copies(Path(destination))
+
     plan = plan_import(source, destination)
     report: dict = {
         "action": "import_footage",
@@ -215,7 +310,10 @@ def import_footage(
         "files_skipped": 0,
         "source_files_removed": 0,
         "source_folders_removed": 0,
-        "warnings": list(plan.warnings),
+        "warnings": list(plan.warnings) + reconciled["warnings"],
+        "partials_deleted": reconciled["deleted"],
+        "partials_recovered": reconciled["recovered"],
+        "partials_unrecoverable": reconciled["unrecoverable"],
         "failures": [],
         "ok": True,
     }
@@ -378,6 +476,143 @@ def sweep_leftover_folders(source: Path, dry_run: bool) -> tuple[int, list[str]]
             warnings.append(f"Could not remove {folder}: {exc}")
 
     return removed, warnings
+
+
+@dataclass
+class RelocatedGroup:
+    """One event group brought onto local disk, ready to scan."""
+
+    ok: bool
+    destination_folder: Path | None
+    copied: int = 0
+    skipped: int = 0
+    bytes_copied: int = 0
+    # Verified byte for byte, so safe to remove once the scan has read them.
+    removable_sources: list[Path] = field(default_factory=list)
+    source_folder: Path | None = None
+    failures: list[dict] = field(default_factory=list)
+
+
+def destination_for_group(source_folder: Path, destination_root: Path) -> Path:
+    """Where one event folder lands, preserving the category.
+
+    Same rule as plan_import: the category has to survive, or a scan of the
+    copy reports 'generic_folder' and the storage actions stop recognising the
+    layout as folder-per-event.
+    """
+
+    category = source_category_for_path(source_folder / "x.mp4")
+    if category == "generic_folder":
+        return destination_root / source_folder.name
+    if source_folder.name.lower() == category.lower():
+        return destination_root / category
+    return destination_root / category / source_folder.name
+
+
+def relocate_event_group(group: dict, destination_root: Path) -> RelocatedGroup:
+    """Copy one event group's files locally and rewrite the group to point at them.
+
+    The unit is the event group rather than the whole drive, so a scan can copy
+    one incident, read it off fast local storage, and clear it from the stick
+    before touching the next -- instead of a twenty-minute copy phase followed
+    by a separate twenty-minute scan phase.
+
+    Nothing is deleted here. Sources that verified are returned so the caller
+    can remove them *after* the scan has read the clips: a crash mid-scan then
+    leaves the drive untouched rather than half-emptied.
+    """
+
+    clips = [clip for clip in (group.get("clips") or []) if isinstance(clip, dict)]
+    paths = [Path(str(clip.get("path"))) for clip in clips if clip.get("path")]
+    if not paths:
+        return RelocatedGroup(ok=False, destination_folder=None,
+                              failures=[{"reason": "event group has no clip paths"}])
+
+    source_folder = paths[0].parent
+    target = destination_for_group(source_folder, Path(destination_root))
+    target.mkdir(parents=True, exist_ok=True)
+
+    result = RelocatedGroup(ok=True, destination_folder=target, source_folder=source_folder)
+
+    # Everything in the folder, so Tesla's event.json and thumb.png travel with
+    # the clips and the folder can actually be removed afterwards.
+    try:
+        members = sorted(path for path in source_folder.iterdir() if path.is_file())
+    except OSError as exc:
+        return RelocatedGroup(ok=False, destination_folder=target,
+                              failures=[{"reason": f"could not read {source_folder}: {exc}"}])
+
+    for source_file in members:
+        destination_file = target / source_file.name
+        try:
+            if destination_file.exists() and destination_file.stat().st_size == source_file.stat().st_size:
+                if _hash_file(destination_file) == _hash_file(source_file):
+                    result.skipped += 1
+                    result.removable_sources.append(source_file)
+                    continue
+            source_digest = _copy_and_hash(source_file, destination_file)
+            if _hash_file(destination_file) != source_digest:
+                result.failures.append(
+                    {"file": str(source_file), "reason": "the copy does not match the original"}
+                )
+                continue
+            result.copied += 1
+            result.bytes_copied += destination_file.stat().st_size
+            result.removable_sources.append(source_file)
+        except OSError as exc:
+            result.failures.append({"file": str(source_file), "reason": f"could not copy: {exc}"})
+
+    if result.failures:
+        # A partially copied group is not scanned from the copy: the source is
+        # still the complete one, so leave the group pointing at it.
+        result.ok = False
+        return result
+
+    # Rewrite in place so the rest of the scan reads local files without
+    # knowing anything about the import.
+    for clip in clips:
+        original = str(clip.get("path") or "")
+        if not original:
+            continue
+        clip["original_path"] = original
+        clip["path"] = str(target / Path(original).name)
+    group["event_folder"] = str(target)
+    group["imported_from"] = str(source_folder)
+
+    return result
+
+
+def remove_relocated_sources(relocated: RelocatedGroup) -> dict:
+    """Delete the originals for a group whose copies were verified.
+
+    Called after the scan has read the group, not before. The folder itself
+    goes only when nothing is left in it, so a file the user added by hand
+    keeps its directory alive.
+    """
+
+    removed = 0
+    warnings: list[str] = []
+    if not relocated.ok:
+        return {"removed": 0, "folder_removed": False, "warnings": ["group was not fully copied"]}
+
+    for path in relocated.removable_sources:
+        try:
+            path.unlink(missing_ok=True)
+            removed += 1
+        except OSError as exc:
+            warnings.append(f"could not remove {path}: {exc}")
+
+    folder_removed = False
+    folder = relocated.source_folder
+    if folder is not None and folder.is_dir():
+        try:
+            if not any(folder.iterdir()):
+                folder.rmdir()
+                folder_removed = True
+        except OSError as exc:
+            warnings.append(f"could not remove {folder}: {exc}")
+
+    return {"removed": removed, "folder_removed": folder_removed, "warnings": warnings}
 
 
 def emit_progress(payload: dict) -> None:

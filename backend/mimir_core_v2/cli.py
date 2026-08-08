@@ -18,6 +18,7 @@ from .output_writer import build_session, incident_from_group, write_latest_sess
 from .progress import ProgressReporter
 from .runtime_paths import default_output_dir
 from .severity_resolver import resolve_severity
+from .footage_import import relocate_event_group, remove_relocated_sources
 from .source_discovery import discover_videos
 from .thumbnailer import THUMBNAIL_VERSION, generate_thumbnails
 
@@ -48,6 +49,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ego-calibration", default="", help="Optional JSON file containing normalized per-camera ego-vehicle polygons.")
     parser.add_argument("--output", dest="output", default=str(DEFAULT_OUTPUT), help="Output folder for latest_session.json.")
     parser.add_argument("--output-dir", dest="output", default=argparse.SUPPRESS, help="Output folder for latest_session.json.")
+    parser.add_argument(
+        "--import-to",
+        default="",
+        help="Copy each event group here before scanning it, so the scan reads local disk instead of the source drive.",
+    )
+    parser.add_argument(
+        "--clear-source",
+        action="store_true",
+        help="With --import-to: after a group is copied, verified and scanned, remove it from the source drive.",
+    )
     return parser
 
 
@@ -62,6 +73,8 @@ def run_scan(
     defer_ai: bool = False,
     disable_yolo: bool = False,
     ego_calibration: str = "",
+    import_to: str | Path | None = None,
+    clear_source: bool = False,
 ) -> dict:
     scan_started = time.perf_counter()
     scan_started_at = _utc_now_iso()
@@ -70,6 +83,7 @@ def run_scan(
     warnings: list[str] = []
     performance_parts = {
         "source_discovery_sec": 0.0,
+        "footage_import_sec": 0.0,
         "event_grouping_sec": 0.0,
         "frame_sampling_sec": 0.0,
         "local_evidence_sec": 0.0,
@@ -106,7 +120,49 @@ def run_scan(
     session_output_dir = Path(output) / "sessions" / session_id
     thumbnail_output_dir = str((session_output_dir / "thumbnails").resolve())
 
+    # Streamed import: copy one event group in, scan it off local disk, then
+    # clear it from the drive, rather than a whole copy phase followed by a
+    # whole scan phase.
+    #
+    # Three reasons this shape is better than two passes. The user sees one
+    # progress bar for what they think of as one action. It is resumable by
+    # construction -- stop at group 50 of 300 and the 250 still on the stick
+    # *are* the remaining queue. And the drive gets idle time between groups
+    # instead of twenty unbroken minutes of reading, which is what was taking
+    # this machine down with DRIVER_POWER_STATE_FAILURE bugchecks.
+    import_root = Path(import_to) if import_to else None
+    imported_groups = 0
+    imported_bytes = 0
+    cleared_folders = 0
+    import_failures: list[dict] = []
+
     for index, event_group in enumerate(event_groups, start=1):
+        relocated = None
+        if import_root is not None:
+            progress.emit(
+                "copying_footage",
+                f"Copying event group {index} of {len(event_groups)} to this PC.",
+                index - 1,
+                len(event_groups),
+                current_video=str(event_group.get("event_group_id") or ""),
+                incidents_created=len(incidents),
+            )
+            part_started = time.perf_counter()
+            relocated = relocate_event_group(event_group, import_root)
+            performance_parts["footage_import_sec"] += time.perf_counter() - part_started
+            if relocated.ok:
+                imported_groups += 1
+                imported_bytes += relocated.bytes_copied
+            else:
+                # Scanning continues from the original location. A group that
+                # would not copy is still worth looking at, and its source is
+                # deliberately left alone.
+                import_failures.extend(relocated.failures)
+                for failure in relocated.failures:
+                    warnings.append(
+                        f"Could not copy {failure.get('file', 'a file')}: {failure.get('reason', 'unknown')}"
+                    )
+
         progress.emit(
             "detecting_activity",
             f"Reviewing event group {index} of {len(event_groups)}.",
@@ -233,6 +289,18 @@ def run_scan(
                 ai_failed_groups += 1
         severity = resolve_severity(evidence, ai_review)
         incidents.append(incident_from_group(index, event_group, evidence, severity, ai_review))
+
+        # Only now, with the group scanned and its incident recorded, is it
+        # safe to clear the originals. Deleting straight after the copy would
+        # be enough for data safety -- the verified copy exists -- but a crash
+        # mid-scan would then leave the drive half emptied for no gain.
+        if clear_source and relocated is not None and relocated.ok:
+            removal = remove_relocated_sources(relocated)
+            if removal["folder_removed"]:
+                cleared_folders += 1
+            for warning in removal["warnings"]:
+                warnings.append(warning)
+
         progress.emit(
             "detecting_activity",
             f"Reviewed event group {index} of {len(event_groups)}.",
@@ -357,6 +425,18 @@ def run_scan(
         "source_mutation_attempted": False,
         "incident_creation_invariant": len(incidents) == len(event_groups),
     }
+    # Recorded on the session so the app can say what happened to the drive,
+    # and so a partial run is diagnosable afterwards.
+    if import_root is not None:
+        session["footage_import"] = {
+            "destination": str(import_root),
+            "groups_imported": imported_groups,
+            "groups_total": len(event_groups),
+            "bytes_copied": imported_bytes,
+            "source_cleared": clear_source,
+            "source_folders_removed": cleared_folders,
+            "failures": import_failures,
+        }
     session["runtime_identity"] = {
         "session_id": session_id,
         "scanner_version": session.get("scanner_version"),
@@ -455,6 +535,8 @@ def main(argv: list[str] | None = None) -> int:
         defer_ai=args.defer_ai,
         disable_yolo=args.disable_yolo,
         ego_calibration=args.ego_calibration,
+        import_to=args.import_to or None,
+        clear_source=args.clear_source,
     )
     return 0 if session.get("schema_version") == "mimir_v2" else 1
 
