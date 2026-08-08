@@ -28,8 +28,8 @@
         <span>Mimir</span>
       </a>
       <nav aria-label="Sections">
+        <a href="#sorting">What it does</a>
         <a href="#how">How it works</a>
-        <a href="#honest">Honest limits</a>
         <a href="#privacy">Privacy</a>
       </nav>
       <a class="button button--small" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">
@@ -45,18 +45,15 @@
         <div class="hero__inner">
           <div class="hero__copy">
             <p class="eyebrow" data-reveal>Free public beta · Windows</p>
-            <!-- Two short lines. The longer version wrapped to three in the
-                 narrower column this layout gives the copy, and the third line
-                 was a single orphaned word. -->
             <h1 class="hero__title" data-reveal style="--delay: 60ms">
               Find the moments<br />worth watching.
             </h1>
             <p class="lede" data-reveal style="--delay: 140ms">
-              Sentry Mode records everything and tells you nothing. Mimir watches it back on your own
-              computer, throws out the empty hours, and points you at what is left.
+              Sentry Mode records everything and tells you nothing. Mimir watches a week of it back on
+              your own computer, throws out the empty hours, and shows you what is left.
             </p>
 
-            <div class="actions" data-reveal style="--delay: 220ms">
+            <div class="actions actions--center" data-reveal style="--delay: 220ms">
               <a class="button button--primary" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">
                 Download for Windows
                 <span class="button__meta">197 MB · Windows 10 / 11</span>
@@ -70,132 +67,39 @@
           </div>
 
           <!--
-            An illustration of the review screen rather than a photograph.
-            A dashcam still of a dark garage says nothing about what the
-            software does, and a real screenshot would be stale the first time
-            the UI moved. Drawn in SVG so it stays sharp at any size, themes
-            from the same variables as the rest of the page, and adds no
-            download weight.
+            The figures are the hero image.
+            A photograph of a dark garage and a drawn app window were both
+            rejected, and both deserved it: one showed nothing about the
+            software, the other was a picture of an interface pretending to be
+            a screenshot. Real measurements at display size are neither, they
+            are the actual claim, and they cannot go stale the way a mock does.
 
-            The numbers are the real ones from a 656-event dump. Putting
-            invented figures in the picture would undo the section further down
-            that exists to correct exactly that.
+            From one real 656-event scan. Nothing here is illustrative.
           -->
-          <div class="hero__shot" data-reveal style="--delay: 200ms">
-            <svg viewBox="0 0 520 372" role="img" aria-labelledby="shot-title">
-              <title id="shot-title">
-                Mimir's review screen: 656 events sorted into 378 ignored and 278 needing a look.
-              </title>
-
-              <!-- window -->
-              <rect x="0" y="0" width="520" height="372" rx="14" class="sv-window" />
-              <rect x="0" y="0" width="520" height="34" rx="14" class="sv-bar" />
-              <rect x="0" y="24" width="520" height="10" class="sv-bar" />
-              <circle cx="19" cy="17" r="4" class="sv-dot-1" />
-              <circle cx="34" cy="17" r="4" class="sv-dot-2" />
-              <circle cx="49" cy="17" r="4" class="sv-dot-3" />
-              <rect x="70" y="12" width="86" height="9" rx="4.5" class="sv-ghost" />
-
-              <!-- sidebar -->
-              <rect x="0" y="34" width="150" height="338" class="sv-side" />
-              <g class="sv-row">
-                <rect x="14" y="52" width="122" height="30" rx="7" class="sv-chip-on" />
-                <circle cx="27" cy="67" r="3.5" class="sv-red" />
-                <rect x="38" y="63" width="44" height="8" rx="4" class="sv-label" />
-                <rect x="108" y="63" width="14" height="8" rx="4" class="sv-num" />
-              </g>
-              <g>
-                <circle cx="27" cy="101" r="3.5" class="sv-amber" />
-                <rect x="38" y="97" width="38" height="8" rx="4" class="sv-ghost" />
-                <rect x="100" y="97" width="22" height="8" rx="4" class="sv-ghost" />
-              </g>
-              <g>
-                <circle cx="27" cy="131" r="3.5" class="sv-slate" />
-                <rect x="38" y="127" width="34" height="8" rx="4" class="sv-ghost" />
-                <rect x="100" y="127" width="22" height="8" rx="4" class="sv-ghost" />
-              </g>
-
-              <line x1="14" y1="158" x2="136" y2="158" class="sv-rule" />
-              <text x="14" y="186" class="sv-figure">656</text>
-              <rect x="14" y="196" width="60" height="7" rx="3.5" class="sv-ghost" />
-
-              <!-- the split -->
-              <rect x="14" y="220" width="122" height="7" rx="3.5" class="sv-track" />
-              <rect x="14" y="220" width="70" height="7" rx="3.5" class="sv-track-fill" />
-              <text x="14" y="248" class="sv-mini">378 ignored</text>
-              <text x="14" y="266" class="sv-mini sv-mini--on">278 to check</text>
-
-              <!-- clip grid -->
-              <g class="sv-grid">
-                <g class="sv-card sv-card--sel">
-                  <rect x="168" y="52" width="158" height="96" rx="9" />
-                  <rect x="168" y="52" width="158" height="62" rx="9" class="sv-thumb" />
-                  <rect x="178" y="122" width="76" height="7" rx="3.5" class="sv-label" />
-                  <rect x="178" y="135" width="48" height="6" rx="3" class="sv-ghost" />
-                  <rect x="300" y="62" width="16" height="6" rx="3" class="sv-amber-fill" />
-                </g>
-                <g class="sv-card">
-                  <rect x="342" y="52" width="158" height="96" rx="9" />
-                  <rect x="342" y="52" width="158" height="62" rx="9" class="sv-thumb" />
-                  <rect x="352" y="122" width="66" height="7" rx="3.5" class="sv-ghost" />
-                  <rect x="352" y="135" width="40" height="6" rx="3" class="sv-ghost" />
-                </g>
-                <g class="sv-card">
-                  <rect x="168" y="164" width="158" height="96" rx="9" />
-                  <rect x="168" y="164" width="158" height="62" rx="9" class="sv-thumb" />
-                  <rect x="178" y="234" width="58" height="7" rx="3.5" class="sv-ghost" />
-                </g>
-                <g class="sv-card">
-                  <rect x="342" y="164" width="158" height="96" rx="9" />
-                  <rect x="342" y="164" width="158" height="62" rx="9" class="sv-thumb" />
-                  <rect x="352" y="234" width="70" height="7" rx="3.5" class="sv-ghost" />
-                </g>
-              </g>
-
-              <!-- timeline: where Mimir thinks something happened -->
-              <rect x="168" y="286" width="332" height="62" rx="9" class="sv-panel" />
-              <line x1="184" y1="322" x2="484" y2="322" class="sv-timeline" />
-              <circle cx="236" cy="322" r="3" class="sv-slate" />
-              <circle cx="300" cy="322" r="3" class="sv-slate" />
-              <g class="sv-marker">
-                <line x1="358" y1="308" x2="358" y2="336" />
-                <circle cx="358" cy="322" r="5.5" />
-              </g>
-              <circle cx="422" cy="322" r="3" class="sv-slate" />
-              <rect x="184" y="298" width="52" height="6" rx="3" class="sv-ghost" />
-            </svg>
+          <div class="hero__figures" data-reveal style="--delay: 360ms">
+            <div class="figure">
+              <div class="figure__num" data-count-to="656">0</div>
+              <div class="figure__label">events in a week</div>
+            </div>
+            <div class="figure figure__sep" aria-hidden="true"></div>
+            <div class="figure">
+              <div class="figure__num figure__num--muted" data-count-to="378">0</div>
+              <div class="figure__label">ruled out for you</div>
+            </div>
+            <div class="figure figure__sep" aria-hidden="true"></div>
+            <div class="figure">
+              <div class="figure__num figure__num--accent" data-count-to="278">0</div>
+              <div class="figure__label">left to check</div>
+            </div>
           </div>
+          <p class="hero__figures-note" data-reveal style="--delay: 420ms">
+            Measured on one real week of Sentry footage.
+          </p>
+
         </div>
 
         <div class="scroll-hint" aria-hidden="true">
           <span></span>
-        </div>
-      </section>
-
-      <!-- ================= THE PROBLEM ================= -->
-      <section class="section section--tight" id="problem">
-        <div class="wrap">
-          <div class="counter" data-reveal>
-            <div class="counter__col">
-              <div class="counter__num" data-count-to="656">0</div>
-              <div class="counter__label">events in a week of Sentry footage</div>
-            </div>
-            <div class="counter__arrow" aria-hidden="true">
-              <svg viewBox="0 0 48 16" fill="none" stroke="currentColor" stroke-width="1.25">
-                <path d="M0 8h44" />
-                <path d="M38 2l6 6-6 6" />
-              </svg>
-            </div>
-            <div class="counter__col counter__col--accent">
-              <div class="counter__num" data-count-to="378">0</div>
-              <div class="counter__label">ruled out for you</div>
-            </div>
-          </div>
-          <p class="counter__caption" data-reveal style="--delay: 120ms">
-            From a real 656-event dump: 378 dismissed as nothing, 278 put in front of a human. That
-            second number is too high and shrinking it is the current work — see
-            <a href="#honest">where it stands</a> before you decide this is for you.
-          </p>
         </div>
       </section>
 
@@ -310,52 +214,6 @@
       </section>
 
       <!-- ================= HONEST ================= -->
-      <section class="section" id="honest">
-        <div class="wrap wrap--narrow">
-          <p class="kicker" data-reveal>Where it stands</p>
-          <h2 class="h2" data-reveal style="--delay: 60ms">It over-flags. Here are the numbers.</h2>
-
-          <p class="body" data-reveal style="--delay: 120ms">
-            Of the beta feedback so far, <strong>18 of 19 clips Mimir called Important were rated
-            lower</strong> by the person who actually watched them. That is not a measured error
-            rate — people write in when something is wrong, not when it is right — but the direction
-            is not in doubt.
-          </p>
-
-          <div class="note" data-reveal style="--delay: 180ms">
-            <p>
-              Two rules were tightened in August 2026 after reading that feedback back. Replayed
-              against it, the change removes <strong>17 of the 18</strong> Important calls a human
-              rejected, and keeps the one they agreed with.
-            </p>
-            <p>
-              But those clips dropped to Review rather than disappearing, and Review is where your
-              evening actually goes. On a real 656-event dump Mimir now rules out 378 and asks you
-              to look at <strong>278</strong>. Better than watching all 656. Nowhere near good
-              enough.
-            </p>
-            <p class="note__foot">
-              Almost all of those 278 are flagged because something was near the car and something
-              moved — which, for a parked car, is most of the time. Separating that from actual
-              contact is the problem being worked on, and it needs a properly labelled set of
-              footage to measure against rather than more guessing.
-            </p>
-          </div>
-
-          <p class="body" data-reveal style="--delay: 240ms">
-            Telling Mimir when it is wrong is the single most useful thing a tester can do. The
-            detector cannot improve without examples, and a clip it misjudged is worth more than a
-            hundred it got right.
-          </p>
-
-          <ul class="limits" data-reveal style="--delay: 300ms">
-            <li>It cannot prove contact happened. Two shapes overlapping is not evidence of touching.</li>
-            <li>It does not identify people or read number plates. Deliberately, permanently.</li>
-            <li>It never deletes or moves anything on its own.</li>
-          </ul>
-        </div>
-      </section>
-
       <!-- ================= PRIVACY ================= -->
       <section class="section section--alt" id="privacy">
         <div class="wrap wrap--narrow">
@@ -394,62 +252,6 @@
       </section>
 
       <!-- ================= BEFORE YOU DOWNLOAD ================= -->
-      <section class="section" id="requirements">
-        <div class="wrap wrap--narrow">
-          <p class="kicker" data-reveal>Before you download</p>
-          <h2 class="h2" data-reveal style="--delay: 60ms">What it needs, and what it will do to you.</h2>
-
-          <dl class="specs" data-reveal style="--delay: 120ms">
-            <div>
-              <dt>Operating system</dt>
-              <dd>Windows 10 or 11, 64-bit. No macOS or Linux build.</dd>
-            </div>
-            <div>
-              <dt>Graphics</dt>
-              <dd>
-                Optional, but it matters. Object detection is over half the scan time and runs
-                roughly 10× slower on the processor alone. With a DirectX 12 GPU, expect about 25
-                minutes for a full dump; without one, budget hours. Mimir tells you which you have
-                before you start.
-              </dd>
-            </div>
-            <div>
-              <dt>Disk</dt>
-              <dd>About 325 MB installed, plus room for the footage you copy over.</dd>
-            </div>
-            <div>
-              <dt>Internet</dt>
-              <dd>
-                Only if Windows is missing the WebView2 runtime at install time, and if you choose to
-                send feedback. Scanning and review are fully offline.
-              </dd>
-            </div>
-            <div>
-              <dt>Prerequisites</dt>
-              <dd>None. No Python, no runtimes to install, no account to create.</dd>
-            </div>
-          </dl>
-
-          <div class="warning" data-reveal style="--delay: 180ms">
-            <h3>Windows will warn you on first run</h3>
-            <p>
-              The installer is not code-signed yet, so SmartScreen shows a blue
-              <em>“Windows protected your PC”</em> box. Click <strong>More info</strong>, then
-              <strong>Run anyway</strong>.
-            </p>
-            <p>
-              That warning is accurate and worth understanding rather than clicking past. Windows
-              checks whether an installer was signed by a verified publisher. Mimir is not signed,
-              because a certificate costs several hundred dollars a year and this is free. So Windows
-              correctly reports that it does not know who made this — not that the file is dangerous.
-              If that is not good enough, the
-              <a href="https://github.com/QIKenway/Mimir#building-from-source">source builds</a>
-              are right there.
-            </p>
-          </div>
-        </div>
-      </section>
-
       <!-- ================= CTA ================= -->
       <section class="cta" id="get">
         <div class="wrap wrap--narrow">
@@ -464,6 +266,83 @@
             </a>
             <a class="button button--ghost" href="https://github.com/QIKenway/Mimir">Read the docs</a>
           </div>
+
+          <!--
+            Requirements and caveats folded away rather than deleted.
+            A wall of specifications and a paragraph about a Windows security
+            warning is a poor thing to put between someone and a download, but
+            it has to be one click away and it has to be honest -- a tester who
+            hits SmartScreen with no warning simply stops, and one who finds out
+            later that it over-flags stops trusting everything else here.
+
+            <details> rather than a modal: works without JavaScript, is
+            keyboard-accessible for free, and browser find-in-page can still
+            reach the contents in most engines.
+          -->
+          <details class="disclosure" data-reveal style="--delay: 220ms">
+            <summary>
+              <span>Requirements and things worth knowing first</span>
+              <svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 5.5L7 9.5L11 5.5" />
+              </svg>
+            </summary>
+
+            <div class="disclosure__body">
+              <dl class="specs">
+                <div>
+                  <dt>Operating system</dt>
+                  <dd>Windows 10 or 11, 64-bit. No macOS or Linux build.</dd>
+                </div>
+                <div>
+                  <dt>Prerequisites</dt>
+                  <dd>None. No Python, no runtimes, no account.</dd>
+                </div>
+                <div>
+                  <dt>Graphics</dt>
+                  <dd>
+                    Optional, but it matters. With a DirectX 12 GPU expect about 25 minutes for a full
+                    dump; on the processor alone, hours. Mimir tells you which you have before you
+                    start.
+                  </dd>
+                </div>
+                <div>
+                  <dt>Disk</dt>
+                  <dd>About 325 MB installed, plus room for the footage you copy over.</dd>
+                </div>
+                <div>
+                  <dt>Internet</dt>
+                  <dd>
+                    Only to fetch Microsoft’s WebView2 at install time if your PC lacks it, and if you
+                    choose to send feedback. Scanning and review are fully offline.
+                  </dd>
+                </div>
+              </dl>
+
+              <div class="disclosure__note">
+                <h3>Windows will warn you on first run</h3>
+                <p>
+                  The installer is not code-signed yet, so SmartScreen shows a blue
+                  <em>“Windows protected your PC”</em> box. Click <strong>More info</strong>, then
+                  <strong>Run anyway</strong>. Windows is reporting that it does not know who made
+                  this — not that the file is dangerous. If that is not good enough, the
+                  <a href="https://github.com/QIKenway/Mimir#building-from-source">source builds</a>
+                  are right there.
+                </p>
+              </div>
+
+              <div class="disclosure__note">
+                <h3>It is early beta, and it over-flags</h3>
+                <p>
+                  Treat <em>Important</em> as “look at this”, not “something happened”. Mimir rules
+                  out well over half of a week’s events and puts the rest in front of you, which
+                  beats watching all of them but is not the ten-out-of-seven-hundred it is aiming
+                  for. The
+                  <a href="https://github.com/QIKenway/Mimir/blob/main/desktop/release_assets/KNOWN_ISSUES.md">known issues</a>
+                  page has the real numbers and what is being done about them.
+                </p>
+              </div>
+            </div>
+          </details>
         </div>
       </section>
     </main>
