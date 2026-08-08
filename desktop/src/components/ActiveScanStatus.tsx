@@ -21,6 +21,11 @@ export const scanStages = [
   { label: 'Reading clips', keys: ['initializing', 'reading_clips', 'preparing_clips', 'discovering_clips'] },
   { label: 'Reading event metadata', keys: ['reading_event_metadata', 'event_metadata'] },
   { label: 'Grouping camera angles', keys: ['grouping_camera_angles', 'camera_grouping'] },
+  // Only reported when the scan is importing. It interleaves with detection
+  // rather than preceding it -- each group is copied, then scanned, then
+  // cleared -- so the two stages alternate for the whole run and the bar
+  // moves through both.
+  { label: 'Copying to this PC', keys: ['copying_footage'] },
   { label: 'Detecting activity', keys: ['detecting_activity', 'scanning_video', 'scanning', 'yolo'] },
   { label: 'Reviewing suspicious moments', keys: ['reviewing_suspicious_moments', 'ai_review', 'reviewing_event', 'ai_enrichment'] },
   { label: 'Building incident timeline', keys: ['building_incident_timeline', 'building_timeline', 'finalizing_event'] },

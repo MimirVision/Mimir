@@ -7,6 +7,11 @@ describe('ActiveScanStatus progress mapping', () => {
       'reading_clips',
       'reading_event_metadata',
       'grouping_camera_angles',
+      // Only emitted when the scan is importing footage, but it still owns a
+      // row, so it has to sit here or every stage after it maps one row early.
+      // It interleaves with detection rather than finishing before it -- each
+      // event group is copied, then scanned, then cleared.
+      'copying_footage',
       'detecting_activity',
       'reviewing_suspicious_moments',
       'building_incident_timeline',

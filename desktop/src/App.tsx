@@ -223,6 +223,12 @@ export default function App() {
   const [isCancellingScan, setIsCancellingScan] = useState(false)
   const [aiEnrichmentRefreshToken, setAiEnrichmentRefreshToken] = useState(0)
   const [detectedTeslaCamDrive, setDetectedTeslaCamDrive] = useState<TeslaCamDriveEvent | null>(null)
+  // Copying in is the default: scanning off a USB stick is slow, and on some
+  // machines the sustained read has taken Windows down mid-scan. Clearing the
+  // drive afterwards is not the default -- that one is destructive and has to
+  // be chosen.
+  const [importFootage, setImportFootage] = useState(true)
+  const [clearSourceAfterImport, setClearSourceAfterImport] = useState(false)
   const activeProgressSessionId = useRef('')
   const scanCancellationRequested = useRef(false)
 
@@ -602,6 +608,10 @@ export default function App() {
         visionModel: useEnhancedAi ? effectiveVisionModel : selectedVisionModel,
         aiReviewBudget: useEnhancedAi ? AI_REVIEW_BUDGET_BY_MODE[scanMode] : undefined,
         aiTimeoutSec: useEnhancedAi ? experimentalAiTimeoutSec : undefined,
+        // Rust resolves the library path -- the frontend only says whether to
+        // import, and whether the drive may be cleared afterwards.
+        importFootage,
+        clearSource: importFootage ? clearSourceAfterImport : false,
       })
       const diagnostics = diagnosticsFromScanResult(result)
       setScanDiagnostics(diagnostics)
@@ -882,10 +892,10 @@ export default function App() {
       <div className="relative h-screen overflow-y-auto">
         <ImportPanel
           selectedFolder={selectedFolder}
-          // Repoints the scan at the imported copy. selectFolder also re-counts
-          // the clips, so the panel's "N clips found" reflects what will
-          // actually be scanned rather than what was on the stick.
-          onFolderImported={selectFolder}
+          importFootage={importFootage}
+          onImportFootageChange={setImportFootage}
+          clearSourceAfterImport={clearSourceAfterImport}
+          onClearSourceAfterImportChange={setClearSourceAfterImport}
           isDraggingFolder={isDraggingFolder}
           onChooseFolder={chooseFolder}
           detectedDrive={scanState === 'running' ? null : detectedTeslaCamDrive}

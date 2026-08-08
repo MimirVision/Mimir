@@ -1,12 +1,8 @@
-import { useEffect, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { useState } from 'react'
 import mimirLockup from '../assets/mimir-lockup.png'
 import { MIMIR_VERSION, USE_MIMIR_CORE_V2 } from '../config'
-import { describeError, type DescribedError } from '../lib/errorMessages'
 import { ActiveScanStatus } from './ActiveScanStatus'
 import type { ScanOutput } from './ActiveScanStatus'
-import { ErrorNotice } from './ErrorNotice'
 import { ModelUpdatePanel } from './ModelUpdatePanel'
 import { OutboxPanel } from './OutboxPanel'
 import type {
@@ -73,142 +69,77 @@ interface ImportPanelProps {
   onReturnToLatestSession: () => void
   sessionHistory: SessionHistoryEntry[]
   onOpenSession: (sessionPath: string) => void
-  /** Repoints the scan at the imported copy once footage has been brought in. */
-  onFolderImported: (destination: string) => void | Promise<void>
-}
-
-interface ImportFootageReport {
-  ok: boolean
-  destination: string
-  files_found: number
-  bytes_found: number
-  files_copied: number
-  source_folders_removed: number
-  message: string
+  /** Copy each event group to the library as the scan reaches it. */
+  importFootage: boolean
+  onImportFootageChange: (value: boolean) => void
+  /** With importFootage: clear each group off the drive once it is scanned. */
+  clearSourceAfterImport: boolean
+  onClearSourceAfterImportChange: (value: boolean) => void
 }
 
 /**
- * Bring the footage onto this PC before scanning it.
+ * Whether the scan copies the footage in as it goes.
  *
- * Two reasons, and the second is the serious one. Scanning reads tens of
- * gigabytes, and a Tesla USB stick sustains around 38 MB/s, so everything waits
- * on it. Worse, sustained reading at that volume has taken Windows down with
- * DRIVER_POWER_STATE_FAILURE bugchecks partway through a scan.
+ * This replaced a separate "Copy footage to this PC" button that ran its own
+ * job before the scan. Two progress bars for what a user thinks of as one
+ * action was the wrong shape: now the scan copies each event group, reads it
+ * off local disk, and optionally clears it from the drive, all under one bar.
  *
- * "Clear the drive afterwards" is off by default and stays a deliberate choice.
- * Nothing is removed from the stick until its copy has been read back and
- * matched byte for byte -- measured at 5% on top of the copy, about a minute
- * on a 49 GB import, which is not a reason to skip it.
+ * Copying in is on by default because scanning straight off a USB stick is
+ * slow and, on some machines, has taken Windows down mid-scan. Clearing the
+ * drive is off by default because it is the only destructive part.
  */
-function ImportFootagePanel({
-  selectedFolder,
+function ScanImportOptions({
+  importFootage,
+  onImportFootageChange,
+  clearSource,
+  onClearSourceChange,
   disabled,
-  onImported,
 }: {
-  selectedFolder: string
+  importFootage: boolean
+  onImportFootageChange: (value: boolean) => void
+  clearSource: boolean
+  onClearSourceChange: (value: boolean) => void
   disabled: boolean
-  onImported: (destination: string) => void | Promise<void>
 }) {
-  const [clearSource, setClearSource] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [progress, setProgress] = useState<{ percent: number; file: string } | null>(null)
-  const [result, setResult] = useState<ImportFootageReport | null>(null)
-  const [error, setError] = useState<DescribedError | null>(null)
-
-  useEffect(() => {
-    if (!busy) return
-    const unlisten = listen<{ line: string }>('mimir-import-progress', event => {
-      const raw = event.payload.line.replace(/^MIMIR_IMPORT\s*/, '')
-      try {
-        const payload = JSON.parse(raw) as { percent?: number; file?: string }
-        setProgress({ percent: payload.percent ?? 0, file: payload.file ?? '' })
-      } catch {
-        // A malformed progress line is not worth failing an import over.
-      }
-    })
-    return () => {
-      void unlisten.then(off => off())
-    }
-  }, [busy])
-
-  const run = async () => {
-    setBusy(true)
-    setError(null)
-    setResult(null)
-    setProgress({ percent: 0, file: '' })
-    try {
-      const report = await invoke<ImportFootageReport>('import_footage', {
-        source: selectedFolder,
-        clearSource,
-        dryRun: false,
-      })
-      setResult(report)
-      if (report.ok && report.destination) {
-        await onImported(report.destination)
-      }
-    } catch (cause) {
-      setError(describeError(cause, 'The footage could not be imported.'))
-    } finally {
-      setBusy(false)
-      setProgress(null)
-    }
-  }
-
   return (
     <div className="mt-5 border-t border-white/[0.07] pt-5">
-      <div className="text-[15px] font-semibold text-[var(--mimir-text)]">Copy to this PC first</div>
+      <div className="text-[15px] font-semibold text-[var(--mimir-text)]">Footage handling</div>
       <p className="mt-1 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
-        Scanning straight off a USB stick is slow, and on some machines heavy reading has crashed
-        Windows partway through. Copying first is faster overall and avoids that entirely.
+        Reading video straight off a USB stick is the slowest part of a scan, and on some machines
+        the sustained load has crashed Windows partway through.
       </p>
 
       <label className="mt-3 flex cursor-pointer items-start gap-2.5">
         <input
           type="checkbox"
-          checked={clearSource}
-          onChange={event => setClearSource(event.target.checked)}
-          disabled={disabled || busy}
+          checked={importFootage}
+          onChange={event => onImportFootageChange(event.target.checked)}
+          disabled={disabled}
           className="mt-0.5 h-3.5 w-3.5 accent-[var(--mimir-accent)]"
         />
         <span className="text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
-          <span className="font-semibold text-[var(--mimir-text)]">Clear the drive afterwards.</span>{' '}
-          Each file is copied, read back and checked byte for byte before anything is removed. Any
-          file that does not match is left where it is.
+          <span className="font-semibold text-[var(--mimir-text)]">Copy to this PC while scanning.</span>{' '}
+          Each incident is copied and checked before Mimir reads it, so the scan runs off your own
+          drive. Recommended.
         </span>
       </label>
 
-      <div className="mt-3.5 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => void run()}
-          disabled={disabled || busy || !selectedFolder}
-          className="h-10 rounded-lg border border-white/[0.12] bg-white/[0.05] px-4 text-[13px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.085] disabled:cursor-not-allowed disabled:opacity-55"
-        >
-          {busy ? 'Copying...' : clearSource ? 'Move footage to this PC' : 'Copy footage to this PC'}
-        </button>
-        {progress && (
-          <span className="text-[12.5px] text-[var(--mimir-text-muted)]">
-            {progress.percent.toFixed(0)}%{progress.file ? ` -- ${progress.file}` : ''}
-          </span>
-        )}
-      </div>
-
-      {progress && (
-        <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
-          <div
-            className="h-full rounded-full bg-[var(--mimir-accent)] transition-[width] duration-300"
-            style={{ width: `${Math.min(100, Math.max(0, progress.percent))}%` }}
+      {importFootage && (
+        <label className="mt-2.5 flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
+          <input
+            type="checkbox"
+            checked={clearSource}
+            onChange={event => onClearSourceChange(event.target.checked)}
+            disabled={disabled}
+            className="mt-0.5 h-3.5 w-3.5 accent-[var(--mimir-status-amber)]"
           />
-        </div>
-      )}
-
-      <ErrorNotice
-        error={error}
-        info={result && result.ok ? `${result.message} Mimir will scan the copy.` : ''}
-        className="mt-3"
-      />
-      {result && !result.ok && (
-        <p className="mt-2 text-[12.5px] leading-5 text-[var(--mimir-status-red)]">{result.message}</p>
+          <span className="text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
+            <span className="font-semibold text-[var(--mimir-text)]">Clear the drive as it goes.</span>{' '}
+            Each incident is removed from the stick only after its copy has been checked byte for
+            byte and scanned. Anything that does not match is left where it is.
+          </span>
+        </label>
       )}
     </div>
   )
@@ -857,7 +788,10 @@ export function ImportPanel({
   onReturnToLatestSession,
   sessionHistory,
   onOpenSession,
-  onFolderImported,
+  importFootage,
+  onImportFootageChange,
+  clearSourceAfterImport,
+  onClearSourceAfterImportChange,
 }: ImportPanelProps) {
   const hasSelectedFolder = selectedFolder.length > 0
   const isAnalyzing = scanState === 'running'
@@ -1055,10 +989,12 @@ export function ImportPanel({
                     </div>
                   </div>
 
-                  <ImportFootagePanel
-                    selectedFolder={selectedFolder}
+                  <ScanImportOptions
+                    importFootage={importFootage}
+                    onImportFootageChange={onImportFootageChange}
+                    clearSource={clearSourceAfterImport}
+                    onClearSourceChange={onClearSourceAfterImportChange}
                     disabled={isWorking}
-                    onImported={onFolderImported}
                   />
 
                   <div className="mt-5 border-t border-white/[0.07] pt-5">

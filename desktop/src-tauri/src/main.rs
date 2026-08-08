@@ -853,6 +853,41 @@ fn list_session_history_sync(
     Ok(entries)
 }
 
+/// Copy each event group onto local disk as the scan reaches it.
+///
+/// Streamed rather than a separate pass: the user presses Scan once, and the
+/// drive gets idle time between groups instead of one long unbroken read --
+/// which is what was provoking DRIVER_POWER_STATE_FAILURE bugchecks.
+///
+/// `clear_source` only ever takes effect after a group has been copied,
+/// verified byte for byte, and scanned.
+/// Where imported footage lands: <home>/Videos/Mimir Library/Footage.
+///
+/// Mirrors LIBRARY_ROOT in mimir_core_v2_actions.py so the scan writes where
+/// the storage actions later look.
+fn mimir_library_footage_dir() -> PathBuf {
+    let home = std::env::var("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
+    home.join("Videos").join("Mimir Library").join("Footage")
+}
+
+#[derive(Clone, Default)]
+struct ImportSettings {
+    destination: Option<PathBuf>,
+    clear_source: bool,
+}
+
+fn append_import_args(command: &mut Command, import: &ImportSettings) {
+    let Some(destination) = import.destination.as_ref() else {
+        return;
+    };
+    command.arg("--import-to").arg(destination);
+    if import.clear_source {
+        command.arg("--clear-source");
+    }
+}
+
 fn append_backend_scan_args(
     command: &mut Command,
     runtime: &BackendRuntime,
@@ -863,6 +898,7 @@ fn append_backend_scan_args(
     vision_model: &str,
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
+    import: &ImportSettings,
 ) {
     let backend_scan_mode = if scan_mode == "quality" {
         "thorough"
@@ -877,6 +913,7 @@ fn append_backend_scan_args(
             .arg("--mode")
             .arg(backend_scan_mode);
         append_output_dir_arg(command, runtime, output_dir);
+        append_import_args(command, import);
 
         append_experimental_ai_scan_args(
             command,
@@ -893,6 +930,7 @@ fn append_backend_scan_args(
             .arg("--mode")
             .arg(backend_scan_mode);
         append_output_dir_arg(command, runtime, output_dir);
+        append_import_args(command, import);
 
         append_experimental_ai_scan_args(
             command,
@@ -909,6 +947,7 @@ fn append_backend_scan_args(
             .arg("--mode")
             .arg(backend_scan_mode);
         append_output_dir_arg(command, runtime, output_dir);
+        append_import_args(command, import);
 
         append_experimental_ai_scan_args(
             command,
@@ -1902,6 +1941,11 @@ fn run_scan_sync(
     vision_model: Option<String>,
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
+    // The frontend asks for an import; it does not decide where the library
+    // is. That path is the same one the storage actions use, and having two
+    // places compute it is how they drift apart.
+    import_footage: Option<bool>,
+    clear_source: Option<bool>,
     active_scan_pid: Arc<Mutex<Option<u32>>>,
 ) -> Result<ScanResult, ScanFailure> {
     let source_folder = PathBuf::from(selected_folder);
@@ -1939,6 +1983,33 @@ fn run_scan_sync(
         .allow_directory(&output_dir, true)
         .map_err(|error| ScanFailure::new(error.to_string()))?;
 
+    // Refuse to import into the folder being scanned: the copy would land
+    // inside the tree the scanner is still walking.
+    let import = if import_footage.unwrap_or(false) {
+        {
+            let destination = mimir_library_footage_dir();
+            if destination.starts_with(&source_canonical) {
+                return Err(ScanFailure::new(
+                    "The library folder is inside the footage folder. Choose a different location.",
+                ));
+            }
+            fs::create_dir_all(&destination)
+                .map_err(|error| ScanFailure::new(format!(
+                    "Could not create the library folder. {}",
+                    error
+                )))?;
+            app.asset_protocol_scope()
+                .allow_directory(&destination, true)
+                .map_err(|error| ScanFailure::new(error.to_string()))?;
+            ImportSettings {
+                destination: Some(destination),
+                clear_source: clear_source.unwrap_or(false),
+            }
+        }
+    } else {
+        ImportSettings::default()
+    };
+
     let mut command = backend_command(&runtime);
     command.env(MODEL_OVERRIDE_DIR_ENV, model_override_dir(&app));
     append_backend_scan_args(
@@ -1951,6 +2022,7 @@ fn run_scan_sync(
         &vision_model,
         ai_review_budget,
         ai_timeout_sec,
+        &import,
     );
     let backend_command = command_preview(&command);
 
@@ -2125,6 +2197,8 @@ async fn run_local_scan(
     vision_model: Option<String>,
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
+    import_footage: Option<bool>,
+    clear_source: Option<bool>,
     active_scan: tauri::State<'_, ActiveScanProcess>,
 ) -> Result<ScanResult, ScanFailure> {
     let active_scan_pid = active_scan.pid.clone();
@@ -2138,6 +2212,8 @@ async fn run_local_scan(
             vision_model,
             ai_review_budget,
             ai_timeout_sec,
+            import_footage,
+            clear_source,
             active_scan_pid,
         )
     })
