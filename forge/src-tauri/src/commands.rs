@@ -12,12 +12,56 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
-const BACKEND_ROOT: &str = r"C:\MimirDev\backend";
-const BACKEND_PYTHON: &str = r"C:\MimirDev\backend\.venv\Scripts\python.exe";
-const BACKEND_SCRIPT: &str = r"C:\MimirDev\backend\mimir_training_ground.py";
 const KEYRING_SERVICE: &str = "MimirForge";
 const SETTINGS_FILE: &str = "settings.json";
 const FEEDBACK_REVIEWS_FILE: &str = "feedback_reviews.json";
+
+/// Where the backend lives, worked out rather than hardcoded.
+///
+/// These were three absolute `C:\MimirDev\backend\...` constants. That is fine
+/// until the repository moves, and then it is a binary that confidently
+/// reports a path which has not existed for days -- which is exactly what
+/// happened: a Forge built before the monorepo consolidation kept asking for
+/// `C:\Mimir_Backend\.venv`, and the error told the user to go set up a venv
+/// in a directory that was gone.
+///
+/// Resolved from the executable by walking up to the repository root, with
+/// MIMIR_BACKEND_ROOT as an override. Same reasoning as the fix to
+/// desktop/scripts/build-sidecar.ps1, which had the identical bug.
+fn backend_root() -> PathBuf {
+    if let Ok(configured) = std::env::var("MIMIR_BACKEND_ROOT") {
+        let path = PathBuf::from(configured.trim());
+        if path.is_dir() {
+            return path;
+        }
+    }
+
+    // In `tauri dev` the binary sits in forge/src-tauri/target/debug; a release
+    // build of this developer-only tool is run from the same tree. Walk up
+    // until a directory containing `backend/` appears.
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cursor = exe.parent();
+        while let Some(directory) = cursor {
+            let candidate = directory.join("backend");
+            if candidate.join("mimir_training_ground.py").is_file() {
+                return candidate;
+            }
+            cursor = directory.parent();
+        }
+    }
+
+    // Last resort, so the error message names something meaningful instead of
+    // an empty path.
+    PathBuf::from(r"C:\MimirDev\backend")
+}
+
+fn backend_python() -> PathBuf {
+    backend_root().join(".venv").join("Scripts").join("python.exe")
+}
+
+fn backend_script() -> PathBuf {
+    backend_root().join("mimir_training_ground.py")
+}
 
 #[derive(Serialize)]
 pub struct ForgeError {
@@ -534,17 +578,32 @@ struct BackendOutput {
 }
 
 fn run_backend(args: &[&str], extra_env: &[(&str, String)]) -> Result<BackendOutput, ForgeError> {
-    if !std::path::Path::new(BACKEND_PYTHON).exists() {
-        return Err(ForgeError::new(format!(
-            "Python venv not found at {BACKEND_PYTHON}. Set it up in {BACKEND_ROOT} first."
-        )));
+    let root = backend_root();
+    let python = backend_python();
+
+    if !python.exists() {
+        // Says which of the two things is actually wrong. "Set up a venv" is
+        // unhelpful advice when the real problem is that the whole backend
+        // directory moved.
+        return Err(ForgeError::new(if root.is_dir() {
+            format!(
+                "Python venv not found at {}. Create it in {} first.",
+                python.display(),
+                root.display()
+            )
+        } else {
+            format!(
+                "Backend not found at {}. Set MIMIR_BACKEND_ROOT, or run Forge from inside the repository.",
+                root.display()
+            )
+        }));
     }
 
-    let mut command = Command::new(BACKEND_PYTHON);
+    let mut command = Command::new(&python);
     command
-        .arg(BACKEND_SCRIPT)
+        .arg(backend_script())
         .args(args)
-        .current_dir(BACKEND_ROOT)
+        .current_dir(&root)
         .creation_flags(CREATE_NO_WINDOW);
     for (key, value) in extra_env {
         command.env(key, value);

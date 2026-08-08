@@ -438,15 +438,21 @@ function FilesDrawer({
 
 function SelectionToolbar({
   count,
+  visibleCount,
+  allVisibleSelected,
   busy,
   onSetStatus,
   onMoveToLibrary,
   onMoveToTrash,
   onContribute,
   contributeNeedsSetup,
+  onSelectAllVisible,
   onClear,
 }: {
   count: number
+  /** How many incidents the current filter and search actually show. */
+  visibleCount: number
+  allVisibleSelected: boolean
   busy: boolean
   onSetStatus: (status: SeverityGroup) => void
   onMoveToLibrary: () => void
@@ -454,11 +460,26 @@ function SelectionToolbar({
   onContribute: () => void
   /** No consent details on file yet, so the first one goes through the viewer. */
   contributeNeedsSetup: boolean
+  onSelectAllVisible: () => void
   onClear: () => void
 }) {
   return (
     <div className="sticky top-0 z-20 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-[rgba(23,24,24,0.94)] px-4 py-3 shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur">
-      <div className="text-[13px] font-medium text-[var(--mimir-text)]">{count} selected</div>
+      <div className="flex items-center gap-3">
+        <span className="text-[13px] font-medium text-[var(--mimir-text)]">{count} selected</span>
+        {/* Acts on what is on screen, not the whole session. Selecting 656
+            incidents because someone filtered to Review and clicked "all"
+            would be the opposite of what they asked for, and the first thing
+            they do next is a bulk action. The label says which. */}
+        <button
+          type="button"
+          disabled={busy || visibleCount === 0}
+          onClick={onSelectAllVisible}
+          className="h-8 rounded-md border border-white/[0.09] bg-white/[0.03] px-2.5 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {allVisibleSelected ? 'Deselect all' : `Select all ${visibleCount}`}
+        </button>
+      </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={busy || count === 0} onClick={() => onSetStatus('IMPORTANT')} className="h-9 rounded-md bg-white/[0.04] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50">Mark Important</button>
         <button type="button" disabled={busy || count === 0} onClick={() => onSetStatus('REVIEW')} className="h-9 rounded-md bg-white/[0.04] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50">Mark Review</button>
@@ -881,6 +902,31 @@ export function IncidentLibraryView({
       cancelSelectionMode()
     }
   }, [page, selectionMode])
+
+  // Scoped to what is on screen. Selecting the whole session because someone
+  // narrowed to Review and pressed "all" would be the opposite of what they
+  // asked for, and the next thing they press is a bulk action.
+  const visibleSelectableIds = useMemo(
+    () => visibleIncidents.map(incidentActionId).filter(Boolean),
+    [visibleIncidents],
+  )
+
+  const allVisibleSelected =
+    visibleSelectableIds.length > 0 && visibleSelectableIds.every(id => selectedIds.has(id))
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(current => {
+      const next = new Set(current)
+      if (allVisibleSelected) {
+        // Only clears what is on screen, so a selection made under a different
+        // filter survives.
+        for (const id of visibleSelectableIds) next.delete(id)
+      } else {
+        for (const id of visibleSelectableIds) next.add(id)
+      }
+      return next
+    })
+  }
 
   const toggleIncidentSelected = (incident: MimirIncident) => {
     const id = incidentActionId(incident)
@@ -1396,12 +1442,15 @@ export function IncidentLibraryView({
         {selectionMode && (
           <SelectionToolbar
             count={selectedIds.size}
+            visibleCount={visibleIncidents.length}
+            allVisibleSelected={allVisibleSelected}
             busy={bulkBusy}
             onSetStatus={status => void runBulkAction(selectedIncidents, 'set_status', status)}
             onMoveToLibrary={() => void runBulkAction(selectedIncidents, 'move_to_library')}
             onMoveToTrash={() => void runBulkAction(selectedIncidents, 'delete')}
             onContribute={() => void contributeSelected()}
             contributeNeedsSetup={!hasSavedContributorIdentity}
+            onSelectAllVisible={toggleSelectAllVisible}
             onClear={() => setSelectedIds(new Set())}
           />
         )}

@@ -79,7 +79,11 @@ finally {
 Write-Step "Running strict free-beta release gate"
 $BackendRoot = $env:MIMIR_BACKEND_ROOT
 if ([string]::IsNullOrWhiteSpace($BackendRoot)) {
-  $BackendRoot = Join-Path (Split-Path -Parent $Root) "Mimir_Backend"
+  # The backend is a sibling directory in the monorepo. This still said
+  # "Mimir_Backend", the pre-consolidation name, so the strict release gate
+  # could only ever have failed with "runtime environment not found" -- the
+  # same stale-path bug that build-sidecar.ps1 and Forge both carried.
+  $BackendRoot = Join-Path (Split-Path -Parent $Root) "backend"
 }
 $BackendRoot = [System.IO.Path]::GetFullPath($BackendRoot)
 $ReleaseCheck = Join-Path $BackendRoot "mimir_core_v2_release_check.py"

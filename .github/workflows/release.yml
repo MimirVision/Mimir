@@ -185,28 +185,29 @@ jobs:
       # signature is over those exact bytes, and pinning the update to a
       # specific build is the point. MimirSetup.exe is for humans clicking a
       # download link, and it moves when a new release is published.
+      #
+      # Built by scripts/build_update_manifest.py rather than inline here.
+      # That script already existed and did exactly this; writing it a second
+      # time in PowerShell left two implementations of the same contract, and
+      # the older one is stricter -- it rejects a non-HTTPS base URL and fails
+      # if either the bundle or its signature is missing, neither of which the
+      # inline version checked.
       - name: Write the update manifest
+        id: manifest
         shell: pwsh
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
           $tag = if ('${{ github.event.inputs.tag }}') { '${{ github.event.inputs.tag }}' } else { '${{ github.ref_name }}' }
-          $exe = Split-Path -Leaf '${{ steps.installer.outputs.path }}'
-          $manifest = [ordered]@{
-            version   = $version
-            notes     = "See the release notes for what changed."
-            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            platforms = [ordered]@{
-              "windows-x86_64" = [ordered]@{
-                signature = (Get-Content -LiteralPath '${{ steps.installer.outputs.signature }}' -Raw).Trim()
-                url       = "https://github.com/${{ github.repository }}/releases/download/$tag/$exe"
-              }
-            }
-          }
           $path = Join-Path (Split-Path -Parent '${{ steps.installer.outputs.path }}') "latest.json"
-          $manifest | ConvertTo-Json -Depth 5 | Out-File -FilePath $path -Encoding utf8 -NoNewline
+          python scripts/build_update_manifest.py `
+            --version $version `
+            --base-url "https://github.com/${{ github.repository }}/releases/download/$tag" `
+            --bundle '${{ steps.installer.outputs.path }}' `
+            --signature '${{ steps.installer.outputs.signature }}' `
+            --output $path
+          if ($LASTEXITCODE -ne 0) { throw "Could not build the update manifest." }
           "manifest=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Get-Content $path
-        id: manifest
 
       # Proves the packaged sidecar runs, rather than only that it compiled.
       # A sidecar that builds but cannot start has shipped from here before.
