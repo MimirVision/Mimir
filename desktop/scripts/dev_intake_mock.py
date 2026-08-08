@@ -1,4 +1,4 @@
-﻿"""A local stand-in for the real Cloudflare Worker intake endpoint.
+"""A local stand-in for the real Cloudflare Worker intake endpoint.
 
 Implements the exact contract the real Worker will expose, so the Rust
 Outbox/upload logic can be built and tested end-to-end before a Cloudflare

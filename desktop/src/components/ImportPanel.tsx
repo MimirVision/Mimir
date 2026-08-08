@@ -87,13 +87,6 @@ interface ImportFootageReport {
   message: string
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
-  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${bytes} bytes`
-}
-
 /**
  * Bring the footage onto this PC before scanning it.
  *
