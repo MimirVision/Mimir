@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mimir design system — reference</title>
+    <link rel="stylesheet" href="./tokens.css" />
+    <style>
+      /* This page is built only from the tokens it documents. If something
+         here looks wrong, the token is wrong -- there is nowhere else for the
+         mistake to hide. */
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        background: var(--mimir-bg);
+        color: var(--mimir-text);
+        font-family: var(--mimir-font);
+        font-size: var(--mimir-text-sm);
+        line-height: var(--mimir-leading-normal);
+        -webkit-font-smoothing: antialiased;
+        padding: var(--mimir-space-10) var(--mimir-space-6) var(--mimir-space-20);
+      }
+
+      .wrap { max-width: 940px; margin: 0 auto; }
+
+      h1 {
+        font-size: var(--mimir-text-2xl);
+        line-height: var(--mimir-leading-tight);
+        letter-spacing: var(--mimir-tracking-display);
+        font-weight: var(--mimir-weight-semibold);
+      }
+      .sub { color: var(--mimir-text-muted); margin-top: var(--mimir-space-3); max-width: 62ch; }
+
+      h2 {
+        font-size: var(--mimir-text-2xs);
+        text-transform: uppercase;
+        letter-spacing: var(--mimir-tracking-caps);
+        font-weight: var(--mimir-weight-semibold);
+        color: var(--mimir-accent);
+        margin: var(--mimir-space-14) 0 var(--mimir-space-4);
+      }
+      .note {
+        color: var(--mimir-text-subtle);
+        font-size: var(--mimir-text-xs);
+        margin-bottom: var(--mimir-space-4);
+        max-width: 70ch;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+        gap: var(--mimir-space-3);
+      }
+
+      .swatch {
+        border: 1px solid var(--mimir-border);
+        border-radius: var(--mimir-radius-lg);
+        overflow: hidden;
+        background: var(--mimir-surface);
+      }
+      .swatch__chip { height: 62px; }
+      .swatch__meta { padding: var(--mimir-space-3); }
+      .swatch__name {
+        font-family: var(--mimir-font-mono);
+        font-size: var(--mimir-text-2xs);
+        color: var(--mimir-text);
+      }
+      .swatch__use {
+        font-size: var(--mimir-text-2xs);
+        color: var(--mimir-text-subtle);
+        margin-top: var(--mimir-space-1);
+      }
+
+      /* Tints need something behind them to be legible as translucent. */
+      .tint-bed {
+        background:
+          linear-gradient(120deg, var(--mimir-accent-soft), transparent 70%),
+          var(--mimir-bg-depth);
+      }
+
+      table { width: 100%; border-collapse: collapse; }
+      td, th {
+        text-align: left;
+        padding: var(--mimir-space-3) var(--mimir-space-2);
+        border-bottom: 1px solid var(--mimir-border);
+        vertical-align: baseline;
+      }
+      th {
+        font-size: var(--mimir-text-2xs);
+        text-transform: uppercase;
+        letter-spacing: var(--mimir-tracking-caps);
+        color: var(--mimir-text-subtle);
+        font-weight: var(--mimir-weight-medium);
+      }
+      code {
+        font-family: var(--mimir-font-mono);
+        font-size: var(--mimir-text-2xs);
+        color: var(--mimir-text-muted);
+        white-space: nowrap;
+      }
+
+      .stack { display: flex; flex-wrap: wrap; gap: var(--mimir-space-3); align-items: flex-end; }
+
+      .box {
+        background: var(--mimir-surface-soft);
+        border: 1px solid var(--mimir-border);
+        display: grid;
+        place-items: center;
+        font-family: var(--mimir-font-mono);
+        font-size: var(--mimir-text-2xs);
+        color: var(--mimir-text-subtle);
+        width: 92px;
+        height: 68px;
+      }
+
+      .btn {
+        border: 1px solid var(--mimir-border-strong);
+        background: var(--mimir-tint-2);
+        color: var(--mimir-text);
+        font: inherit;
+        font-weight: var(--mimir-weight-medium);
+        padding: var(--mimir-space-3) var(--mimir-space-5);
+        border-radius: var(--mimir-radius-full);
+        cursor: pointer;
+        transition: background var(--mimir-duration-fast) var(--mimir-ease),
+                    transform var(--mimir-duration) var(--mimir-ease);
+      }
+      .btn:hover { background: var(--mimir-tint-3); transform: translateY(-2px); }
+      .btn--primary {
+        background: var(--mimir-accent);
+        color: #0a0d0b;
+        border-color: transparent;
+        box-shadow: var(--mimir-shadow-accent);
+      }
+
+      .sev {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--mimir-space-2);
+        padding: var(--mimir-space-2) var(--mimir-space-3);
+        border-radius: var(--mimir-radius);
+        background: var(--mimir-tint-2);
+        font-size: var(--mimir-text-xs);
+        font-weight: var(--mimir-weight-medium);
+      }
+      .dot { width: 8px; height: 8px; border-radius: var(--mimir-radius-full); }
+
+      .card {
+        background: var(--mimir-surface);
+        border: 1px solid var(--mimir-border);
+        border-radius: var(--mimir-radius-xl);
+        padding: var(--mimir-space-5);
+        box-shadow: var(--mimir-shadow);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Mimir design system</h1>
+      <p class="sub">
+        Every token in <code>tokens.css</code>, rendered. This page is built only from those
+        tokens — if something here looks wrong, the token is wrong, because there is nowhere
+        else for the mistake to hide.
+      </p>
+
+      <!-- ============================================ severity -->
+      <h2>Severity — vocabulary, not palette</h2>
+      <p class="note">
+        A user learns these in the first thirty seconds. Never use one decoratively: a red
+        border meaning “important detail” teaches them that red is sometimes just red, and the
+        red that matters then carries less weight.
+      </p>
+      <div class="stack" style="margin-bottom: var(--mimir-space-4)">
+        <span class="sev"><span class="dot" style="background: var(--mimir-severity-important)"></span>Important</span>
+        <span class="sev"><span class="dot" style="background: var(--mimir-severity-review)"></span>Review</span>
+        <span class="sev"><span class="dot" style="background: var(--mimir-severity-ignore)"></span>Ignore</span>
+        <span class="sev"><span class="dot" style="background: var(--mimir-severity-ok)"></span>Verified</span>
+      </div>
+      <table>
+        <tr><th>Token</th><th>Means</th></tr>
+        <tr><td><code>--mimir-severity-important</code></td><td>something may have happened to your car</td></tr>
+        <tr><td><code>--mimir-severity-review</code></td><td>probably nothing, worth a glance</td></tr>
+        <tr><td><code>--mimir-severity-ignore</code></td><td>ruled out</td></tr>
+        <tr><td><code>--mimir-severity-ok</code></td><td>verified, succeeded, confirmed</td></tr>
+      </table>
+
+      <!-- ============================================ surfaces -->
+      <h2>Surfaces</h2>
+      <p class="note">Stack in order. Each step is a level of nesting, not a mood.</p>
+      <div class="grid">
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-bg)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-bg</div><div class="swatch__use">the page</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-bg-depth)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-bg-depth</div><div class="swatch__use">recessed, alternating</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-surface)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-surface</div><div class="swatch__use">cards, panels</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-surface-soft)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-surface-soft</div><div class="swatch__use">raised within</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-surface-muted)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-surface-muted</div><div class="swatch__use">inputs, chips</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-accent)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-accent</div><div class="swatch__use">one action, one selection</div></div></div>
+      </div>
+
+      <!-- ============================================ tints -->
+      <h2>Tints</h2>
+      <p class="note">
+        Translucent, for surfaces sitting on something unknown. Shown over a gradient, because
+        that is the case they exist for. The app currently spells these inline 395 times.
+      </p>
+      <div class="grid tint-bed" style="padding: var(--mimir-space-3); border-radius: var(--mimir-radius-lg)">
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-tint-1)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-tint-1</div><div class="swatch__use">barely there</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-tint-2)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-tint-2</div><div class="swatch__use">resting</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-tint-3)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-tint-3</div><div class="swatch__use">hover</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-tint-4)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-tint-4</div><div class="swatch__use">active</div></div></div>
+        <div class="swatch"><div class="swatch__chip" style="background: var(--mimir-tint-5)"></div>
+          <div class="swatch__meta"><div class="swatch__name">--mimir-tint-5</div><div class="swatch__use">sparingly</div></div></div>
+      </div>
+
+      <!-- ============================================ type -->
+      <h2>Type scale</h2>
+      <p class="note">
+        Derived from what the app uses, not invented — which is why it is dense at the small
+        end. 12px appears 175 times and 13px 84 times. If a size is not here, the answer is one
+        that is.
+      </p>
+      <table>
+        <tr><th>Token</th><th>Size</th><th>Sample</th></tr>
+        <tr><td><code>--mimir-text-2xs</code></td><td>11</td><td style="font-size: var(--mimir-text-2xs)">Right repeater · 14:56:20</td></tr>
+        <tr><td><code>--mimir-text-xs</code></td><td>12</td><td style="font-size: var(--mimir-text-xs)">Possible contact evidence</td></tr>
+        <tr><td><code>--mimir-text-sm</code></td><td>13</td><td style="font-size: var(--mimir-text-sm)">Possible contact evidence</td></tr>
+        <tr><td><code>--mimir-text-base</code></td><td>14</td><td style="font-size: var(--mimir-text-base)">Possible contact evidence</td></tr>
+        <tr><td><code>--mimir-text-md</code></td><td>15</td><td style="font-size: var(--mimir-text-md)">Possible contact evidence</td></tr>
+        <tr><td><code>--mimir-text-lg</code></td><td>17</td><td style="font-size: var(--mimir-text-lg)">Review this incident</td></tr>
+        <tr><td><code>--mimir-text-xl</code></td><td>22</td><td style="font-size: var(--mimir-text-xl); letter-spacing: var(--mimir-tracking-tight)">Review this incident</td></tr>
+        <tr><td><code>--mimir-text-2xl</code></td><td>30</td><td style="font-size: var(--mimir-text-2xl); line-height: var(--mimir-leading-tight); letter-spacing: var(--mimir-tracking-display)">Incidents</td></tr>
+        <tr><td><code>--mimir-text-3xl</code></td><td>46</td><td style="font-size: var(--mimir-text-3xl); line-height: var(--mimir-leading-tight); letter-spacing: var(--mimir-tracking-display)">Mimir</td></tr>
+        <tr><td><code>--mimir-text-4xl</code></td><td>64</td><td style="font-size: var(--mimir-text-4xl); line-height: 1; letter-spacing: var(--mimir-tracking-display); font-variant-numeric: tabular-nums">656</td></tr>
+      </table>
+
+      <!-- ============================================ ink -->
+      <h2>Ink</h2>
+      <p class="note">Three weights, and three is the limit. A fourth grey is always someone failing to decide between two that already exist.</p>
+      <table>
+        <tr><th>Token</th><th>Contrast on --mimir-bg</th><th>Sample</th></tr>
+        <tr><td><code>--mimir-text</code></td><td>18.0 : 1</td><td style="color: var(--mimir-text)">What you are reading</td></tr>
+        <tr><td><code>--mimir-text-muted</code></td><td>7.4 : 1</td><td style="color: var(--mimir-text-muted)">Supporting copy and descriptions</td></tr>
+        <tr><td><code>--mimir-text-subtle</code></td><td>5.2 : 1</td><td style="color: var(--mimir-text-subtle)">Labels, metadata, timestamps</td></tr>
+        <tr><td><code>--mimir-accent</code></td><td>9.5 : 1</td><td style="color: var(--mimir-accent)">Links and the current selection</td></tr>
+      </table>
+
+      <!-- ============================================ radius + space -->
+      <h2>Radius</h2>
+      <div class="stack">
+        <div class="box" style="border-radius: var(--mimir-radius-sm)">sm 4</div>
+        <div class="box" style="border-radius: var(--mimir-radius)">base 8</div>
+        <div class="box" style="border-radius: var(--mimir-radius-lg)">lg 12</div>
+        <div class="box" style="border-radius: var(--mimir-radius-xl)">xl 16</div>
+        <div class="box" style="border-radius: var(--mimir-radius-full)">full</div>
+      </div>
+
+      <h2>Space</h2>
+      <p class="note">4px base, so nothing ever lands half a pixel off a neighbour.</p>
+      <div class="stack" style="align-items: flex-end">
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-1); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-2); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-3); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-4); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-6); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-8); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-10); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-14); height: 28px"></div>
+        <div style="background: var(--mimir-accent); width: var(--mimir-space-20); height: 28px"></div>
+      </div>
+
+      <!-- ============================================ components -->
+      <h2>In combination</h2>
+      <p class="note">Nothing below sets a raw value. Every colour, size, radius, shadow and transition is a token.</p>
+      <div class="card" style="max-width: 460px">
+        <div style="font-size: var(--mimir-text-lg); font-weight: var(--mimir-weight-semibold); letter-spacing: var(--mimir-tracking-tight)">
+          2026-05-14 14:56:20
+        </div>
+        <div style="color: var(--mimir-text-muted); font-size: var(--mimir-text-xs); margin-top: var(--mimir-space-1)">
+          Right repeater · 4 cameras
+        </div>
+        <div style="margin-top: var(--mimir-space-4); display: flex; gap: var(--mimir-space-2)">
+          <span class="sev"><span class="dot" style="background: var(--mimir-severity-review)"></span>Review</span>
+        </div>
+        <p style="color: var(--mimir-text-muted); font-size: var(--mimir-text-sm); margin-top: var(--mimir-space-4)">
+          Possible contact evidence. Person pass-by capped at Review without hard evidence.
+        </p>
+        <div style="margin-top: var(--mimir-space-5); display: flex; gap: var(--mimir-space-2)">
+          <button class="btn btn--primary">Open clip</button>
+          <button class="btn">Move to Trash</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -243,6 +243,10 @@ engine and the ~120 MB object detection model.
 [`ARCHITECTURE.md`](ARCHITECTURE.md) explains the layout: the desktop app, the
 detection backend, the intake Worker, and the contracts that span them.
 
+[`design-system/`](design-system/) holds the design tokens the app and this
+site both use, and the rules for choosing between them. Open
+`design-system/reference.html` in a browser to see every token rendered.
+
 ---
 
 ## Licence and trademarks
