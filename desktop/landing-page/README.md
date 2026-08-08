@@ -6,13 +6,22 @@ This folder is a static free public beta download page for Mimir. It has no buil
 
 ```text
 landing-page/
-  index.html          markup and copy
+  index.html          markup and copy, including the hero illustration
   styles.css          all styling; tokens copied from the app's src/index.css
   main.js             scroll reveals, counters, sticky header
-  incident-hero.jpg   the author's own dashcam frame
   mimir-mark.png      app icon, same file as src/assets/mimir-mark.png
   README.md
 ```
+
+The hero is an inline SVG of the review screen, not a photograph and not a
+screenshot. A dashcam still of a dark garage said nothing about what the
+software does, and a real screenshot goes stale the first time the UI moves.
+Inline SVG stays sharp at any size, themes from the same custom properties as
+the rest of the page, and costs no extra request.
+
+**The figures drawn in it are the real ones** -- 656 events, 378 ignored, 278
+to check. Inventing prettier numbers for the artwork would quietly undo the
+section further down the page that exists to correct exactly that mistake.
 
 Nothing is fetched from a third party -- no web fonts, no CDN, no analytics.
 That is deliberate rather than minimalism for its own sake: the page's central

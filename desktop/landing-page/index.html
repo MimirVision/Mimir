@@ -40,33 +40,131 @@
     <main id="main">
       <!-- ================= HERO ================= -->
       <section class="hero" id="top">
-        <div class="hero__media" aria-hidden="true">
-          <img src="./incident-hero.jpg" alt="" />
-          <div class="hero__scrim"></div>
-          <div class="hero__grain"></div>
-        </div>
+        <div class="hero__glow" aria-hidden="true"></div>
 
         <div class="hero__inner">
-          <p class="eyebrow" data-reveal>Free public beta · Windows</p>
-          <h1 class="hero__title" data-reveal style="--delay: 60ms">
-            Find the moments<br />worth watching.
-          </h1>
-          <p class="lede" data-reveal style="--delay: 140ms">
-            Sentry Mode records everything. Mimir watches it back for you, on your own computer, and
-            tells you which few clips actually matter.
-          </p>
+          <div class="hero__copy">
+            <p class="eyebrow" data-reveal>Free public beta · Windows</p>
+            <!-- Two short lines. The longer version wrapped to three in the
+                 narrower column this layout gives the copy, and the third line
+                 was a single orphaned word. -->
+            <h1 class="hero__title" data-reveal style="--delay: 60ms">
+              Find the moments<br />worth watching.
+            </h1>
+            <p class="lede" data-reveal style="--delay: 140ms">
+              Sentry Mode records everything and tells you nothing. Mimir watches it back on your own
+              computer, throws out the empty hours, and points you at what is left.
+            </p>
 
-          <div class="actions" data-reveal style="--delay: 220ms">
-            <a class="button button--primary" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">
-              Download for Windows
-              <span class="button__meta">197 MB · Windows 10 / 11</span>
-            </a>
-            <a class="button button--ghost" href="#how">See how it works</a>
+            <div class="actions" data-reveal style="--delay: 220ms">
+              <a class="button button--primary" href="https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe">
+                Download for Windows
+                <span class="button__meta">197 MB · Windows 10 / 11</span>
+              </a>
+              <a class="button button--ghost" href="#how">See how it works</a>
+            </div>
+
+            <p class="hero__foot" data-reveal style="--delay: 300ms">
+              No account. No subscription. Nothing leaves your PC.
+            </p>
           </div>
 
-          <p class="hero__foot" data-reveal style="--delay: 300ms">
-            No account. No subscription. Nothing uploaded.
-          </p>
+          <!--
+            An illustration of the review screen rather than a photograph.
+            A dashcam still of a dark garage says nothing about what the
+            software does, and a real screenshot would be stale the first time
+            the UI moved. Drawn in SVG so it stays sharp at any size, themes
+            from the same variables as the rest of the page, and adds no
+            download weight.
+
+            The numbers are the real ones from a 656-event dump. Putting
+            invented figures in the picture would undo the section further down
+            that exists to correct exactly that.
+          -->
+          <div class="hero__shot" data-reveal style="--delay: 200ms">
+            <svg viewBox="0 0 520 372" role="img" aria-labelledby="shot-title">
+              <title id="shot-title">
+                Mimir's review screen: 656 events sorted into 378 ignored and 278 needing a look.
+              </title>
+
+              <!-- window -->
+              <rect x="0" y="0" width="520" height="372" rx="14" class="sv-window" />
+              <rect x="0" y="0" width="520" height="34" rx="14" class="sv-bar" />
+              <rect x="0" y="24" width="520" height="10" class="sv-bar" />
+              <circle cx="19" cy="17" r="4" class="sv-dot-1" />
+              <circle cx="34" cy="17" r="4" class="sv-dot-2" />
+              <circle cx="49" cy="17" r="4" class="sv-dot-3" />
+              <rect x="70" y="12" width="86" height="9" rx="4.5" class="sv-ghost" />
+
+              <!-- sidebar -->
+              <rect x="0" y="34" width="150" height="338" class="sv-side" />
+              <g class="sv-row">
+                <rect x="14" y="52" width="122" height="30" rx="7" class="sv-chip-on" />
+                <circle cx="27" cy="67" r="3.5" class="sv-red" />
+                <rect x="38" y="63" width="44" height="8" rx="4" class="sv-label" />
+                <rect x="108" y="63" width="14" height="8" rx="4" class="sv-num" />
+              </g>
+              <g>
+                <circle cx="27" cy="101" r="3.5" class="sv-amber" />
+                <rect x="38" y="97" width="38" height="8" rx="4" class="sv-ghost" />
+                <rect x="100" y="97" width="22" height="8" rx="4" class="sv-ghost" />
+              </g>
+              <g>
+                <circle cx="27" cy="131" r="3.5" class="sv-slate" />
+                <rect x="38" y="127" width="34" height="8" rx="4" class="sv-ghost" />
+                <rect x="100" y="127" width="22" height="8" rx="4" class="sv-ghost" />
+              </g>
+
+              <line x1="14" y1="158" x2="136" y2="158" class="sv-rule" />
+              <text x="14" y="186" class="sv-figure">656</text>
+              <rect x="14" y="196" width="60" height="7" rx="3.5" class="sv-ghost" />
+
+              <!-- the split -->
+              <rect x="14" y="220" width="122" height="7" rx="3.5" class="sv-track" />
+              <rect x="14" y="220" width="70" height="7" rx="3.5" class="sv-track-fill" />
+              <text x="14" y="248" class="sv-mini">378 ignored</text>
+              <text x="14" y="266" class="sv-mini sv-mini--on">278 to check</text>
+
+              <!-- clip grid -->
+              <g class="sv-grid">
+                <g class="sv-card sv-card--sel">
+                  <rect x="168" y="52" width="158" height="96" rx="9" />
+                  <rect x="168" y="52" width="158" height="62" rx="9" class="sv-thumb" />
+                  <rect x="178" y="122" width="76" height="7" rx="3.5" class="sv-label" />
+                  <rect x="178" y="135" width="48" height="6" rx="3" class="sv-ghost" />
+                  <rect x="300" y="62" width="16" height="6" rx="3" class="sv-amber-fill" />
+                </g>
+                <g class="sv-card">
+                  <rect x="342" y="52" width="158" height="96" rx="9" />
+                  <rect x="342" y="52" width="158" height="62" rx="9" class="sv-thumb" />
+                  <rect x="352" y="122" width="66" height="7" rx="3.5" class="sv-ghost" />
+                  <rect x="352" y="135" width="40" height="6" rx="3" class="sv-ghost" />
+                </g>
+                <g class="sv-card">
+                  <rect x="168" y="164" width="158" height="96" rx="9" />
+                  <rect x="168" y="164" width="158" height="62" rx="9" class="sv-thumb" />
+                  <rect x="178" y="234" width="58" height="7" rx="3.5" class="sv-ghost" />
+                </g>
+                <g class="sv-card">
+                  <rect x="342" y="164" width="158" height="96" rx="9" />
+                  <rect x="342" y="164" width="158" height="62" rx="9" class="sv-thumb" />
+                  <rect x="352" y="234" width="70" height="7" rx="3.5" class="sv-ghost" />
+                </g>
+              </g>
+
+              <!-- timeline: where Mimir thinks something happened -->
+              <rect x="168" y="286" width="332" height="62" rx="9" class="sv-panel" />
+              <line x1="184" y1="322" x2="484" y2="322" class="sv-timeline" />
+              <circle cx="236" cy="322" r="3" class="sv-slate" />
+              <circle cx="300" cy="322" r="3" class="sv-slate" />
+              <g class="sv-marker">
+                <line x1="358" y1="308" x2="358" y2="336" />
+                <circle cx="358" cy="322" r="5.5" />
+              </g>
+              <circle cx="422" cy="322" r="3" class="sv-slate" />
+              <rect x="184" y="298" width="52" height="6" rx="3" class="sv-ghost" />
+            </svg>
+          </div>
         </div>
 
         <div class="scroll-hint" aria-hidden="true">
@@ -386,7 +484,8 @@
         </div>
         <p class="footer__legal">
           Not affiliated with, endorsed by, or sponsored by Tesla, Inc. Tesla, Sentry Mode, and
-          TeslaCam are trademarks of Tesla, Inc. Screenshot is the author’s own dashcam footage.
+          TeslaCam are trademarks of Tesla, Inc. The interface above is an illustration, not a
+          screenshot; the figures in it are from a real 656-event scan.
         </p>
       </div>
     </footer>
