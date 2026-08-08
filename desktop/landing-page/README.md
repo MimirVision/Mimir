@@ -13,15 +13,35 @@ landing-page/
   README.md
 ```
 
-The hero is an inline SVG of the review screen, not a photograph and not a
-screenshot. A dashcam still of a dark garage said nothing about what the
-software does, and a real screenshot goes stale the first time the UI moves.
-Inline SVG stays sharp at any size, themes from the same custom properties as
-the rest of the page, and costs no extra request.
+There is no hero image, by the third attempt rather than by principle. A
+dashcam still of a dark garage showed nothing about the software. An SVG of the
+review screen was a drawing of an interface pretending to be a screenshot, and
+looked it.
 
-**The figures drawn in it are the real ones** -- 656 events, 378 ignored, 278
-to check. Inventing prettier numbers for the artwork would quietly undo the
-section further down the page that exists to correct exactly that mistake.
+What replaced both is the measurement: **656 events, 378 ruled out, 278 left to
+check**, set at display size under the headline. It is the actual claim rather
+than a picture of one, it cannot go stale the way a mock of a moving UI does,
+and there is nothing to download.
+
+Those numbers are real, from one scan of one real week of footage. Rounding
+them into something prettier would make the most prominent thing on the page
+the least true.
+
+### Requirements are behind a disclosure
+
+System requirements, the SmartScreen explanation, and the note that it
+over-flags sit inside a `<details>` under the final download button rather than
+in sections of their own.
+
+The reasoning is that a wall of specifications and a paragraph about a Windows
+security warning is a poor thing to put between someone and a download -- but
+both have to be one click away and both have to be honest. A tester who meets
+SmartScreen with no warning just stops. One who discovers later that it
+over-flags stops believing anything else here.
+
+`<details>` rather than a modal: it works with JavaScript disabled, it is
+keyboard-accessible for free, and find-in-page can still reach the contents in
+most browsers.
 
 Nothing is fetched from a third party -- no web fonts, no CDN, no analytics.
 That is deliberate rather than minimalism for its own sake: the page's central

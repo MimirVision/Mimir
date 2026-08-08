@@ -252,83 +252,65 @@ code {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: var(--wrap);
+  max-width: 980px;
   margin: 0 auto;
   padding: 0 28px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  align-items: center;
-  gap: clamp(32px, 5vw, 64px);
+  text-align: center;
 }
 
 .hero__copy {
   min-width: 0;
 }
 
-.hero__shot {
+/* ---- the figures, which are the hero image ---- */
+
+.hero__figures {
+  margin: clamp(56px, 8vw, 88px) auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 5vw, 60px);
+  flex-wrap: wrap;
+}
+
+.figure {
   min-width: 0;
 }
-.hero__shot svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 14px;
-  box-shadow:
-    0 2px 0 rgba(244, 241, 233, 0.05) inset,
-    0 40px 90px -30px rgba(0, 0, 0, 0.9);
-}
 
-/* ---- the illustrated review screen ---- */
-.sv-window { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1; }
-.sv-bar { fill: var(--surface-soft); }
-.sv-side { fill: var(--bg-depth); }
-.sv-panel { fill: var(--surface-soft); }
-.sv-thumb { fill: #0d0f0f; }
-
-.sv-dot-1 { fill: rgba(196, 119, 114, 0.5); }
-.sv-dot-2 { fill: rgba(195, 160, 98, 0.45); }
-.sv-dot-3 { fill: rgba(143, 170, 155, 0.45); }
-
-.sv-red { fill: var(--red); }
-.sv-amber { fill: var(--amber); }
-.sv-slate { fill: var(--slate); }
-.sv-amber-fill { fill: rgba(195, 160, 98, 0.55); }
-
-.sv-ghost { fill: rgba(244, 241, 233, 0.13); }
-.sv-label { fill: rgba(244, 241, 233, 0.34); }
-.sv-num { fill: rgba(244, 241, 233, 0.26); }
-.sv-chip-on { fill: rgba(157, 183, 170, 0.1); }
-.sv-rule { stroke: var(--border); stroke-width: 1; }
-
-.sv-figure {
-  fill: var(--text);
-  font-family: var(--font);
-  font-size: 27px;
+.figure__num {
+  font-size: clamp(2.6rem, 6vw, 4.2rem);
+  line-height: 1;
   font-weight: 600;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
-.sv-mini {
-  fill: var(--text-subtle);
-  font-family: var(--font);
-  font-size: 11px;
+.figure__num--muted {
+  color: var(--text-subtle);
 }
-.sv-mini--on { fill: var(--accent); }
-
-.sv-track { fill: rgba(244, 241, 233, 0.09); }
-.sv-track-fill { fill: rgba(157, 183, 170, 0.5); }
-
-.sv-card rect:first-child {
-  fill: var(--surface-soft);
-  stroke: var(--border);
-  stroke-width: 1;
-}
-.sv-card--sel rect:first-child {
-  stroke: rgba(157, 183, 170, 0.42);
+.figure__num--accent {
+  color: var(--accent);
 }
 
-.sv-timeline { stroke: rgba(244, 241, 233, 0.16); stroke-width: 1.5; stroke-linecap: round; }
-.sv-marker line { stroke: var(--amber); stroke-width: 1.5; }
-.sv-marker circle { fill: var(--amber); }
+.figure__label {
+  margin-top: 12px;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--text-subtle);
+}
+
+.figure__sep {
+  width: 1px;
+  height: 46px;
+  background: var(--border-strong);
+  flex: none;
+}
+
+.hero__figures-note {
+  margin: 26px 0 0;
+  font-size: 12.5px;
+  color: var(--text-subtle);
+}
 
 .eyebrow {
   margin: 0 0 22px;
@@ -341,18 +323,16 @@ code {
 
 .hero__title {
   margin: 0;
-  /* Smaller ceiling than the full-bleed version: the headline now shares the
-     row with the artwork instead of sitting over a photograph. */
-  font-size: clamp(2.4rem, 4.2vw, 3.7rem);
-  line-height: 1.06;
-  letter-spacing: -0.032em;
+  font-size: clamp(2.7rem, 6.4vw, 4.7rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
   font-weight: 600;
 }
 
 .lede {
-  margin: 26px 0 0;
-  max-width: 46ch;
-  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  margin: 26px auto 0;
+  max-width: 54ch;
+  font-size: clamp(1.05rem, 1.6vw, 1.28rem);
   line-height: 1.55;
   color: var(--text-muted);
 }
@@ -681,26 +661,100 @@ code {
 /* -------------------------------------------------------------- specs ---- */
 
 .specs {
-  margin: 40px 0 0;
+  margin: 0;
 }
 .specs > div {
   display: grid;
-  grid-template-columns: 190px 1fr;
-  gap: 24px;
-  padding: 20px 0;
-  border-top: 1px solid var(--border);
+  grid-template-columns: 132px 1fr;
+  gap: 18px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
 }
 .specs > div:last-child {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
 }
 .specs dt {
   font-weight: 600;
-  font-size: 0.97rem;
+  font-size: 12.8px;
+  color: var(--text);
 }
 .specs dd {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.97rem;
+  font-size: 12.8px;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------- disclosure ---- */
+
+/* Requirements and caveats, one click from the download button. Quiet enough
+   not to stand between someone and trying it, prominent enough that nobody
+   can say they were not told. */
+.disclosure {
+  margin: 46px auto 0;
+  max-width: 640px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(244, 241, 233, 0.014);
+}
+
+.disclosure summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text-muted);
+  transition: color 0.2s var(--ease);
+}
+.disclosure summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure summary:hover {
+  color: var(--text);
+}
+.disclosure summary svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  transition: transform 0.25s var(--ease);
+}
+.disclosure[open] summary svg {
+  transform: rotate(180deg);
+}
+.disclosure[open] summary {
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.disclosure__body {
+  padding: 6px 20px 20px;
+}
+
+.disclosure__note {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.disclosure__note h3 {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.disclosure__note p {
+  margin: 0;
+  font-size: 12.8px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.disclosure__note a {
+  color: var(--accent);
 }
 
 /* ------------------------------------------------------------ warning ---- */
