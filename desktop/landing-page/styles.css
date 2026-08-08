@@ -9,30 +9,40 @@
  * whole argument is that nothing about you gets sent anywhere.
  */
 
-:root {
-  --bg: #050606;
-  --bg-depth: #0a0b0b;
-  --surface: #111313;
-  --surface-soft: #171919;
-  --surface-muted: #202221;
-  --text: #f4f1e9;
-  --text-muted: #a09c93;
-  --text-subtle: #858078;
-  --border: rgba(244, 241, 233, 0.075);
-  --border-strong: rgba(244, 241, 233, 0.14);
-  --accent: #9db7aa;
-  --accent-soft: rgba(157, 183, 170, 0.13);
-  --red: #c47772;
-  --amber: #c3a062;
-  --slate: #858b8b;
+@import "../../design-system/tokens.css";
 
+:root {
+  /* Short local aliases for the shared tokens. The page reads better as
+     var(--accent) than var(--mimir-accent) when almost every rule uses one,
+     and this is the only place the two vocabularies meet -- change a value in
+     design-system/tokens.css and it lands here automatically. */
+  --bg: var(--mimir-bg);
+  --bg-depth: var(--mimir-bg-depth);
+  --surface: var(--mimir-surface);
+  --surface-soft: var(--mimir-surface-soft);
+  --surface-muted: var(--mimir-surface-muted);
+  --text: var(--mimir-text);
+  --text-muted: var(--mimir-text-muted);
+  --text-subtle: var(--mimir-text-subtle);
+  --border: var(--mimir-border);
+  --border-strong: var(--mimir-border-strong);
+  --accent: var(--mimir-accent);
+  --accent-soft: var(--mimir-accent-soft);
+
+  /* Named for what they mean, not what they look like. These three are the
+     product's severity vocabulary and the buckets below use them to say
+     Important / Review / Ignore. */
+  --red: var(--mimir-severity-important);
+  --amber: var(--mimir-severity-review);
+  --slate: var(--mimir-severity-ignore);
+
+  --ease: var(--mimir-ease);
+  --font: var(--mimir-font);
+  --mono: var(--mimir-font-mono);
+
+  /* Page layout only -- these have no meaning inside the app. */
   --wrap: 1120px;
   --wrap-narrow: 760px;
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, "Noto Sans", sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 *,

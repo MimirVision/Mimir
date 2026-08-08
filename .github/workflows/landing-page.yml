@@ -14,6 +14,7 @@ on:
     branches: [main]
     paths:
       - 'desktop/landing-page/**'
+      - 'design-system/tokens.css'
       - '.github/workflows/landing-page.yml'
   workflow_dispatch:
 
@@ -40,20 +41,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Cheap guard against publishing a page whose assets 404. The download
-      # link deliberately points at a GitHub release and is not checked here;
-      # everything else must exist in the folder being shipped.
-      - name: Check local assets resolve
+      # Staged rather than uploading desktop/landing-page directly, because the
+      # stylesheet imports the shared design tokens from design-system/, which
+      # sits outside the folder. Publishing the folder alone would deploy a
+      # page whose @import 404s -- and a 404 on a stylesheet import is silent:
+      # the page still renders, just with every colour and size missing.
+      - name: Stage the site
         shell: bash
         run: |
-          cd desktop/landing-page
+          mkdir -p _site
+          cp -r desktop/landing-page/. _site/
+          cp design-system/tokens.css _site/tokens.css
+          # The page is served flat, so rewrite the repo-relative import to sit
+          # beside the stylesheet.
+          sed -i 's|\.\./\.\./design-system/tokens\.css|./tokens.css|' _site/styles.css
+          echo "Staged:"; ls -1 _site
+
+      # Cheap guard against publishing a page whose assets 404. The download
+      # link deliberately points at a GitHub release and is not checked here;
+      # everything else must exist in what is about to ship.
+      - name: Check every local reference resolves
+        shell: bash
+        run: |
+          cd _site
           missing=0
-          for ref in $(grep -oE '(href|src)="\./[^"]+"' index.html | sed -E 's/.*"\.\/(.*)"/\1/' | sort -u); do
-            if [ ! -f "$ref" ]; then
-              echo "::error::index.html references ./$ref, which is not in the folder"
+          refs=$(grep -oE '(href|src)="\./[^"]+"' index.html | sed -E 's/.*"\.\/(.*)"/\1/')
+          # CSS @import counts too, and is the one that fails silently.
+          refs="$refs $(grep -oE '@import "\./[^"]+"' styles.css | sed -E 's/.*"\.\/(.*)"/\1/')"
+          for ref in $(echo "$refs" | tr ' ' '\n' | sort -u); do
+            if [ -n "$ref" ] && [ ! -f "$ref" ]; then
+              echo "::error::references ./$ref, which is not in the staged site"
               missing=1
             fi
           done
+          if grep -q '\.\./' styles.css; then
+            echo "::error::styles.css still contains a path that escapes the site root"
+            missing=1
+          fi
           [ "$missing" -eq 0 ] && echo "All local references resolve."
           exit $missing
 
@@ -61,7 +85,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: desktop/landing-page
+          path: _site
 
       - id: deployment
         uses: actions/deploy-pages@v4

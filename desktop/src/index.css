@@ -1,27 +1,18 @@
+/* Tokens come from design-system/tokens.css, which the download page imports
+   too. They used to be duplicated here by hand, which meant the site and the
+   thing you download could drift apart without anyone noticing.
+
+   Imported before Tailwind so the custom properties exist for any layer that
+   references them. Every --mimir-* name the app already uses is preserved
+   there, including the --mimir-status-* ones, which are now aliases of the
+   semantic --mimir-severity-* names. */
+@import "../../design-system/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --mimir-bg: #050606;
-    --mimir-bg-depth: #0a0b0b;
-    --mimir-surface: #111313;
-    --mimir-surface-soft: #171919;
-    --mimir-surface-muted: #202221;
-    --mimir-text: #f4f1e9;
-    --mimir-text-muted: #a09c93;
-    --mimir-text-subtle: #858078;
-    --mimir-border: rgba(244, 241, 233, 0.075);
-    --mimir-border-strong: rgba(244, 241, 233, 0.14);
-    --mimir-accent: #9db7aa;
-    --mimir-accent-soft: rgba(157, 183, 170, 0.13);
-    --mimir-status-red: #c47772;
-    --mimir-status-amber: #c3a062;
-    --mimir-status-green: #8faa9b;
-    --mimir-status-slate: #858b8b;
-  }
-
   * {
     @apply m-0 p-0 box-border;
   }
