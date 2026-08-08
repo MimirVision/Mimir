@@ -39,8 +39,22 @@
 
     <main id="main">
       <!-- ================= HERO ================= -->
+      <!--
+        Ambient layers, not decoration for its own sake. With no hero image the
+        section is a paragraph on a black rectangle, and a page that never
+        moves reads as unfinished.
+
+        Three slow things rather than one fast one: two aurora fields drifting
+        on different periods so they never visibly loop, and a light sweep that
+        crosses once and stops. All of it pauses under prefers-reduced-motion,
+        and all of it is behind the text rather than around it -- motion near
+        something someone is trying to read is an irritation, not polish.
+      -->
       <section class="hero" id="top">
-        <div class="hero__glow" aria-hidden="true"></div>
+        <div class="hero__aurora hero__aurora--a" aria-hidden="true"></div>
+        <div class="hero__aurora hero__aurora--b" aria-hidden="true"></div>
+        <div class="hero__sweep" aria-hidden="true"></div>
+        <div class="hero__grid" aria-hidden="true"></div>
 
         <div class="hero__inner">
           <div class="hero__copy">
@@ -65,36 +79,6 @@
               No account. No subscription. Nothing leaves your PC.
             </p>
           </div>
-
-          <!--
-            The figures are the hero image.
-            A photograph of a dark garage and a drawn app window were both
-            rejected, and both deserved it: one showed nothing about the
-            software, the other was a picture of an interface pretending to be
-            a screenshot. Real measurements at display size are neither, they
-            are the actual claim, and they cannot go stale the way a mock does.
-
-            From one real 656-event scan. Nothing here is illustrative.
-          -->
-          <div class="hero__figures" data-reveal style="--delay: 360ms">
-            <div class="figure">
-              <div class="figure__num" data-count-to="656">0</div>
-              <div class="figure__label">events in a week</div>
-            </div>
-            <div class="figure figure__sep" aria-hidden="true"></div>
-            <div class="figure">
-              <div class="figure__num figure__num--muted" data-count-to="378">0</div>
-              <div class="figure__label">ruled out for you</div>
-            </div>
-            <div class="figure figure__sep" aria-hidden="true"></div>
-            <div class="figure">
-              <div class="figure__num figure__num--accent" data-count-to="278">0</div>
-              <div class="figure__label">left to check</div>
-            </div>
-          </div>
-          <p class="hero__figures-note" data-reveal style="--delay: 420ms">
-            Measured on one real week of Sentry footage.
-          </p>
 
         </div>
 

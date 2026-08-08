@@ -13,19 +13,35 @@ landing-page/
   README.md
 ```
 
-There is no hero image, by the third attempt rather than by principle. A
-dashcam still of a dark garage showed nothing about the software. An SVG of the
-review screen was a drawing of an interface pretending to be a screenshot, and
-looked it.
+There is no hero image, after three attempts at one. A dashcam still of a dark
+garage showed nothing about the software. An SVG of the review screen was a
+drawing of an interface pretending to be a screenshot. A row of large figures
+turned the first thing a visitor saw into a statistic.
 
-What replaced both is the measurement: **656 events, 378 ruled out, 278 left to
-check**, set at display size under the headline. It is the actual claim rather
-than a picture of one, it cannot go stale the way a mock of a moving UI does,
-and there is nothing to download.
+The hero is now type, one action, and atmosphere.
 
-Those numbers are real, from one scan of one real week of footage. Rounding
-them into something prettier would make the most prominent thing on the page
-the least true.
+### The atmosphere is doing real work
+
+With no image, the section is otherwise a paragraph on a black rectangle, and a
+page that never moves reads as unfinished. Four layers, all behind the text
+rather than around it -- motion beside something someone is trying to read is
+an irritation, not polish:
+
+| Layer | What it does |
+|---|---|
+| `hero__aurora--a/b` | Two gradient fields drifting on 34s and 47s. Mismatched on purpose: a single loop becomes obvious within a minute of looking at it. |
+| `hero__sweep` | One light pass on load, suggesting a read straight through a week of footage. It does not repeat — looping it makes a screensaver. |
+| `hero__grid` | A masked 64px grid so the black is not flat. |
+
+Elsewhere the motion is attached to something the reader is already doing:
+section rules draw in on arrival, step numbers brighten in sequence so the four
+steps read in order, and the download button breathes very slightly — pausing
+on hover, so it is never moving under the pointer.
+
+`prefers-reduced-motion` needs more than the blanket duration override, and
+gets it. Zeroing an animation's duration freezes it at its first keyframe,
+which for the sweep is a bright band across the hero; that rule cancels the
+animation and the gradient outright instead.
 
 ### Requirements are behind a disclosure
 
