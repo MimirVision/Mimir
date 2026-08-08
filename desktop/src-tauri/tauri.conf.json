@@ -90,7 +90,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk4NjM5ODNGODA4QjFDODIKUldTQ0hJdUFQNWhqbVBGQ0tuWTVUbXRjYk9ZTkJ3ckpmdlFDT3N3V29jcG9JUGJ3RFliQ3NwN1oK",
       "endpoints": [
-        "https://github.com/QIKenway/Mimir/releases/latest/download/latest.json"
+        "https://github.com/MimirVision/Mimir/releases/latest/download/latest.json"
       ]
     }
   }

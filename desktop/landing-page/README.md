@@ -128,7 +128,7 @@ need to read it from R2's own analytics instead.
 ## Measuring Uptake
 
 ```bash
-python scripts/download_stats.py --repo QIKenway/Mimir
+python scripts/download_stats.py --repo MimirVision/Mimir
 ```
 
 Records the per-asset download count with a timestamp, so the rate is visible

@@ -18,7 +18,7 @@ you deliberately choose to send some.
 
 ## Download
 
-**[⬇ Download Mimir for Windows](https://github.com/QIKenway/Mimir/releases/latest/download/MimirSetup.exe)**
+**[⬇ Download Mimir for Windows](https://github.com/MimirVision/Mimir/releases/latest/download/MimirSetup.exe)**
 
 About 197 MB. Windows 10 or 11, 64-bit.
 
@@ -190,7 +190,7 @@ No macOS or Linux build. No 32-bit or ARM build.
 - **A wrong verdict:** use the feedback button in the app. It carries the
   context needed to actually diagnose it.
 - **A bug, a crash, or anything else:** open an
-  [issue](https://github.com/QIKenway/Mimir/issues), or email
+  [issue](https://github.com/MimirVision/Mimir/issues), or email
   <feedback.mimir@gmail.com>.
 
 Reports that Mimir was wrong are the most useful thing this beta produces.
@@ -214,7 +214,7 @@ the build deliberately refuses to run if training-only packages such as
 PyTorch are installed, so that they cannot end up inside a shipped binary.
 
 ```powershell
-git clone https://github.com/QIKenway/Mimir.git
+git clone https://github.com/MimirVision/Mimir.git
 cd Mimir\backend
 python -m venv .venv-runtime
 .\.venv-runtime\Scripts\python.exe -m pip install -r requirements-core-v2.txt
