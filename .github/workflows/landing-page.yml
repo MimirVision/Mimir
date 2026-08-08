@@ -1,0 +1,67 @@
+name: Landing page
+
+# Publishes desktop/landing-page to GitHub Pages.
+#
+# Pages can only serve from a repository root or /docs, and the page lives in
+# desktop/landing-page next to the app it describes. Moving it to satisfy
+# Pages would separate it from the thing it documents, so it is uploaded as an
+# artifact instead and the folder stays where it belongs.
+#
+# Path-filtered: editing the scanner should not redeploy a website.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/landing-page/**'
+      - '.github/workflows/landing-page.yml'
+  workflow_dispatch:
+
+# Required by actions/deploy-pages. `contents: read` is deliberately not
+# `write` -- this job publishes a site, it has no business pushing commits.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never two deploys at once, but let a queued one finish rather than
+# cancelling it: a half-published site is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cheap guard against publishing a page whose assets 404. The download
+      # link deliberately points at a GitHub release and is not checked here;
+      # everything else must exist in the folder being shipped.
+      - name: Check local assets resolve
+        shell: bash
+        run: |
+          cd desktop/landing-page
+          missing=0
+          for ref in $(grep -oE '(href|src)="\./[^"]+"' index.html | sed -E 's/.*"\.\/(.*)"/\1/' | sort -u); do
+            if [ ! -f "$ref" ]; then
+              echo "::error::index.html references ./$ref, which is not in the folder"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] && echo "All local references resolve."
+          exit $missing
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: desktop/landing-page
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
