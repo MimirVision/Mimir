@@ -1,0 +1,191 @@
+/* Mimir design tokens — the single source of truth.
+ *
+ * Imported by the desktop app (desktop/src/index.css) and the download page
+ * (desktop/landing-page/styles.css). Before this file the palette existed in
+ * both places as two hand-copied lists, which is a divergence waiting to
+ * happen: the site and the thing you download should not drift apart.
+ *
+ * Two rules keep this file useful:
+ *
+ *   1. Nothing here is decorative. Every token has a job, and the severity
+ *      colours have a job that is part of the product's vocabulary rather
+ *      than its styling. See "severity" below.
+ *   2. Existing --mimir-* names are kept exactly. There are 442 references to
+ *      them across the app; renaming for tidiness would be a large diff whose
+ *      only effect is risk.
+ */
+
+:root {
+  /* ---------------------------------------------------------------- base --
+   * Backgrounds, darkest to lightest. Mimir is a dark-only product: it is
+   * used to look at night-time dashcam footage, and a light theme would make
+   * the footage the darkest thing on screen.
+   */
+  --mimir-bg: #050606;              /* page */
+  --mimir-bg-depth: #0a0b0b;        /* recessed areas, alternating sections */
+  --mimir-surface: #111313;         /* cards, panels */
+  --mimir-surface-soft: #171919;    /* raised within a surface */
+  --mimir-surface-muted: #202221;   /* inputs, chips, pressed states */
+
+  /* ----------------------------------------------------------------- ink --
+   * Three weights, and three is the limit. A fourth grey is always someone
+   * failing to decide between two that already exist.
+   */
+  --mimir-text: #f4f1e9;            /* primary. Warm off-white, not #fff --
+                                       pure white on near-black vibrates */
+  --mimir-text-muted: #a09c93;      /* body copy, descriptions */
+  --mimir-text-subtle: #858078;     /* labels, meta, timestamps */
+
+  /* ---------------------------------------------------------------- line -- */
+  --mimir-border: rgba(244, 241, 233, 0.075);        /* default separation */
+  --mimir-border-strong: rgba(244, 241, 233, 0.14);  /* interactive, focus-adjacent */
+
+  /* -------------------------------------------------------------- accent --
+   * One accent, used for exactly two things: the primary action, and marking
+   * the current selection. Using it anywhere else is what makes an interface
+   * look busy.
+   */
+  --mimir-accent: #9db7aa;
+  --mimir-accent-soft: rgba(157, 183, 170, 0.13);
+
+  /* ------------------------------------------------------------ severity --
+   * NOT a palette. These four are the product's vocabulary, and a user learns
+   * them in the first thirty seconds:
+   *
+   *   important  something may have happened to your car
+   *   review     probably nothing, worth a glance
+   *   ignore     ruled out
+   *   ok         confirmation, success, verified
+   *
+   * Never use a severity colour decoratively. A red border that means
+   * "important detail" teaches the user that red is sometimes just red, and
+   * from then on the one that matters carries less weight.
+   */
+  --mimir-severity-important: #c47772;
+  --mimir-severity-review: #c3a062;
+  --mimir-severity-ignore: #858b8b;
+  --mimir-severity-ok: #8faa9b;
+
+  /* The names the app already uses, kept as aliases. Prefer the semantic
+     names above in new code -- --mimir-status-red says what it looks like,
+     --mimir-severity-important says what it means. */
+  --mimir-status-red: var(--mimir-severity-important);
+  --mimir-status-amber: var(--mimir-severity-review);
+  --mimir-status-slate: var(--mimir-severity-ignore);
+  --mimir-status-green: var(--mimir-severity-ok);
+
+  /* --------------------------------------------------------------- tints --
+   * Translucent white, for surfaces that must sit on an unknown background.
+   * The app currently spells these inline 395 times as bg-white/[0.035] and
+   * friends, at a dozen slightly different alphas that nobody chose on
+   * purpose. Five steps is enough for any interface.
+   */
+  --mimir-tint-1: rgba(244, 241, 233, 0.02);   /* barely there */
+  --mimir-tint-2: rgba(244, 241, 233, 0.035);  /* resting surface */
+  --mimir-tint-3: rgba(244, 241, 233, 0.065);  /* hover */
+  --mimir-tint-4: rgba(244, 241, 233, 0.1);    /* active / selected */
+  --mimir-tint-5: rgba(244, 241, 233, 0.16);   /* strong, use sparingly */
+
+  /* ----------------------------------------------------------------- type --
+   * Derived from what the app actually uses, not invented. A count of every
+   * text-[Npx] in the codebase found 402 uses across 29 distinct sizes,
+   * including 12 and 12.5, and 13 and 13.5. Those pairs are not decisions.
+   *
+   * The scale is deliberately dense at the small end, because that is where
+   * this product lives: 12px is used 175 times and 13px 84 times. It is a
+   * dense review tool, not a marketing site.
+   */
+  --mimir-text-2xs: 11px;   /* meta, badge labels, table headers */
+  --mimir-text-xs: 12px;    /* dense UI. The workhorse. */
+  --mimir-text-sm: 13px;    /* default body inside panels */
+  --mimir-text-base: 14px;  /* comfortable body */
+  --mimir-text-md: 15px;    /* lead paragraphs */
+  --mimir-text-lg: 17px;    /* section titles */
+  --mimir-text-xl: 22px;    /* screen titles */
+  --mimir-text-2xl: 30px;   /* page headings */
+  --mimir-text-3xl: 46px;   /* display */
+  --mimir-text-4xl: 64px;   /* figures, hero numerals */
+
+  /* Tighter as it grows. Large type set at body line-height looks loose;
+     small type set tight becomes unreadable. */
+  --mimir-leading-tight: 1.1;
+  --mimir-leading-snug: 1.35;
+  --mimir-leading-normal: 1.55;
+
+  /* Negative tracking on display sizes only. */
+  --mimir-tracking-display: -0.035em;
+  --mimir-tracking-tight: -0.012em;
+  --mimir-tracking-normal: 0;
+  --mimir-tracking-caps: 0.14em;   /* for uppercase eyebrows only */
+
+  --mimir-weight-normal: 400;
+  --mimir-weight-medium: 550;
+  --mimir-weight-semibold: 600;
+
+  /* System stack. No web font: it needs no licence, makes no third-party
+     request, and renders with no layout shift -- which matters for a product
+     whose central claim is that nothing about you is sent anywhere. */
+  --mimir-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --mimir-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* ---------------------------------------------------------------- space --
+   * 4px base. Everything is a multiple, so nothing ever lands half a pixel
+   * off a neighbour.
+   */
+  --mimir-space-1: 4px;
+  --mimir-space-2: 8px;
+  --mimir-space-3: 12px;
+  --mimir-space-4: 16px;
+  --mimir-space-5: 20px;
+  --mimir-space-6: 24px;
+  --mimir-space-8: 32px;
+  --mimir-space-10: 40px;
+  --mimir-space-14: 56px;
+  --mimir-space-20: 80px;
+
+  /* --------------------------------------------------------------- radius -- */
+  --mimir-radius-sm: 4px;    /* tags, tiny chips */
+  --mimir-radius: 8px;       /* buttons, inputs */
+  --mimir-radius-lg: 12px;   /* cards */
+  --mimir-radius-xl: 16px;   /* panels, modals */
+  --mimir-radius-full: 999px;
+
+  /* --------------------------------------------------------------- motion --
+   * One easing curve for almost everything. A page where different elements
+   * decelerate differently feels unfinished even when nobody can say why.
+   */
+  --mimir-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mimir-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --mimir-duration-fast: 150ms;   /* hover, focus, colour */
+  --mimir-duration: 250ms;        /* the default */
+  --mimir-duration-slow: 400ms;   /* size and position changes */
+  --mimir-duration-reveal: 750ms; /* scroll reveals only */
+
+  /* ------------------------------------------------------------ elevation --
+   * Dark interfaces get depth from contrast far more than from shadow. These
+   * are deliberately soft and few.
+   */
+  --mimir-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --mimir-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.7);
+  --mimir-shadow-lg: 0 30px 90px rgba(0, 0, 0, 0.62);
+  --mimir-shadow-accent: 0 10px 34px -14px rgba(157, 183, 170, 0.75);
+}
+
+/* Reduced motion is a token-level concern, not a per-component one.
+ *
+ * Note this zeroes durations rather than removing animations. That is the
+ * right default, but it FREEZES an animation on its first keyframe -- for a
+ * sweeping gradient that is a bright band left sitting on screen. Anything
+ * with a moving background must cancel itself explicitly, not rely on this.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mimir-duration-fast: 0.001ms;
+    --mimir-duration: 0.001ms;
+    --mimir-duration-slow: 0.001ms;
+    --mimir-duration-reveal: 0.001ms;
+  }
+}
