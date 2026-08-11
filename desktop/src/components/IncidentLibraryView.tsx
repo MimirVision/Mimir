@@ -6,6 +6,7 @@ import { CrashSafeBoundary } from './CrashSafeBoundary'
 import { ModalOverlay } from './ModalOverlay'
 import { ErrorNotice } from './ErrorNotice'
 import { describeError, describeFailures, type DescribedError } from '../lib/errorMessages'
+import { computeGridWindow } from '../lib/windowedGrid'
 import { IncidentViewerScreen } from './IncidentViewerScreen'
 import { MIMIR_VERSION } from '../config'
 import { readContributorIdentity, rightsBasisLabel } from '../lib/contributionIdentity'
@@ -903,6 +904,68 @@ export function IncidentLibraryView({
     }
   }, [page, selectionMode])
 
+  // ---- windowed grid ----
+  //
+  // Measured rather than assumed: the card height comes from the first card
+  // the browser lays out, so a change to the card does not silently break the
+  // arithmetic. Until that measurement lands, computeGridWindow returns the
+  // whole list, which is what the old behaviour was anyway.
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const [gridMetrics, setGridMetrics] = useState({ width: 0, rowHeight: 0, offsetTop: 0, viewportHeight: 0 })
+
+  useEffect(() => {
+    const element = gridRef.current
+    if (!element) return
+
+    const measure = () => {
+      const box = element.getBoundingClientRect()
+      const firstCard = element.firstElementChild as HTMLElement | null
+      // Row pitch is the card plus the gap between rows.
+      const cardHeight = firstCard ? firstCard.getBoundingClientRect().height + 16 : 0
+      setGridMetrics(current => {
+        const next = {
+          width: box.width,
+          rowHeight: cardHeight || current.rowHeight,
+          offsetTop: box.top,
+          viewportHeight: window.innerHeight,
+        }
+        // Re-rendering on every scroll frame with identical numbers would
+        // undo the point of this.
+        return current.width === next.width &&
+          current.rowHeight === next.rowHeight &&
+          current.offsetTop === next.offsetTop &&
+          current.viewportHeight === next.viewportHeight
+          ? current
+          : next
+      })
+    }
+
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    window.addEventListener('scroll', measure, { passive: true, capture: true })
+    window.addEventListener('resize', measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', measure, { capture: true } as EventListenerOptions)
+      window.removeEventListener('resize', measure)
+    }
+  }, [visibleIncidents.length, filter])
+
+  const gridWindow = useMemo(
+    () =>
+      computeGridWindow({
+        containerWidth: gridMetrics.width,
+        minColumnWidth: 238,
+        gap: 16,
+        rowHeight: gridMetrics.rowHeight,
+        offsetTop: gridMetrics.offsetTop,
+        viewportHeight: gridMetrics.viewportHeight,
+        itemCount: visibleIncidents.length,
+      }),
+    [gridMetrics, visibleIncidents.length],
+  )
+
   // Scoped to what is on screen. Selecting the whole session because someone
   // narrowed to Review and pressed "all" would be the opposite of what they
   // asked for, and the next thing they press is a bulk action.
@@ -1469,8 +1532,16 @@ export function IncidentLibraryView({
         {visibleIncidents.length === 0 ? (
           <EmptyLibraryState filter={filter} incidentCount={incidentCount} />
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(238px,1fr))] gap-4">
-            {visibleIncidents.map(incident => (
+          // Only the rows on screen are mounted. A real week is 656 cards,
+          // each with a thumbnail, and the grid scrolled poorly long before
+          // that. The padding either side holds the scroll height steady so
+          // the scrollbar does not move under the cursor.
+          <div
+            ref={gridRef}
+            className="grid grid-cols-[repeat(auto-fill,minmax(238px,1fr))] gap-4"
+            style={{ paddingTop: gridWindow.paddingTop, paddingBottom: gridWindow.paddingBottom }}
+          >
+            {visibleIncidents.slice(gridWindow.firstIndex, gridWindow.lastIndex).map(incident => (
               <IncidentCard
                 key={incidentActionId(incident)}
                 incident={incident}
