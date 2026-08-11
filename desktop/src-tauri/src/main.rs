@@ -2836,11 +2836,19 @@ fn save_manual_status_sync(
             "manual_status_override".to_string(),
             Value::Bool(is_override),
         );
-        if is_override {
-            object.insert("user_status".to_string(), Value::String(status.clone()));
-        } else {
-            object.remove("user_status");
-        }
+        // The human's verdict is recorded whether or not it differs.
+        //
+        // This used to delete user_status when someone confirmed what Mimir
+        // already said, keeping only disagreements. That is reasonable for a
+        // field called "override" and it quietly threw away half the training
+        // signal: an evaluation set needs the cases a ruleset got right as
+        // much as the ones it got wrong, or a change that removes false
+        // positives cannot be shown not to have removed the true ones with
+        // them.
+        //
+        // manual_status_override still means "differs from Mimir", so
+        // everything reading it for display is unaffected.
+        object.insert("user_status".to_string(), Value::String(status.clone()));
         object.insert(
             "user_status_updated_at".to_string(),
             Value::String(chrono_like_now()),

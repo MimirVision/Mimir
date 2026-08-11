@@ -1940,27 +1940,43 @@ function ReviewActionsPanel({
       </div>
 
       <div>
+        {/* The shortcut is on the button because these three keys were already
+            bound and completely invisible. Across 80 scans and 4,959
+            incidents on the development machine, not one verdict had ever
+            been set -- which is also why the evaluation set the model card
+            asks for did not exist. Every press here becomes a labelled
+            example, and a label is the only thing that makes the detector
+            measurably better. */}
         <div className="grid grid-cols-3 gap-2">
           {(['IGNORE', 'REVIEW', 'IMPORTANT'] as const).map(status => {
             const actionKey = `set_status_${status}` as IncidentAction
+            const shortcut = status === 'IGNORE' ? 'G' : status === 'REVIEW' ? 'R' : 'I'
+            const isCurrent = currentSeverity === status
             return (
               <button
                 key={status}
                 onClick={() => onSetStatus(status)}
-                disabled={disabled || currentSeverity === status}
+                disabled={disabled || isCurrent}
+                title={`${severityCopy(status)}  (${shortcut})`}
                 className={`h-10 rounded-lg border px-3 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${actionButtonTone(
                   status,
-                  currentSeverity === status,
+                  isCurrent,
                 )}`}
               >
-                <span className="inline-flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5">
                   {busyAction === actionKey && <SmallSpinner />}
                   {severityCopy(status)}
+                  <kbd className="rounded border border-white/12 px-1 text-[10px] font-medium leading-[15px] text-[var(--mimir-text-subtle)]">
+                    {shortcut}
+                  </kbd>
                 </span>
               </button>
             )
           })}
         </div>
+        <p className="mt-2 text-[11.5px] leading-4 text-[var(--mimir-text-subtle)]">
+          Agreeing counts too — confirming what Mimir got right is how it learns the difference.
+        </p>
       </div>
 
       <div className="mt-4 grid gap-2">
