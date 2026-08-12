@@ -2386,11 +2386,21 @@ export function IncidentViewerScreen({
           { heading: 'Cameras in this incident', lines: cameraLines },
         ],
         images,
+        // The footage itself, so the export is something you can hand to an
+        // insurer rather than a description of clips they do not have. Rust
+        // copies each one into the folder and writes its SHA-256 beside it.
+        //
+        // normalizeCameraClips because camera_clips is either an array or a
+        // map depending on how the session was written, and this is the one
+        // place that difference is already handled.
+        clips: normalizeCameraClips(incident)
+          .map(clip => clip.path)
+          .filter((path): path is string => typeof path === 'string' && path.length > 0),
       })
 
       setActionError('')
       setActionDetails('')
-      setActionMessage(`Report saved and opened: ${reportPath}`)
+      setActionMessage(`Evidence packet saved and opened: ${reportPath}`)
     } catch (error) {
       setActionMessage('')
       const described = describeError(error, 'The report could not be saved.')

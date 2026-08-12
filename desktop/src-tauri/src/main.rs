@@ -3647,6 +3647,22 @@ fn build_incident_report_html(
     )
 }
 
+/// Lowercase hex SHA-256, for the evidence packet manifest.
+///
+/// The point of publishing these is that the recipient does not have to trust
+/// the sender: `certutil -hashfile <file> SHA256` on any Windows machine
+/// produces the same string, or the file has changed since export.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect()
+}
+
 #[tauri::command]
 async fn export_incident_report(
     incident_id: String,
@@ -3656,7 +3672,11 @@ async fn export_incident_report(
     generated_at: String,
     sections: Vec<ReportSection>,
     images: Vec<ReportImage>,
+    // Every camera angle for the incident. Optional so an older frontend
+    // still exports a report rather than failing on a missing argument.
+    clips: Option<Vec<String>>,
 ) -> Result<String, ScanFailure> {
+    let clips = clips.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
         let documents_root = default_documents_root()?;
         let reports_dir = documents_root.join("Mimir Reports");
@@ -3682,18 +3702,75 @@ async fn export_incident_report(
 
         let html = build_incident_report_html(&title, &severity_label, &subtitle, &generated_at, &sections, &embedded_images);
 
-        let filename = format!(
-            "{}_{}.html",
+        // A folder, not a loose HTML file.
+        //
+        // The report on its own describes footage the recipient does not have.
+        // Someone sending this to an insurer or the police needs the clips
+        // beside it, and needs to be able to show that what they sent is what
+        // came off the car -- so every file is hashed and the digests are
+        // written next to them. Anyone can re-run sha256 and compare; nothing
+        // here has to be taken on trust.
+        let packet_name = format!(
+            "{}_{}",
             safe_filename(&incident_id),
             safe_filename(&chrono_like_now()),
         );
-        let report_path = reports_dir.join(filename);
+        let packet_dir = reports_dir.join(&packet_name);
+        let clips_dir = packet_dir.join("clips");
+        fs::create_dir_all(&clips_dir)
+            .map_err(|error| ScanFailure::new(format!("Could not create the report folder: {error}")))?;
+
+        let report_path = packet_dir.join("report.html");
         fs::write(&report_path, html)
             .map_err(|error| ScanFailure::new(format!("Could not write the report file: {error}")))?;
 
+        let mut manifest_lines = vec![
+            "# Mimir evidence packet".to_string(),
+            String::new(),
+            format!("incident: {}", incident_id),
+            format!("exported: {}", chrono_like_now()),
+            String::new(),
+            "SHA-256 of every file in this folder, so a recipient can confirm".to_string(),
+            "nothing was altered after export. Verify on Windows with:".to_string(),
+            "  certutil -hashfile <file> SHA256".to_string(),
+            String::new(),
+        ];
+
+        let mut copied = 0usize;
+        for clip in &clips {
+            // Same rule as the images above: only real video files on disk.
+            // A path that resolves to something else must not be copied into
+            // a folder the user is about to send to someone.
+            let Ok(source) = validated_media_path(clip, VIDEO_EXTENSIONS, "video") else {
+                continue;
+            };
+            let Some(name) = source.file_name() else { continue };
+            let destination = clips_dir.join(name);
+            if fs::copy(&source, &destination).is_err() {
+                continue;
+            }
+            if let Ok(bytes) = fs::read(&destination) {
+                manifest_lines.push(format!("clips/{}  {}", name.to_string_lossy(), sha256_hex(&bytes)));
+            }
+            copied += 1;
+        }
+
+        if let Ok(bytes) = fs::read(&report_path) {
+            manifest_lines.push(format!("report.html  {}", sha256_hex(&bytes)));
+        }
+        if copied == 0 {
+            manifest_lines.push(String::new());
+            manifest_lines.push(
+                "No clips were included: the source files could not be found. The report".to_string(),
+            );
+            manifest_lines.push("below still describes what Mimir observed.".to_string());
+        }
+
+        let _ = fs::write(packet_dir.join("MANIFEST.txt"), manifest_lines.join("\n") + "\n");
+
         open_folder_with_explorer(&report_path)?;
 
-        Ok(report_path.to_string_lossy().to_string())
+        Ok(packet_dir.to_string_lossy().to_string())
     })
     .await
     .map_err(|error| ScanFailure::new(format!("Report export task failed: {error}")))?
