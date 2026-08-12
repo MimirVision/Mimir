@@ -227,8 +227,16 @@ def export_dataset(args: argparse.Namespace) -> int:
         )
 
     permission_reference = str(getattr(args, "permission_reference", "") or "").strip()
-    if not permission_reference:
-        permission_reference = str(args.license_id or f"{args.rights_basis}:{args.source_group or session.get('session_id') or 'session'}")
+    if not permission_reference and args.rights_basis != "owned":
+        # Only where an external document is what the basis rests on, and only
+        # from a licence id the caller actually supplied. The old fallback
+        # synthesised "owned:some-session" whenever the field was blank, which
+        # put a string that looks like a permission reference into a receipt
+        # where no permission had been referenced. An empty field paired with
+        # rights_basis "owned" is the honest record: the terms of service carry
+        # that warranty, and inventing a citation to fill a column makes the
+        # receipt worth less, not more.
+        permission_reference = str(args.license_id or "")
     consent = {
         "schema_version": "mimir_dataset_consent_v2",
         "receipt_id": uuid.uuid4().hex,

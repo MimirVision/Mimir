@@ -216,10 +216,22 @@ def _verify_package_tree(root: Path) -> tuple[dict[str, Any], dict[str, Any], di
         raise DatasetPackageError("Contribution consent is missing or invalid.")
     if not str(consent.get("recorded_by") or "").strip():
         raise DatasetPackageError("Consent recorder is missing.")
-    if not str(consent.get("rights_basis") or "").strip():
+    rights_basis = str(consent.get("rights_basis") or "").strip()
+    if not rights_basis:
         raise DatasetPackageError("Consent rights basis is missing.")
-    if not str(consent.get("permission_reference") or "").strip():
-        raise DatasetPackageError("Consent permission reference is missing.")
+    # A permission reference points at something outside the receipt -- a
+    # signed release, a licence, a written permission. Someone contributing
+    # footage from their own car has nothing to point at, and requiring it
+    # anyway made the common case a dead end with no error trail: three
+    # separate checks rejected an empty string and none of them said why.
+    #
+    # Still required for the two bases that genuinely rest on an external
+    # document. For "owned", the terms of service carry the warranty and the
+    # receipt records who claimed it and when.
+    if rights_basis != "owned" and not str(consent.get("permission_reference") or "").strip():
+        raise DatasetPackageError(
+            f"A permission reference is required when the rights basis is '{rights_basis}'."
+        )
     records = package.get("files") if isinstance(package.get("files"), list) else []
     if not records:
         raise DatasetPackageError("Contribution package has no file inventory.")

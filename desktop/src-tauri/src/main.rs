@@ -3119,8 +3119,21 @@ fn export_training_contribution_sync(
     if !valid_free_text_argument(recorder, 200) {
         return Err(ScanFailure::new("Enter the person recording this consent."));
     }
-    if !valid_free_text_argument(permission, 500) {
-        return Err(ScanFailure::new("Enter an auditable ownership, permission, or license reference."));
+    // Only required where it points at something real. Footage from your own
+    // car has no external document to cite, and demanding one made the
+    // ordinary case unanswerable. The terms of service carry that warranty
+    // instead; the receipt still records who claimed it and on what basis.
+    //
+    // Whatever is supplied is still validated, because it is forwarded as a
+    // CLI argument value and a leading '-' would be read as a flag.
+    let permission_required = rights_basis != "owned";
+    if permission_required && permission.is_empty() {
+        return Err(ScanFailure::new(
+            "Enter the permission or licence this footage relies on.",
+        ));
+    }
+    if !permission.is_empty() && !valid_free_text_argument(permission, 500) {
+        return Err(ScanFailure::new("That permission reference contains characters Mimir cannot forward."));
     }
     let output = PathBuf::from(output_path);
     let output_name = output.file_name().and_then(|value| value.to_str()).unwrap_or_default();
