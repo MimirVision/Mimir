@@ -249,7 +249,13 @@ site both use, and the rules for choosing between them. Open
 
 ---
 
-## Licence and trademarks
+## Terms, licence and trademarks
+
+[`docs/TERMS.md`](docs/TERMS.md) covers the beta: no warranty, your footage
+stays on your machine, and what you promise about anything you choose to send.
+The short version of that last part — **you must have the right to every clip
+you upload**, which for dashcam footage is worth a moment's thought, because it
+usually contains people who never agreed to anything.
 
 Not affiliated with, endorsed by, or sponsored by Tesla, Inc. Tesla, Sentry
 Mode, and TeslaCam are trademarks of Tesla, Inc.
