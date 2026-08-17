@@ -1941,10 +1941,9 @@ fn run_scan_sync(
     vision_model: Option<String>,
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
-    // The frontend asks for an import; it does not decide where the library
-    // is. That path is the same one the storage actions use, and having two
-    // places compute it is how they drift apart.
-    import_footage: Option<bool>,
+    // Whether to copy is decided here from the volumes involved, not asked of
+    // the user. All the frontend says is whether the drive may be cleared
+    // afterwards, which is the only part that is genuinely a choice.
     clear_source: Option<bool>,
     active_scan_pid: Arc<Mutex<Option<u32>>>,
 ) -> Result<ScanResult, ScanFailure> {
@@ -1983,11 +1982,32 @@ fn run_scan_sync(
         .allow_directory(&output_dir, true)
         .map_err(|error| ScanFailure::new(error.to_string()))?;
 
-    // Refuse to import into the folder being scanned: the copy would land
-    // inside the tree the scanner is still walking.
-    let import = if import_footage.unwrap_or(false) {
+    // Whether to copy is worked out, not asked.
+    //
+    // It was a checkbox, which made the user reason about disk layout before
+    // they could press Scan. There is only one sensible answer and it depends
+    // on something the app already knows: footage on another volume is worth
+    // copying in, because reading video off a USB stick is the slowest part of
+    // a scan and the sustained load has taken Windows down mid-scan. Footage
+    // already on the library's own volume is not, because copying it would
+    // duplicate tens of gigabytes to no benefit -- rescanning the library
+    // itself would have written a second 42 GB copy of it.
+    //
+    // Comparing volumes rather than testing for removable media: it is the
+    // property that actually matters, needs no extra API, and gets the
+    // library-rescan case right as a side effect.
+    let destination = mimir_library_footage_dir();
+    let same_volume = source_canonical
+        .components()
+        .next()
+        .zip(destination.components().next())
+        .map(|(source_root, destination_root)| source_root == destination_root)
+        .unwrap_or(false);
+
+    let import = if !same_volume {
         {
-            let destination = mimir_library_footage_dir();
+            // Refuse to import into the folder being scanned: the copy would
+            // land inside the tree the scanner is still walking.
             if destination.starts_with(&source_canonical) {
                 return Err(ScanFailure::new(
                     "The library folder is inside the footage folder. Choose a different location.",
@@ -2197,7 +2217,6 @@ async fn run_local_scan(
     vision_model: Option<String>,
     ai_review_budget: Option<u32>,
     ai_timeout_sec: Option<u32>,
-    import_footage: Option<bool>,
     clear_source: Option<bool>,
     active_scan: tauri::State<'_, ActiveScanProcess>,
 ) -> Result<ScanResult, ScanFailure> {
@@ -2212,7 +2231,6 @@ async fn run_local_scan(
             vision_model,
             ai_review_budget,
             ai_timeout_sec,
-            import_footage,
             clear_source,
             active_scan_pid,
         )

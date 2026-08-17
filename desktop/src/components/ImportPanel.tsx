@@ -69,10 +69,7 @@ interface ImportPanelProps {
   onReturnToLatestSession: () => void
   sessionHistory: SessionHistoryEntry[]
   onOpenSession: (sessionPath: string) => void
-  /** Copy each event group to the library as the scan reaches it. */
-  importFootage: boolean
-  onImportFootageChange: (value: boolean) => void
-  /** With importFootage: clear each group off the drive once it is scanned. */
+  /** Clear each group off the drive once its copy is verified and scanned. */
   clearSourceAfterImport: boolean
   onClearSourceAfterImportChange: (value: boolean) => void
 }
@@ -90,14 +87,10 @@ interface ImportPanelProps {
  * drive is off by default because it is the only destructive part.
  */
 function ScanImportOptions({
-  importFootage,
-  onImportFootageChange,
   clearSource,
   onClearSourceChange,
   disabled,
 }: {
-  importFootage: boolean
-  onImportFootageChange: (value: boolean) => void
   clearSource: boolean
   onClearSourceChange: (value: boolean) => void
   disabled: boolean
@@ -106,41 +99,25 @@ function ScanImportOptions({
     <div className="mt-5 border-t border-white/[0.07] pt-5">
       <div className="text-[15px] font-semibold text-[var(--mimir-text)]">Footage handling</div>
       <p className="mt-1 text-[13px] leading-5 text-[var(--mimir-text-muted)]">
-        Reading video straight off a USB stick is the slowest part of a scan, and on some machines
-        the sustained load has crashed Windows partway through.
+        Each incident is copied to your Mimir library and checked before Mimir reads it, so the scan
+        runs off your own drive rather than the stick. Footage already on this drive is scanned
+        where it sits.
       </p>
 
-      <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+      <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
         <input
           type="checkbox"
-          checked={importFootage}
-          onChange={event => onImportFootageChange(event.target.checked)}
+          checked={clearSource}
+          onChange={event => onClearSourceChange(event.target.checked)}
           disabled={disabled}
-          className="mt-0.5 h-3.5 w-3.5 accent-[var(--mimir-accent)]"
+          className="mt-0.5 h-3.5 w-3.5 accent-[var(--mimir-status-amber)]"
         />
         <span className="text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
-          <span className="font-semibold text-[var(--mimir-text)]">Copy to this PC while scanning.</span>{' '}
-          Each incident is copied and checked before Mimir reads it, so the scan runs off your own
-          drive. Recommended.
+          <span className="font-semibold text-[var(--mimir-text)]">Clear the drive as it goes.</span>{' '}
+          Each incident is removed from the stick only after its copy has been checked byte for byte
+          and scanned. Anything that does not match is left where it is.
         </span>
       </label>
-
-      {importFootage && (
-        <label className="mt-2.5 flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
-          <input
-            type="checkbox"
-            checked={clearSource}
-            onChange={event => onClearSourceChange(event.target.checked)}
-            disabled={disabled}
-            className="mt-0.5 h-3.5 w-3.5 accent-[var(--mimir-status-amber)]"
-          />
-          <span className="text-[12.5px] leading-5 text-[var(--mimir-text-muted)]">
-            <span className="font-semibold text-[var(--mimir-text)]">Clear the drive as it goes.</span>{' '}
-            Each incident is removed from the stick only after its copy has been checked byte for
-            byte and scanned. Anything that does not match is left where it is.
-          </span>
-        </label>
-      )}
     </div>
   )
 }
@@ -788,8 +765,6 @@ export function ImportPanel({
   onReturnToLatestSession,
   sessionHistory,
   onOpenSession,
-  importFootage,
-  onImportFootageChange,
   clearSourceAfterImport,
   onClearSourceAfterImportChange,
 }: ImportPanelProps) {
@@ -990,8 +965,6 @@ export function ImportPanel({
                   </div>
 
                   <ScanImportOptions
-                    importFootage={importFootage}
-                    onImportFootageChange={onImportFootageChange}
                     clearSource={clearSourceAfterImport}
                     onClearSourceChange={onClearSourceAfterImportChange}
                     disabled={isWorking}

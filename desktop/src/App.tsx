@@ -227,7 +227,11 @@ export default function App() {
   // machines the sustained read has taken Windows down mid-scan. Clearing the
   // drive afterwards is not the default -- that one is destructive and has to
   // be chosen.
-  const [importFootage, setImportFootage] = useState(true)
+  // Whether footage is copied in is decided by Rust from the volumes involved,
+  // not chosen here -- it was a checkbox that made the user reason about disk
+  // layout before they could press Scan, and there is only one sensible answer.
+  // Clearing the drive stays a choice, and stays off, because it is the only
+  // destructive part.
   const [clearSourceAfterImport, setClearSourceAfterImport] = useState(false)
   const activeProgressSessionId = useRef('')
   const scanCancellationRequested = useRef(false)
@@ -610,8 +614,7 @@ export default function App() {
         aiTimeoutSec: useEnhancedAi ? experimentalAiTimeoutSec : undefined,
         // Rust resolves the library path -- the frontend only says whether to
         // import, and whether the drive may be cleared afterwards.
-        importFootage,
-        clearSource: importFootage ? clearSourceAfterImport : false,
+        clearSource: clearSourceAfterImport,
       })
       const diagnostics = diagnosticsFromScanResult(result)
       setScanDiagnostics(diagnostics)
@@ -892,8 +895,6 @@ export default function App() {
       <div className="relative h-screen overflow-y-auto">
         <ImportPanel
           selectedFolder={selectedFolder}
-          importFootage={importFootage}
-          onImportFootageChange={setImportFootage}
           clearSourceAfterImport={clearSourceAfterImport}
           onClearSourceAfterImportChange={setClearSourceAfterImport}
           isDraggingFolder={isDraggingFolder}
