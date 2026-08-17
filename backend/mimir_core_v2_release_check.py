@@ -170,8 +170,46 @@ def add_check(checks: list[dict[str, Any]], name: str, passed: bool, detail: str
     checks.append({"name": name, "passed": bool(passed), "blocking": blocking, "detail": detail})
 
 
+def repository_root(root: Path) -> Path | None:
+    """The work-tree root of the repository containing `root`, if any."""
+
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return Path(result.stdout.strip()).resolve()
+
+
 def repository_files(root: Path) -> list[str] | None:
-    if not (root / ".git").exists():
+    """List files git knows about under `root`, or None if it is not part of this project.
+
+    Two things this had to get right, and originally got wrong both ways.
+
+    It used to test for a `.git` entry beside the folder. Backend and desktop
+    were each their own repository; once they became folders in one, nothing sat
+    beside either, so both hygiene checks degraded into the literal string
+    "repository could not be inspected" and it was counted as two tracked
+    violations. A blocking failure whose detail names no file is worse than
+    either outcome, because the number looks real.
+
+    Asking git "are you inside a work tree" instead is not enough either. On a
+    machine where the home directory is itself a repository -- which is the case
+    on the development machine -- every path under it answers yes, so a folder
+    that had nothing to do with Mimir would be inspected against an unrelated
+    ancestor repository and pass. So the requirement is the stronger one the
+    check actually means: the folder must sit in the *same* repository as this
+    script.
+
+    `git ls-files` already restricts itself to the directory it runs in, so
+    scoping per folder still works inside one monorepo.
+    """
+
+    project = repository_root(Path(__file__).resolve().parent)
+    if project is None or repository_root(root) != project:
         return None
     result = subprocess.run(
         ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard"],

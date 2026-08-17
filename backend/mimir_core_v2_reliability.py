@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,24 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = ROOT / "mimir_core_v2" / "reliability_suite.json"
 DEFAULT_SCANNER = ROOT / "mimir_core_v2_scan.py"
 VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv", ".avi"}
+
+
+def fixture_input(fixture: dict[str, Any]) -> Path:
+    """Resolve a fixture's footage folder, expanding `~` and environment variables.
+
+    The two required fixtures used to be absolute paths on `D:`, a USB drive.
+    That made the 500-run gate unrunnable whenever the stick was unplugged, which
+    is the normal state of a USB stick and had already killed one experiment run
+    partway through. They now point into the Mimir library under `~`, which is
+    the same footage at a path that stays put.
+
+    Expansion happens here rather than at each of the four call sites that used
+    to build this path themselves, because those four had to agree and nothing
+    made them.
+    """
+
+    raw = os.path.expandvars(str(fixture.get("input") or ""))
+    return Path(raw).expanduser()
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -94,7 +113,7 @@ def run_once(
     scanner: Path,
     timeout_sec: float,
 ) -> dict[str, Any]:
-    source = Path(str(fixture["input"])).resolve()
+    source = fixture_input(fixture).resolve()
     run_output = output / "runs" / f"{index:04d}_{fixture['name']}_{scenario['name']}"
     run_output.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
@@ -129,7 +148,18 @@ def run_once(
         benchmark_ok: bool | None = None
         benchmark: dict[str, Any] = {}
         session_path = run_output / "latest_session.json"
-        if process.returncode == 0 and session_path.exists() and not copy_mode:
+        source_set = str(fixture.get("source_set") or "")
+        if (
+            process.returncode == 0
+            and session_path.exists()
+            and not copy_mode
+            # A fixture without a source_set is here to be scanned repeatedly,
+            # not graded. And expectations are written against the detector, so
+            # grading a hard negative in a mode built to escalate without one
+            # fails by design -- see skip_accuracy in reliability_suite.json.
+            and source_set
+            and not scenario.get("skip_accuracy")
+        ):
             report_path = run_output / "benchmark_report.json"
             benchmark_command = [
                 sys.executable,
@@ -138,7 +168,7 @@ def run_once(
                 "--session",
                 str(session_path),
                 "--source-set",
-                str(fixture.get("source_set") or fixture["name"]),
+                source_set,
                 "--report",
                 str(report_path),
                 "--strict",
@@ -149,7 +179,15 @@ def run_once(
             benchmark_ok = benchmark_result.returncode == 0
             if report_path.exists():
                 benchmark = read_json(report_path)
-            scan_ok = scan_ok and benchmark_ok
+            # Whether a label exists is data, not behaviour. Counting "nobody has
+            # labelled this yet" as a reliability failure is what made this gate
+            # unpassable, and it would go on failing however good the scanner
+            # got. Left unscored, so the fixture starts being graded on its own
+            # the moment a label for it is added.
+            if benchmark.get("status") == "no_labels_for_source_set":
+                benchmark_ok = None
+            else:
+                scan_ok = scan_ok and benchmark_ok
         session = read_json(session_path) if session_path.exists() else {}
         incidents = session.get("incidents") if isinstance(session.get("incidents"), list) else []
         media_available = sum(
@@ -209,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         for fixture in config.get("fixtures", []):
             if not isinstance(fixture, dict):
                 continue
-            path = Path(str(fixture.get("input") or ""))
+            path = fixture_input(fixture)
             if path.is_dir():
                 fixtures.append(fixture)
             elif fixture.get("required"):
@@ -234,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("No reliability scenarios are enabled.")
         output = Path(args.output) / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         source_baselines = {
-            str(fixture["name"]): source_inventory(Path(str(fixture["input"])).resolve())
+            str(fixture["name"]): source_inventory(fixture_input(fixture).resolve())
             for fixture in fixtures
         }
         results = []
@@ -248,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
                 print("  FAILED")
         source_integrity = {
             str(fixture["name"]): source_baselines[str(fixture["name"])]
-            == source_inventory(Path(str(fixture["input"])).resolve())
+            == source_inventory(fixture_input(fixture).resolve())
             for fixture in fixtures
         }
         for result in results:

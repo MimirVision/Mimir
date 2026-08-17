@@ -1,6 +1,9 @@
 {
   "schema_version": "mimir_reliability_suite_v1",
   "target_runs": 500,
+  "_what_this_measures": "Crash resistance, media survival and source integrity across many repeated scans. Accuracy is a separate gate with its own locked evaluation set. Conflating them is what made this one unpassable: two of its three fixtures were being graded against expectations that could not apply to them.",
+  "_fixture_paths": "Expanded with ~ and environment variables, so a fixture can live in the Mimir library rather than on a removable drive. The two required fixtures used to be absolute paths on D:, which left this gate unrunnable whenever the stick was unplugged -- the normal state of a USB stick, and it had already killed one experiment run partway through.",
+  "_source_set": "Present only where the footage is the complete, pinned set the labels in benchmark_labels.csv were written against. Omitted means scan-only: the fixture is real footage worth scanning 500 times, but grading it would be grading a subset against labels for the whole.",
   "fixtures": [
     {
       "name": "current_crash_door_ding_set",
@@ -9,21 +12,22 @@
       "required": true
     },
     {
-      "name": "known_person_near_set",
-      "input": "D:\\TeslaCam\\SentryClips\\2026-04-19_12-44-51",
-      "source_set": "known_person_near_set",
-      "required": true
+      "name": "library_person_near_partial",
+      "input": "~/Videos/Mimir Library/Footage/SentryClips/2026-04-19_12-44-51",
+      "required": true,
+      "notes": "Scan-only. Holds the 12-43-26 group but not 12-44-29, so it covers one of the two known_person_near_set labels. Verified separately on the detector-enabled path: 12-43-26 resolves REVIEW as labelled. The pinned accuracy fixture stays in benchmark_suite.json."
     },
     {
-      "name": "known_grouping_set",
-      "input": "D:\\TeslaCam\\SentryClips\\2026-04-18_16-04-02",
-      "source_set": "known_grouping_set",
-      "required": false
+      "name": "library_multi_camera_grouping",
+      "input": "~/Videos/Mimir Library/Footage/SentryClips/2026-04-18_16-04-02",
+      "required": false,
+      "notes": "Scan-only, four camera angles. Nothing in benchmark_labels.csv covers it."
     }
   ],
   "scenarios": [
     {"name": "local_normal", "weight": 12, "extra_args": []},
-    {"name": "no_object_detection", "weight": 4, "extra_args": ["--disable-yolo"]},
+    {"name": "no_object_detection", "weight": 4, "extra_args": ["--disable-yolo"], "skip_accuracy": true,
+     "notes": "Without the detector the pipeline escalates on purpose, to stay safe rather than silently miss a collision. Every label is written for the detector-enabled path, so a hard negative graded here fails by design. What this scenario is for is proving the fallback does not crash."},
     {"name": "corrupt_copy", "weight": 1, "temporary_copy": "corrupt"},
     {"name": "removed_media_copy", "weight": 1, "temporary_copy": "remove_during_scan"},
     {"name": "cancelled_scan", "weight": 1, "cancel_after_sec": 1.0},

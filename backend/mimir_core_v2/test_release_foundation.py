@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import tempfile
 import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from mimir_core_v2_release_check import source_video_hashes
+from mimir_core_v2_release_check import forbidden_tracked, repository_files, source_video_hashes
 
 from .ego_vehicle import polygons_for_camera
 from .output_writer import write_latest_session
@@ -67,6 +68,38 @@ class ReleaseFoundationTests(unittest.TestCase):
             video.write_bytes(b"changed source bytes")
             after = source_video_hashes(temporary)
             self.assertNotEqual(before, after)
+
+    def test_hygiene_check_inspects_a_subfolder_without_its_own_git(self) -> None:
+        """backend/ and desktop/ must both be inspectable from one repository.
+
+        They were each their own repository once. After they became folders in
+        one, nothing named .git sat beside either, and the check quietly stopped
+        inspecting anything -- reporting two violations both named "repository
+        could not be inspected" rather than naming a file.
+        """
+
+        for folder in (Path(__file__).resolve().parent, Path(__file__).resolve().parents[2] / "desktop"):
+            with self.subTest(folder=folder.name):
+                files = repository_files(folder)
+                self.assertIsNotNone(files)
+                self.assertTrue(files)
+
+    def test_hygiene_check_refuses_an_unrelated_repository(self) -> None:
+        """Being inside *some* repository is not the same as being inside this one.
+
+        The development machine's home directory is itself a repository, so
+        "are you in a work tree" answers yes for every temp folder. A check that
+        accepted that would inspect an unrelated repo and pass.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            other = Path(temporary) / "elsewhere"
+            other.mkdir()
+            subprocess.run(["git", "-C", str(other), "init", "-q"], check=True)
+            (other / "kept.py").write_text("x = 1\n", encoding="utf-8")
+
+            self.assertIsNone(repository_files(other))
+            self.assertEqual(forbidden_tracked(repository_files(other)), ["repository could not be inspected"])
 
 
 if __name__ == "__main__":
