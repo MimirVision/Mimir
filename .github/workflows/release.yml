@@ -209,20 +209,35 @@ jobs:
           "manifest=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Get-Content $path
 
-      # Proves the packaged sidecar runs, rather than only that it compiled.
-      # A sidecar that builds but cannot start has shipped from here before.
-      - name: Smoke-test the packaged sidecar
+      # Proves the packaged sidecars run, rather than only that they compiled.
+      # A sidecar that builds but cannot start has shipped from here before --
+      # and the one that did was not the scanner. Only the scanner was checked
+      # here, so the other four could each have been broken and this step would
+      # still have gone green.
+      - name: Smoke-test the packaged sidecars
         shell: pwsh
         run: |
-          $scan = "src-tauri\resources\mimir-backend\mimir-core-v2-scan.exe"
-          if (-not (Test-Path $scan)) { throw "Packaged scanner is missing: $scan" }
-          # Captured, not piped: piping into something that stops reading early
-          # (Select-Object -First, Out-Null in some hosts) closes the pipe and
-          # the exe reports a broken-pipe failure that has nothing to do with it.
-          $output = & $scan --help 2>&1
-          if ($LASTEXITCODE -ne 0) { throw "Packaged scanner failed to start (exit $LASTEXITCODE)." }
-          if (-not ($output -match 'mimir-core-v2-scan')) { throw "Packaged scanner produced unexpected output." }
-          "Packaged scanner starts cleanly."
+          $root = "src-tauri\resources\mimir-backend"
+          $names = @(
+            "mimir-core-v2-scan",
+            "mimir-core-v2-actions",
+            "mimir-core-v2-dataset",
+            "mimir-core-v2-model-update",
+            "mimir-core-v2-ai-enrich"
+          )
+          foreach ($name in $names) {
+            $exe = Join-Path $root "$name.exe"
+            if (-not (Test-Path $exe)) { throw "Packaged sidecar is missing: $exe" }
+            # Captured, not piped: piping into something that stops reading early
+            # (Select-Object -First, Out-Null in some hosts) closes the pipe and
+            # the exe reports a broken-pipe failure that has nothing to do with it.
+            $output = & $exe --help 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "$name failed to start (exit $LASTEXITCODE)." }
+            if (-not ($output -match [regex]::Escape($name))) {
+              throw "$name produced unexpected output: $output"
+            }
+            "$name starts cleanly."
+          }
 
       - name: Draft the release
         uses: softprops/action-gh-release@v2
