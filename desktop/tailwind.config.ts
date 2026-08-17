@@ -4,6 +4,11 @@ export default {
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
+    // Tests are scanned like any other source, so class names quoted in them as
+    // examples become real rules in the shipped stylesheet. styleOpacity.test.ts
+    // names the utilities it checks for and added 0.61 kB of CSS that nothing
+    // renders.
+    '!./src/**/*.test.{ts,tsx}',
   ],
   theme: {
     extend: {
