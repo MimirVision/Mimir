@@ -72,6 +72,15 @@ VISUAL_CONTACT_MIN_GLOBAL = 0.10
 VISUAL_CONTACT_LOCALIZED_RATIO = 0.55
 VISUAL_CONTACT_MIN_CLUSTER_SEC = 1.25
 VISUAL_CONTACT_BODY_ZONE_BONUS = 0.08
+
+# Chosen from the empty band in a measured, bimodal distribution -- see
+# _is_frame_filling_detection. Real detections stop below 0.90 and the failure
+# cluster starts at 0.95, so any value between the two excludes exactly the
+# same boxes.
+FRAME_FILLING_DETECTION_AREA = 0.92
+# A box that spans nearly the full width AND height is the same failure, caught
+# even if a slightly odd aspect ratio keeps its area just under the bar.
+FRAME_FILLING_DETECTION_SIDE = 0.97
 VISUAL_CONTACT_MIN_SCORE = 0.32
 
 # -- Contact-track window around a candidate contact moment --
@@ -578,6 +587,46 @@ def _object_detection_samples(samples: list[dict], motion: dict) -> list[dict]:
     return selected
 
 
+def _is_frame_filling_detection(area_ratio: float, width_ratio: float, height_ratio: float) -> bool:
+    """A box covering nearly the whole frame is a failed detection, not a close object.
+
+    Measured over 619 close-vehicle detections from four real event groups, the
+    areas are bimodal rather than continuous:
+
+        0.00-0.20  259
+        0.20-0.40   82
+        0.40-0.60  146
+        0.60-0.80   25
+        0.80-0.90    3
+        0.90-0.95    0      <- nothing here
+        0.95-1.01  104      <- 17%, almost all on one camera
+
+    Real vehicles thin out above 0.8. The cluster at ~0.99 is the detector
+    returning a box around the entire image -- sky, ground and all -- on
+    low-contrast night footage. A vehicle cannot occupy 99% of a frame that
+    also contains the ground it is standing on.
+
+    Those boxes carry no localisation at all, and each one satisfies
+    `area_ratio >= 0.12`, which marks a close vehicle, which sets
+    contact_level MEDIUM, which sets possible_contact, which blocks the
+    normal_traffic rule meant to say "this is just a car park". The event lands
+    in REVIEW, and it happened on nearly every event.
+
+    The threshold sits in the empty band, so the exact value is not a judgement
+    call: anything from 0.90 to 0.95 excludes the same 104 detections and keeps
+    the same 515.
+
+    This only removes the box from close-object evidence. Motion, impact level,
+    ego-zone motion, visible contact and crash-safety are untouched, so a real
+    collision still raises everything it raised before.
+    """
+
+    return (
+        area_ratio >= FRAME_FILLING_DETECTION_AREA
+        or (width_ratio >= FRAME_FILLING_DETECTION_SIDE and height_ratio >= FRAME_FILLING_DETECTION_SIDE)
+    )
+
+
 def _close_object_evidence(detections: list[dict]) -> dict:
     reasons: list[str] = []
     max_area_ratio = 0.0
@@ -586,6 +635,11 @@ def _close_object_evidence(detections: list[dict]) -> dict:
     max_height_ratio = 0.0
     classes: set[str] = set()
     close_classes: set[str] = set()
+    frame_filling_detections = 0
+    # Per class, the ratios of the detections that survived the frame-filling
+    # check. Measured once here rather than re-derived when the reason strings
+    # are built, so the numbers Mimir reports are the numbers it decided on.
+    kept_by_class: dict[str, list[tuple[float, float]]] = {}
 
     for detection in detections:
         bbox = detection.get("bbox") if isinstance(detection.get("bbox"), list) else []
@@ -601,7 +655,13 @@ def _close_object_evidence(detections: list[dict]) -> dict:
         area_ratio = width_ratio * height_ratio
         bottom_ratio = y2 / frame_height
         class_name = str(detection.get("class_name") or "object")
+
+        if _is_frame_filling_detection(area_ratio, width_ratio, height_ratio):
+            frame_filling_detections += 1
+            continue
+
         classes.add(class_name)
+        kept_by_class.setdefault(class_name, []).append((area_ratio, bottom_ratio))
         max_area_ratio = max(max_area_ratio, area_ratio)
         max_bottom_ratio = max(max_bottom_ratio, bottom_ratio)
         max_width_ratio = max(max_width_ratio, width_ratio)
@@ -617,23 +677,7 @@ def _close_object_evidence(detections: list[dict]) -> dict:
             close_classes.add(class_name)
 
     for class_name in sorted(close_classes):
-        matching = []
-        for detection in detections:
-            if str(detection.get("class_name") or "object") != class_name:
-                continue
-            bbox = detection.get("bbox") if isinstance(detection.get("bbox"), list) else []
-            if len(bbox) != 4:
-                continue
-            frame_width = _safe_float(detection.get("frame_width"))
-            frame_height = _safe_float(detection.get("frame_height"))
-            if frame_width <= 0 or frame_height <= 0:
-                continue
-            x1, y1, x2, y2 = (_safe_float(value) for value in bbox)
-            width_ratio = max(0.0, x2 - x1) / frame_width
-            height_ratio = max(0.0, y2 - y1) / frame_height
-            area_ratio = width_ratio * height_ratio
-            bottom_ratio = y2 / frame_height
-            matching.append((area_ratio, bottom_ratio))
+        matching = kept_by_class.get(class_name) or []
         if matching:
             class_area = max(item[0] for item in matching)
             class_bottom = max(item[1] for item in matching)
@@ -654,6 +698,10 @@ def _close_object_evidence(detections: list[dict]) -> dict:
         "max_width_ratio": round(max_width_ratio, 4),
         "max_height_ratio": round(max_height_ratio, 4),
         "hard_close_vehicle": hard_close_vehicle,
+        # Reported rather than silently dropped: a camera that suddenly starts
+        # returning nothing but whole-frame boxes is a detector or footage
+        # problem, and this is the only place that would ever notice.
+        "frame_filling_detections": frame_filling_detections,
     }
 
 
