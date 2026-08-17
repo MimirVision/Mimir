@@ -2,14 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "//": "Runs desktop/landing-page/serve_preview.py, which stages the page the way the Pages workflow does rather than serving the folder as-is. styles.css imports the shared tokens from outside the folder, and a 404 on a stylesheet import is silent -- the page renders with every colour unset, which looked like black text on black while the deployed site was fine. See the script for why the repository root is not served instead.",
       "name": "landing-page",
       "runtimeExecutable": "python",
       "runtimeArgs": [
-        "-m",
-        "http.server",
-        "4173",
-        "--directory",
-        "desktop/landing-page"
+        "desktop/landing-page/serve_preview.py"
       ],
       "port": 4173
     }

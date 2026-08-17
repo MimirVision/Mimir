@@ -310,6 +310,24 @@
                 </p>
               </div>
 
+              <!--
+                An unsigned installer asks for trust it cannot prove on its own,
+                so the one check that does prove something belongs next to the
+                warning rather than only in the release notes. Every release
+                publishes the SHA-256; nothing on this page said so, which meant
+                the only people who could verify were the ones who already knew
+                to go looking.
+              -->
+              <div class="disclosure__note">
+                <h3>Check the download if you want to</h3>
+                <p>
+                  Every release publishes the installer’s SHA-256 in its
+                  <a href="https://github.com/MimirVision/Mimir/releases/latest">release notes</a>.
+                  To compare, run this in PowerShell and check it matches:
+                </p>
+                <p><code>Get-FileHash -Algorithm SHA256 .\MimirSetup.exe</code></p>
+              </div>
+
               <div class="disclosure__note">
                 <h3>It is early beta, and it over-flags</h3>
                 <p>
