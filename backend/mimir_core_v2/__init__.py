@@ -6,7 +6,7 @@ beside the existing scanner so the current production path stays untouched.
 
 SCHEMA_VERSION = "mimir_v2"
 SCANNER_VERSION = "mimir_core_v2_0_5"
-CORE_VERSION = "0.5.0-beta.1"
+CORE_VERSION = "0.5.0-beta.2"
 CORE_BUILD_ID = "mimir_core_v2_0_5_door_articulation_guard"
 GENERATED_BY = "mimir_core_v2"
 SCAN_COMMAND_VERSION = "mimir_core_v2_scan_0_5"
