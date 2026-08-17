@@ -22,6 +22,23 @@ Practically: treat IMPORTANT as "look at this", not as "something happened".
 Mimir is trying to save you from scrubbing hours of footage, not to tell you
 what occurred.
 
+### And once, it went too quiet
+
+The fixes for over-flagging can overshoot, and on 2026-08-17 one was caught
+doing it. Rescanning the feedback clips whose whole event group is still on
+hand, five could be scored: three are still noisier than the person wanted,
+one agrees, and **one is now quieter** -- a clip where someone asked for Review
+and Mimir today says Ignore.
+
+That is one clip, not a rate. It is called out anyway because it is the
+direction that matters: Mimir being noisier than you wanted costs you a minute;
+Mimir being quieter than you wanted means you never see the clip. So do not
+treat Ignore as "nothing happened" either. If something did happen and you know
+roughly when, go and look rather than trusting the sort.
+
+`score_feedback_labels.py` in the backend is what produced this, and it will
+keep producing it as more feedback arrives.
+
 **What changed on 2026-08-05.** Two rules were tightened after reading that
 feedback back. Both come down to the same mistake: motion near the car was
 being treated as evidence that something touched it.
