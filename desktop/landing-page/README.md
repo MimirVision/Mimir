@@ -107,8 +107,9 @@ measure uptake without adding telemetry to the app. The repository is already pu
    updater private key. The workflow checks for it before building and stops
    immediately if it is missing, rather than failing 80 minutes in — and an
    unsigned build cannot serve auto-updates, so it must not go out as a release.
-2. Push a tag matching `package.json` (`v0.5.0-free-beta.1`). The tag and the
-   version have to agree or the build fails on purpose.
+2. Push a tag matching `package.json` — `v` followed by the version there, so
+   `v0.5.0-free-beta.2` for the current one. The tag and the version have to
+   agree or the build fails on purpose.
    `.github/workflows/release.yml` runs every test suite, builds the installer,
    smoke-tests the packaged scanner, writes `latest.json` for the updater, and
    drafts a release.
