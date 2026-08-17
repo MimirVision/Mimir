@@ -265,6 +265,61 @@ export function aiQualityWarning(incident: MimirIncident) {
   return ''
 }
 
+/**
+ * How much evidence an incident carries, for ordering a severity tier.
+ *
+ * Roughly 80% of a dump lands in REVIEW, and until now those were shown in the
+ * order they happened, so a user working down the list had no idea which ones
+ * were worth opening. The tiers are already a ranking; this ranks inside one.
+ *
+ * The order is taken from what severity_resolver.py already treats as stronger,
+ * rather than invented here: something directly observed outranks a candidate
+ * flag, which outranks a HIGH level, which outranks MEDIUM. Getting this wrong
+ * can only change the order someone reviews in -- no incident is hidden,
+ * reclassified, or dropped -- which is why it is safe to do while the
+ * classification itself waits on labelled footage.
+ */
+export function incidentEvidenceStrength(incident: MimirIncident) {
+  const local = localEvidence(incident)
+  const debug = classificationDebug(incident)
+  const own = incident as unknown as Record<string, unknown>
+  // All three places, because these flags genuinely arrive in all three
+  // depending on how the session was written -- which is the whole reason
+  // booleanEvidence takes a direct value alongside the nested lookup.
+  const flag = (key: string) => Boolean(own[key] || local[key] || debug[key])
+
+  const contact = contactEvidenceLevel(incident)
+  const impact = impactEvidenceLevel(incident)
+
+  let score = 0
+
+  // Something was actually seen touching the car.
+  if (flag('visible_contact') || flag('visible_impact')) score += 1000
+  // A specific mechanism fired, not just "close and moving".
+  if (flag('crash_safety_triggered')) score += 500
+  if (flag('hard_contact_candidate')) score += 400
+  if (flag('rear_impact_candidate')) score += 300
+  if (flag('strong_impact_like_motion')) score += 200
+
+  if (impact === 'HIGH') score += 120
+  else if (impact === 'MEDIUM') score += 40
+  if (contact === 'HIGH') score += 100
+  else if (contact === 'MEDIUM') score += 30
+
+  // A detector that returned boxes around whole frames was failing on this
+  // footage, so what evidence it did produce deserves less weight, not more.
+  const frameFilling = Number(local.frame_filling_detections ?? debug.frame_filling_detections ?? 0)
+  if (Number.isFinite(frameFilling) && frameFilling > 0) score -= Math.min(25, frameFilling)
+
+  // Continuous scores only break ties between otherwise equal incidents.
+  const contactScore = Number(incident.contact_score ?? local.contact_score ?? 0)
+  const impactScore = Number(incident.impact_score ?? local.impact_score ?? 0)
+  if (Number.isFinite(contactScore)) score += Math.max(0, Math.min(1, contactScore)) * 10
+  if (Number.isFinite(impactScore)) score += Math.max(0, Math.min(1, impactScore)) * 10
+
+  return score
+}
+
 export function yesNo(value: unknown) {
   return value === true ? 'Yes' : value === false ? 'No' : 'Not provided'
 }

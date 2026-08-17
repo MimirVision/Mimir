@@ -1,4 +1,5 @@
 import { formatDateTime, formatEventType, sourceEventReason, sourceEventTimestamp, sourceFilename } from './incidentDisplay'
+import { incidentEvidenceStrength } from './incidentEvidence'
 import { resolveIncidentSeverity, type ManualStatusOverrides, type SeverityGroup } from './incidentStatus'
 import type { MimirCameraClip, MimirIncident, MimirSession } from '../types'
 
@@ -100,6 +101,16 @@ export function sortIncidents(incidents: MimirIncident[], manualOverrides: Manua
       return severityDelta
     }
 
+    // Strongest evidence first inside a tier. Most of a dump lands in REVIEW,
+    // and in event order there was nothing to tell a user which of 278 to open
+    // first -- so the list was as long as the raw footage and no better sorted.
+    const strengthDelta = incidentEvidenceStrength(right) - incidentEvidenceStrength(left)
+    if (strengthDelta !== 0) {
+      return strengthDelta
+    }
+
+    // Chronological within equal evidence, so the order is stable and an
+    // incident does not move between renders.
     return String(left.created_at || '').localeCompare(String(right.created_at || ''))
   })
 }
