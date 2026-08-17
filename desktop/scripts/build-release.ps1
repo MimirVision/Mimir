@@ -79,6 +79,37 @@ if ($Installer) {
   Write-Host "Installer : $($Installer.FullName)"
   Write-Host ("Size      : {0:N1} MB" -f ($Installer.Length / 1MB))
   Write-Host "SHA-256   : $Sha"
+
+  # This build rebuilt the sidecars, and PyInstaller output is not byte
+  # reproducible -- identical source produces a different hash every time. So a
+  # reliability report generated before this point describes a scanner that no
+  # longer exists, and the release gate's packaged-scanner-parity check will
+  # reject it. That is the gate working, but it is a two-and-a-half hour
+  # surprise if you find out at the end, so it is said here instead.
+  $Scanner = Join-Path $Root "src-tauri\resources\mimir-backend\mimir-core-v2-scan.exe"
+  $Report = Join-Path $Root "release_assets\reliability_report.json"
+  if ((Test-Path -LiteralPath $Scanner) -and (Test-Path -LiteralPath $Report)) {
+    $ScannerSha = (Get-FileHash -LiteralPath $Scanner -Algorithm SHA256).Hash
+    $ReportSha = (Get-Content -LiteralPath $Report -Raw | ConvertFrom-Json).scanner_sha256
+    if ($ScannerSha -ne $ReportSha) {
+      Write-Host ""
+      Write-Warning @"
+The reliability report describes a different scanner than the one just packaged.
+
+  packaged : $ScannerSha
+  report   : $ReportSha
+
+Re-run the 500-run harness against the scanner this build produced, or the
+release gate will fail on reliability_packaged_scanner_parity:
+
+  cd ..\backend
+  .venv\Scripts\python.exe mimir_core_v2_reliability.py --iterations 500 ``
+    --scanner ..\desktop\src-tauri\resources\mimir-backend\mimir-core-v2-scan.exe ``
+    --output MimirOutputV2\reliability_500 ``
+    --report ..\desktop\release_assets\reliability_report.json
+"@
+    }
+  }
 } else {
   Write-Warning "Build reported success but no installer was found in $Bundle"
 }
