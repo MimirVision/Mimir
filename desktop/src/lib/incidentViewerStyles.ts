@@ -42,7 +42,7 @@ export function markerAccentClass(severity?: string) {
     return 'bg-[var(--mimir-status-amber)]'
   }
 
-  return 'bg-white/32'
+  return 'bg-white/[0.32]'
 }
 
 export function markerAccentForMarker(marker: MimirTimelineMarker) {

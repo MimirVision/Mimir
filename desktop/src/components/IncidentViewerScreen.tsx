@@ -219,7 +219,7 @@ function ViewerFilesDrawer({
   const originalPath = originalVideoPath(incident)
 
   return (
-    <ModalOverlay label="Incident files" onClose={onClose} className="justify-end bg-black/62 backdrop-blur-sm">
+    <ModalOverlay label="Incident files" onClose={onClose} className="justify-end bg-black/[0.62] backdrop-blur-sm">
       <button
         type="button"
         className="absolute inset-0 cursor-default"
@@ -244,7 +244,7 @@ function ViewerFilesDrawer({
           </button>
         </div>
 
-        <div className="rounded-2xl border border-white/[0.06] bg-black/14 p-4">
+        <div className="rounded-2xl border border-white/[0.06] bg-black/[0.14] p-4">
           <div className="mb-3 text-[12px] font-semibold text-[var(--mimir-text)]">Camera clips</div>
           {clips.length > 0 ? (
             <div className="space-y-2">
@@ -268,7 +268,7 @@ function ViewerFilesDrawer({
                       className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${
                         available
                           ? 'border-white/[0.08] bg-white/[0.04] text-[var(--mimir-text-muted)]'
-                          : 'border-red-300/18 bg-red-500/10 text-red-100/78'
+                          : 'border-red-300/[0.18] bg-red-500/10 text-red-100/[0.78]'
                       }`}
                     >
                       {available ? 'Available' : 'Missing'}
@@ -284,7 +284,7 @@ function ViewerFilesDrawer({
           )}
         </div>
 
-        <div className="mt-4 rounded-2xl border border-white/[0.06] bg-black/14 p-4">
+        <div className="mt-4 rounded-2xl border border-white/[0.06] bg-black/[0.14] p-4">
           <div className="mb-3 text-[12px] font-semibold text-[var(--mimir-text)]">Folders</div>
           <div className="grid gap-2">
             <FolderButton label="Open original folder" disabled={!originalPath} onClick={() => onOpenFileAction('original')} />
@@ -686,7 +686,7 @@ function ViewerMedia({
   const renderUnavailable = (label: string, className = '', loadFailed = false) => (
     <div className={`grid min-h-[180px] place-items-center bg-[linear-gradient(145deg,#08090a,#020202)] text-center ${className}`}>
       <div className="px-5">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/12" />
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/[0.12]" />
         <div className="text-[15px] font-semibold text-[var(--mimir-text)]">
           {loadFailed ? `Could not load ${label} camera` : `${label} unavailable`}
         </div>
@@ -785,17 +785,17 @@ function ViewerMedia({
           onError={() => markFeedFailed(feed)}
         />
         <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-1.5">
-          <span className="rounded-full border border-white/10 bg-black/62 px-2.5 py-1 text-[11px] font-semibold text-white/78 backdrop-blur-md">
+          <span className="rounded-full border border-white/10 bg-black/[0.62] px-2.5 py-1 text-[11px] font-semibold text-white/[0.78] backdrop-blur-md">
             {feed.label}
           </span>
           {feed.isPrimary && (
-            <span className="rounded-full border border-white/10 bg-white/[0.095] px-2.5 py-1 text-[11px] font-semibold text-white/72 backdrop-blur-md">
+            <span className="rounded-full border border-white/10 bg-white/[0.095] px-2.5 py-1 text-[11px] font-semibold text-white/[0.72] backdrop-blur-md">
               Best angle
             </span>
           )}
         </div>
         {loading && (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/28 backdrop-blur-[1px]">
+          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/[0.28] backdrop-blur-[1px]">
             <span className="h-6 w-6 animate-spin rounded-full border-2 border-white/20 border-t-white/70" />
           </div>
         )}
@@ -846,13 +846,13 @@ function ViewerMedia({
                   onClick={() => selectCameraFeed(feed)}
                   className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition ${
                     selected
-                      ? 'border-white/28 bg-white/[0.13] text-[var(--mimir-text)]'
+                      ? 'border-white/[0.28] bg-white/[0.13] text-[var(--mimir-text)]'
                       : 'border-white/[0.08] bg-white/[0.025] text-[var(--mimir-text-muted)] hover:bg-white/[0.06] hover:text-[var(--mimir-text)]'
                   }`}
                   title={feed.isPrimary ? `Best angle: ${feed.label}` : feed.label}
                 >
                   {label}
-                  {feed.isPrimary && <span className="ml-1 font-medium text-white/52">{feed.label}</span>}
+                  {feed.isPrimary && <span className="ml-1 font-medium text-white/[0.52]">{feed.label}</span>}
                 </button>
               )
             })}
@@ -883,8 +883,8 @@ function ViewerMedia({
                     }}
                     className={`overflow-hidden rounded-[14px] border bg-black/45 text-left shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition ${
                       isSelected
-                        ? 'border-white/30 ring-2 ring-white/18'
-                        : 'border-white/[0.055] hover:border-white/18 hover:bg-white/[0.025]'
+                        ? 'border-white/30 ring-2 ring-white/[0.18]'
+                        : 'border-white/[0.055] hover:border-white/[0.18] hover:bg-white/[0.025]'
                     }`}
                   >
                     {renderFeedVideo(feed, {
@@ -920,7 +920,7 @@ function ViewerMedia({
                   }
                 }}
                 className={`overflow-hidden rounded-[18px] border bg-black/45 text-left shadow-[0_18px_46px_rgba(0,0,0,0.22)] transition ${
-                  selected ? 'border-white/28 ring-2 ring-white/14' : 'border-white/[0.055] hover:border-white/16'
+                  selected ? 'border-white/[0.28] ring-2 ring-white/[0.14]' : 'border-white/[0.055] hover:border-white/[0.16]'
                 }`}
               >
                 {renderFeedVideo(feed, {
@@ -979,7 +979,7 @@ function ViewerMedia({
       {(media.mode === 'empty' || (!canUseMultiCamera && !showSingleVideo && !showImage)) && (
         <div className="grid min-h-[390px] place-items-center px-8 text-center lg:min-h-[640px]">
           <div>
-            <div className="mx-auto mb-5 h-1 w-14 rounded-full bg-white/18" />
+            <div className="mx-auto mb-5 h-1 w-14 rounded-full bg-white/[0.18]" />
             <h3 className="text-[20px] font-semibold text-[var(--mimir-text)]">Video file not found</h3>
             <p className="mt-3 max-w-[360px] text-[14px] leading-6 text-[var(--mimir-text-muted)]">
               Mimir could not find a playable local video for this incident. The incident details are still available.
@@ -996,7 +996,7 @@ function ViewerMedia({
 
       {!canUseMultiCamera && playableFeeds.length === 1 && media.mode === 'empty' && (
         <div className="grid min-h-[390px] place-items-center px-8 text-center lg:min-h-[640px]">
-          <div className="mx-auto mb-5 h-1 w-14 rounded-full bg-white/18" />
+          <div className="mx-auto mb-5 h-1 w-14 rounded-full bg-white/[0.18]" />
           <h3 className="text-[20px] font-semibold text-[var(--mimir-text)]">Video file not found</h3>
           <p className="mt-3 max-w-[360px] text-[14px] leading-6 text-[var(--mimir-text-muted)]">
             Mimir could not find a playable local video for this incident. The incident details are still available.
@@ -1126,7 +1126,7 @@ function IncidentTimelineMarkers({
   }
 
   return (
-    <div className="rounded-2xl bg-black/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
+    <div className="rounded-2xl bg-black/[0.12] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[12px] font-semibold text-[var(--mimir-text-subtle)]">Key moments</div>
@@ -1182,13 +1182,13 @@ function IncidentTimelineMarkers({
         }`}
       >
         <div className="absolute left-0 right-0 top-[48px] h-px bg-white/[0.08]" />
-        <div className="absolute left-0 right-0 top-[46px] h-3 rounded-full bg-black/28 shadow-[inset_0_1px_1px_rgba(0,0,0,0.34)]" />
+        <div className="absolute left-0 right-0 top-[46px] h-3 rounded-full bg-black/[0.28] shadow-[inset_0_1px_1px_rgba(0,0,0,0.34)]" />
         <div
           className="absolute left-0 top-[46px] h-3 rounded-full bg-[rgba(157,183,170,0.34)] transition-[width]"
           style={{ width: `${progressPercent}%` }}
         />
         <div
-          className="absolute top-[34px] h-12 w-px bg-white/42"
+          className="absolute top-[34px] h-12 w-px bg-white/[0.42]"
           style={{ left: `${progressPercent}%` }}
         />
         {displayedMarkers.map((marker, index) => {
@@ -1223,11 +1223,11 @@ function IncidentTimelineMarkers({
               )}
               <span className="absolute left-1/2 top-9 h-6 w-px -translate-x-1/2 bg-white/[0.08]" />
               <span
-                className={`relative z-[1] block rounded-full border transition duration-150 group-focus-visible:ring-2 group-focus-visible:ring-white/28 ${markerVisualClass(marker)} ${
+                className={`relative z-[1] block rounded-full border transition duration-150 group-focus-visible:ring-2 group-focus-visible:ring-white/[0.28] ${markerVisualClass(marker)} ${
                   isPrimary ? 'ring-2 ring-[var(--mimir-accent)] ring-offset-2 ring-offset-black' : ''
                 } ${
                   isSelected
-                    ? 'h-10 w-10 scale-110 ring-2 ring-white/24 brightness-110'
+                    ? 'h-10 w-10 scale-110 ring-2 ring-white/[0.24] brightness-110'
                     : isHovered
                       ? 'h-9 w-9 scale-110'
                       : String(marker.type || '').toLowerCase() === 'impact_contact' || isPrimary
@@ -1239,7 +1239,7 @@ function IncidentTimelineMarkers({
                 className={`mt-7 max-w-[132px] truncate rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-[0_10px_26px_rgba(0,0,0,0.22)] transition ${
                   isSelected
                     ? 'border-white/20 bg-white/[0.12] text-[var(--mimir-text)]'
-                    : 'border-white/[0.08] bg-black/26 text-[var(--mimir-text-muted)] group-hover:bg-white/[0.075] group-hover:text-[var(--mimir-text)]'
+                    : 'border-white/[0.08] bg-black/[0.26] text-[var(--mimir-text-muted)] group-hover:bg-white/[0.075] group-hover:text-[var(--mimir-text)]'
                 }`}
               >
                 {markerLabel(marker, incident)}
@@ -1323,7 +1323,7 @@ function DetailsPanel({
   const severityCapReason = safeText(debug.severity_cap_reason || incident.severity_cap_reason, '')
   const severityFloorReason = safeText(debug.severity_floor_reason, '')
   const reviewBadgeTone = aiReviewed(incident)
-    ? 'border-sky-200/18 bg-sky-300/10 text-sky-100/88'
+    ? 'border-sky-200/[0.18] bg-sky-300/10 text-sky-100/[0.88]'
     : 'border-white/[0.07] bg-white/[0.035] text-[var(--mimir-text-muted)]'
   const severity = severityResolution.displaySeverity
   const reviewCopy =
@@ -1384,7 +1384,7 @@ function DetailsPanel({
         </span>
       </div>
 
-      <div className="rounded-xl bg-black/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
+      <div className="rounded-xl bg-black/[0.12] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.018)]">
         <div className="text-[12px] font-semibold text-[var(--mimir-text-subtle)]">
           Mimir review
         </div>
@@ -1437,7 +1437,7 @@ function DetailsPanel({
                 {aiSceneType(incident) && <div>Scene: {aiSceneType(incident)}</div>}
                 <div>Suggested severity: {aiRecommendedSeverity(incident)}</div>
                 <div>Confidence: {aiConfidenceCopy(incident)}</div>
-                {aiWarning && <div className="text-amber-50/78">{aiWarning}</div>}
+                {aiWarning && <div className="text-amber-50/[0.78]">{aiWarning}</div>}
               </div>
               {aiEvidenceItems.length > 0 && (
                 <ul className="mt-3 space-y-2">
@@ -1546,7 +1546,7 @@ function AiFeedbackPanel({
             disabled={busy}
             className={`min-h-9 rounded-lg border px-2.5 py-2 text-[11px] font-semibold transition disabled:cursor-wait disabled:opacity-60 ${
               selectedFeedback === choice
-                ? 'border-white/24 bg-white/[0.095] text-[var(--mimir-text)]'
+                ? 'border-white/[0.24] bg-white/[0.095] text-[var(--mimir-text)]'
                 : 'border-white/[0.07] bg-white/[0.025] text-[var(--mimir-text-muted)] hover:bg-white/[0.055] hover:text-[var(--mimir-text)]'
             }`}
           >
@@ -1560,7 +1560,7 @@ function AiFeedbackPanel({
         onChange={event => onNotesChange(event.target.value)}
         disabled={busy}
         rows={3}
-        className="mt-3 w-full resize-none rounded-lg border border-white/[0.08] bg-black/18 p-3 text-[13px] leading-5 text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/18 disabled:cursor-wait disabled:opacity-60"
+        className="mt-3 w-full resize-none rounded-lg border border-white/[0.08] bg-black/[0.18] p-3 text-[13px] leading-5 text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/[0.18] disabled:cursor-wait disabled:opacity-60"
         placeholder="Notes"
         aria-label="Feedback notes"
       />
@@ -1614,7 +1614,7 @@ function AiFeedbackPanel({
         </div>
       )}
       {error && (
-        <div className="mt-3 rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/86">
+        <div className="mt-3 rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/[0.86]">
           {error}
         </div>
       )}
@@ -1768,13 +1768,13 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
         onChange={event => setRecordedBy(event.target.value)}
         placeholder="Your name"
         aria-label="Your name"
-        className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
+        className="h-10 rounded-lg border border-white/[0.08] bg-black/[0.18] px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/[0.18]"
       />
       <select
         aria-label="Rights basis for this footage"
         value={rightsBasis}
         onChange={event => setRightsBasis(event.target.value as typeof rightsBasis)}
-        className="h-10 rounded-lg border border-white/[0.08] bg-[var(--mimir-bg-depth)] px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
+        className="h-10 rounded-lg border border-white/[0.08] bg-[var(--mimir-bg-depth)] px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/[0.18]"
       >
         <option value="owned">I recorded and own this footage</option>
         <option value="explicit_permission">I have explicit permission</option>
@@ -1793,7 +1793,7 @@ function TrainingContributionPanel({ incident, session }: { incident: MimirIncid
           onChange={event => setPermissionReference(event.target.value)}
           placeholder={permissionReferencePlaceholder(rightsBasis)}
           aria-describedby="mimir-permission-reference-help"
-          className="h-10 rounded-lg border border-white/[0.08] bg-black/18 px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/18"
+          className="h-10 rounded-lg border border-white/[0.08] bg-black/[0.18] px-3 text-[13px] text-[var(--mimir-text)] outline-none focus:border-white/[0.18]"
         />
         <p id="mimir-permission-reference-help" className="text-[11px] leading-4 text-[var(--mimir-text-subtle)]">
           {permissionReferenceHelp(rightsBasis)}
@@ -1912,7 +1912,7 @@ function ReviewActionsPanel({
     currentStorageState.includes('Trash')
       ? 'border-red-300/20 bg-red-500/10 text-red-100/85'
       : currentStorageState.includes('Library')
-        ? 'border-emerald-300/18 bg-emerald-400/10 text-emerald-100/85'
+        ? 'border-emerald-300/[0.18] bg-emerald-400/10 text-emerald-100/85'
         : currentStorageState === 'Missing file'
           ? 'border-amber-300/20 bg-amber-400/10 text-amber-100/85'
           : 'border-white/[0.08] bg-white/[0.035] text-[var(--mimir-text-muted)]'
@@ -1966,7 +1966,7 @@ function ReviewActionsPanel({
                 <span className="inline-flex items-center gap-1.5">
                   {busyAction === actionKey && <SmallSpinner />}
                   {severityCopy(status)}
-                  <kbd className="rounded border border-white/12 px-1 text-[10px] font-medium leading-[15px] text-[var(--mimir-text-subtle)]">
+                  <kbd className="rounded border border-white/[0.12] px-1 text-[10px] font-medium leading-[15px] text-[var(--mimir-text-subtle)]">
                     {shortcut}
                   </kbd>
                 </span>
@@ -2026,7 +2026,7 @@ function ReviewActionsPanel({
         {!incident.user_deleted && !currentStorageState.includes('Trash') && <button
           onClick={onConfirmDelete}
           disabled={disabled || incident.user_deleted}
-          className="h-10 rounded-lg border border-red-300/14 bg-red-500/[0.045] px-3 text-[12px] font-semibold text-red-100/82 transition hover:bg-red-500/[0.075] disabled:cursor-not-allowed disabled:opacity-55"
+          className="h-10 rounded-lg border border-red-300/[0.14] bg-red-500/[0.045] px-3 text-[12px] font-semibold text-red-100/[0.82] transition hover:bg-red-500/[0.075] disabled:cursor-not-allowed disabled:opacity-55"
         >
           <span className="inline-flex items-center gap-2">
             {busyAction === 'move_to_trash' && <SmallSpinner />}
@@ -2082,7 +2082,7 @@ function ReviewActionsPanel({
               value={noteDraft}
               onChange={event => onNoteDraftChange(event.target.value)}
               rows={4}
-              className="w-full resize-none rounded-lg border border-white/[0.08] bg-black/18 p-3 text-[13px] leading-5 text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/18"
+              className="w-full resize-none rounded-lg border border-white/[0.08] bg-black/[0.18] p-3 text-[13px] leading-5 text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/[0.18]"
               placeholder="Add your review note..."
             aria-label="Review note"
             />
@@ -2122,13 +2122,13 @@ function ReviewActionsPanel({
         </div>
       )}
       {actionError && (
-        <div className="mt-4 rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/86">
+        <div className="mt-4 rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/[0.86]">
           <div>{actionError}</div>
           {actionDetails && (
             <button
               type="button"
               onClick={() => setShowActionDetails(value => !value)}
-              className="mt-2 rounded-md border border-red-100/18 bg-black/18 px-2.5 py-1 text-[11px] font-semibold text-red-50/86 transition hover:bg-black/30"
+              className="mt-2 rounded-md border border-red-100/[0.18] bg-black/[0.18] px-2.5 py-1 text-[11px] font-semibold text-red-50/[0.86] transition hover:bg-black/30"
             >
               {showActionDetails ? 'Hide details' : 'Show details'}
             </button>
@@ -2735,7 +2735,7 @@ export function IncidentViewerScreen({
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_352px]">
           <div className="min-w-0">
-            <section className="rounded-[24px] border border-white/[0.045] bg-black/16 p-2.5 shadow-[0_24px_78px_rgba(0,0,0,0.32)]">
+            <section className="rounded-[24px] border border-white/[0.045] bg-black/[0.16] p-2.5 shadow-[0_24px_78px_rgba(0,0,0,0.32)]">
               <CrashSafeBoundary
                 title="Video player error"
                 incidentId={incidentActionId(incident)}
@@ -2972,7 +2972,7 @@ export function IncidentViewerScreen({
                 disabled={busyAction !== null}
                 className={`h-10 rounded-lg border px-4 text-[13px] font-semibold transition disabled:cursor-wait disabled:opacity-60 ${
                   deleteChoice === 'delete'
-                    ? 'border-red-300/20 bg-red-500/12 text-red-100 hover:bg-red-500/18'
+                    ? 'border-red-300/20 bg-red-500/[0.12] text-red-100 hover:bg-red-500/[0.18]'
                     : 'border-white/[0.12] bg-white/[0.06] text-[var(--mimir-text)] hover:bg-white/[0.1]'
                 }`}
               >

@@ -80,7 +80,7 @@ function formatScanMode(value: ScanMode) {
 function StageIcon({ status }: { status: string }) {
   if (status === 'complete') {
     return (
-      <span aria-hidden="true" className="grid h-5 w-5 place-items-center rounded-full bg-white/14 text-[12px] font-semibold text-[var(--mimir-text)]">
+      <span aria-hidden="true" className="grid h-5 w-5 place-items-center rounded-full bg-white/[0.14] text-[12px] font-semibold text-[var(--mimir-text)]">
         <span className="h-1.5 w-1.5 rounded-full bg-[var(--mimir-accent)]" />
       </span>
     )
@@ -96,9 +96,9 @@ function StageIcon({ status }: { status: string }) {
     )
   }
   if (status === 'error') {
-    return <span className="grid h-5 w-5 place-items-center rounded-full border border-red-200/30 bg-red-500/12 text-[12px] font-semibold text-red-100">!</span>
+    return <span className="grid h-5 w-5 place-items-center rounded-full border border-red-200/30 bg-red-500/[0.12] text-[12px] font-semibold text-red-100">!</span>
   }
-  return <span className="h-5 w-5 shrink-0 rounded-full border border-white/16 bg-black/20" />
+  return <span className="h-5 w-5 shrink-0 rounded-full border border-white/[0.16] bg-black/20" />
 }
 
 export function ActiveScanStatus({
@@ -173,7 +173,7 @@ export function ActiveScanStatus({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-full border border-[var(--mimir-border)] bg-black/18 px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
+          <div className="inline-flex rounded-full border border-[var(--mimir-border)] bg-black/[0.18] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
             {formatScanMode(scanMode)}
           </div>
           {isAnalyzing && (
@@ -184,7 +184,7 @@ export function ActiveScanStatus({
         </div>
       </div>
 
-      <div className="mt-5 rounded-lg bg-black/18 p-4">
+      <div className="mt-5 rounded-lg bg-black/[0.18] p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">{formatStage(scanProgress?.stage)}</div>
@@ -220,7 +220,7 @@ export function ActiveScanStatus({
               key={stage.label}
               role="listitem"
               aria-current={status === 'active' ? 'step' : undefined}
-              className={`flex items-center gap-3 rounded-md border px-3 py-2 text-[13px] transition ${status === 'active' ? 'border-[rgba(157,183,170,0.24)] bg-[var(--mimir-accent-soft)] text-[var(--mimir-text)] shadow-[0_0_28px_rgba(157,183,170,0.06)]' : status === 'complete' ? 'border-[var(--mimir-border)] bg-white/[0.025] text-[var(--mimir-text)]' : status === 'error' ? 'border-red-300/20 bg-red-500/10 text-red-100' : 'border-[var(--mimir-border)] bg-black/18 text-[var(--mimir-text-subtle)]'}`}
+              className={`flex items-center gap-3 rounded-md border px-3 py-2 text-[13px] transition ${status === 'active' ? 'border-[rgba(157,183,170,0.24)] bg-[var(--mimir-accent-soft)] text-[var(--mimir-text)] shadow-[0_0_28px_rgba(157,183,170,0.06)]' : status === 'complete' ? 'border-[var(--mimir-border)] bg-white/[0.025] text-[var(--mimir-text)]' : status === 'error' ? 'border-red-300/20 bg-red-500/10 text-red-100' : 'border-[var(--mimir-border)] bg-black/[0.18] text-[var(--mimir-text-subtle)]'}`}
             >
               <StageIcon status={status} />
               <span>{stage.label}</span>

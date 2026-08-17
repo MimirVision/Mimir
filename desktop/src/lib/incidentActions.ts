@@ -207,11 +207,11 @@ export function actionButtonTone(status: string, active: boolean) {
   if (severity === 'REVIEW') {
     return active
       ? 'border-[rgba(173,139,85,0.42)] bg-[rgba(173,139,85,0.18)] text-amber-100'
-      : 'border-[rgba(173,139,85,0.18)] bg-[rgba(173,139,85,0.07)] text-amber-100/78 hover:bg-[rgba(173,139,85,0.12)]'
+      : 'border-[rgba(173,139,85,0.18)] bg-[rgba(173,139,85,0.07)] text-amber-100/[0.78] hover:bg-[rgba(173,139,85,0.12)]'
   }
 
   return active
-    ? 'border-white/24 bg-white/[0.095] text-[var(--mimir-text)]'
+    ? 'border-white/[0.24] bg-white/[0.095] text-[var(--mimir-text)]'
     : 'border-white/[0.075] bg-white/[0.025] text-[var(--mimir-text-muted)] hover:bg-white/[0.05] hover:text-[var(--mimir-text)]'
 }
 

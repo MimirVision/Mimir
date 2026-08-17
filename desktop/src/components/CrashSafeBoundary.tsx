@@ -148,7 +148,7 @@ export class CrashSafeBoundary extends Component<CrashSafeBoundaryProps, CrashSa
           {this.props.title || 'Incident error'}
         </div>
         <h2 className="mt-3 text-[22px] font-semibold text-red-50">Mimir could not open this incident.</h2>
-        <p className="mt-2 text-[13px] leading-6 text-red-100/78">
+        <p className="mt-2 text-[13px] leading-6 text-red-100/[0.78]">
           The rest of the app is still running. Diagnostics were written to Documents\Mimir Logs\app_crash_log.txt.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">

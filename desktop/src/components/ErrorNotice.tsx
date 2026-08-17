@@ -29,7 +29,7 @@ export function ErrorNotice({ error, info, className = '' }: ErrorNoticeProps) {
   return (
     <div
       role="alert"
-      className={`rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/86 ${className}`}
+      className={`rounded-lg border border-red-300/20 bg-red-500/10 p-3 text-[12px] leading-5 text-red-100/[0.86] ${className}`}
     >
       <div className="whitespace-pre-wrap">{error.message}</div>
       {error.detail && (

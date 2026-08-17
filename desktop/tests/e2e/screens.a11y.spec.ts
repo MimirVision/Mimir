@@ -119,14 +119,16 @@ test.describe('incident screens', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
   })
 
-  // UNRESOLVED. axe reports ~58 serious contrast violations on this screen, all
-  // computing the background as #ffffff. The app is dark, and the same check is
-  // clean on the viewer, so this is either an axe blind spot with the
-  // CSS-variable gradient backgrounds or a real missing base colour. Adding an
-  // explicit background-color to the library root did not change the result.
-  // Left failing on purpose rather than relaxed to green: the numbers are real
-  // output and the cause has not been established.
-  test.fixme('the incident library has no serious violations', async ({ page }) => {
+  // This was skipped as unresolved, on the theory that axe had a blind spot with
+  // the gradient backgrounds because it computed the background as #ffffff.
+  //
+  // axe was right. The search input's `bg-black/16` was never generated -- 16 is
+  // not on Tailwind's opacity scale, so the class was silently dropped and the
+  // input fell back to the browser's default white, with cream text on it at a
+  // contrast of 1.12. You could not read what you typed. The fix was to write
+  // the opacity as an exact arbitrary value, here and in the other 170 places
+  // the same footgun had swallowed a style.
+  test('the incident library has no serious violations', async ({ page }) => {
     await page.getByRole('button', { name: 'Back to latest session' }).click()
     await expect(page.locator('article').first()).toBeVisible()
 

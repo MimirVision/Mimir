@@ -117,7 +117,7 @@ export function OutboxPanel() {
   const isBusy = isRetryingAll || retryingId !== null
 
   return (
-    <details className="mt-4 rounded-lg border border-white/[0.045] bg-black/12 p-3" open={unsentCount > 0}>
+    <details className="mt-4 rounded-lg border border-white/[0.045] bg-black/[0.12] p-3" open={unsentCount > 0}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[12px] font-semibold text-[var(--mimir-text-muted)]">
         <span>Submissions</span>
         <span className="text-[11px] font-normal text-[var(--mimir-text-subtle)]">{outboxSummary(entries)}</span>
@@ -146,7 +146,7 @@ export function OutboxPanel() {
           return (
             <li
               key={item.package_id}
-              className="rounded-lg border border-white/[0.055] bg-black/16 p-3 text-[12px] leading-5"
+              className="rounded-lg border border-white/[0.055] bg-black/[0.16] p-3 text-[12px] leading-5"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-semibold text-[var(--mimir-text)]">{outboxKindLabel(item.kind)}</span>
@@ -158,10 +158,10 @@ export function OutboxPanel() {
               <div
                 className={
                   state === 'sent'
-                    ? 'mt-1 text-emerald-100/78'
+                    ? 'mt-1 text-emerald-100/[0.78]'
                     : state === 'cannot_send'
                       ? 'mt-1 text-red-100/80'
-                      : 'mt-1 text-amber-100/78'
+                      : 'mt-1 text-amber-100/[0.78]'
                 }
               >
                 {outboxStateLabel(state)}

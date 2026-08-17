@@ -79,7 +79,7 @@ export function ModelUpdatePanel() {
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-white/[0.055] bg-black/16 p-4">
+    <div className="mt-4 rounded-lg border border-white/[0.055] bg-black/[0.16] p-4">
       <div className="text-[14px] font-semibold text-[var(--mimir-text)]">Detector model</div>
       <p className="mt-1 max-w-[560px] text-[12px] leading-5 text-[var(--mimir-text-subtle)]">
         Mimir ships with a stock detection model. A validated improvement can be installed from a
@@ -88,7 +88,7 @@ export function ModelUpdatePanel() {
 
       <div className="mt-3 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
         {statusError ? (
-          <span className="text-red-100/78">{statusError.message}</span>
+          <span className="text-red-100/[0.78]">{statusError.message}</span>
         ) : status?.installed ? (
           <span>
             Using installed update: <span className="text-[var(--mimir-text)]">{status.detector_id} {status.detector_version}</span>
@@ -108,7 +108,7 @@ export function ModelUpdatePanel() {
       </button>
 
       {installMessage && (
-        <p className="mt-2 text-[12px] leading-5 text-emerald-100/78">{installMessage}</p>
+        <p className="mt-2 text-[12px] leading-5 text-emerald-100/[0.78]">{installMessage}</p>
       )}
       <ErrorNotice error={installError} className="mt-2" />
     </div>

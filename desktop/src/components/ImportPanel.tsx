@@ -161,7 +161,7 @@ function SystemStatusPill({
   if (isCheckingSystem) {
     return (
       <div className="flex h-10 items-center gap-2 rounded-full bg-white/[0.035] px-4 text-[13px] text-[var(--mimir-text-muted)]">
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/16 border-t-white/70" />
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/[0.16] border-t-white/70" />
         Checking system
       </div>
     )
@@ -172,7 +172,7 @@ function SystemStatusPill({
   }
 
   return (
-    <div className="flex h-10 items-center gap-2 rounded-full border border-[rgba(173,139,85,0.24)] bg-[rgba(173,139,85,0.10)] px-4 text-[13px] text-amber-100/88">
+    <div className="flex h-10 items-center gap-2 rounded-full border border-[rgba(173,139,85,0.24)] bg-[rgba(173,139,85,0.10)] px-4 text-[13px] text-amber-100/[0.88]">
       <span className="h-2 w-2 rounded-full bg-amber-200/80" />
       Setup needed
     </div>
@@ -197,7 +197,7 @@ function ExperimentalAiSettings({
   const modelPreset = aiModelOptions.includes(model as typeof aiModelOptions[number]) ? model : 'custom'
 
   return (
-    <div className="mt-4 rounded-lg border border-white/[0.055] bg-black/16 p-4">
+    <div className="mt-4 rounded-lg border border-white/[0.055] bg-black/[0.16] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[14px] font-semibold text-[var(--mimir-text)]">
@@ -232,7 +232,7 @@ function ExperimentalAiSettings({
 
       {enabled && (
         <div className="mt-4 grid gap-3">
-          <div className="rounded-lg border border-amber-200/14 bg-amber-300/8 p-3 text-[12px] leading-5 text-amber-50/78">
+          <div className="rounded-lg border border-amber-200/[0.14] bg-amber-300/[0.08] p-3 text-[12px] leading-5 text-amber-50/[0.78]">
             Experimental: current local AI models may misread impact/contact clips. AI does not override Mimir's safety rules.
           </div>
 
@@ -250,7 +250,7 @@ function ExperimentalAiSettings({
                   const value = event.currentTarget.value
                   onModelChange(value === 'custom' ? '' : value)
                 }}
-                className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
+                className="h-10 rounded-lg border border-white/[0.08] bg-black/[0.28] px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/[0.24]"
               >
                 {aiModelOptions.map(option => (
                   <option key={option} value={option}>{option}</option>
@@ -266,7 +266,7 @@ function ExperimentalAiSettings({
                   value={model}
                   onChange={event => onModelChange(event.currentTarget.value)}
                   placeholder="example: qwen2.5vl:7b"
-                  className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/24"
+                  className="h-10 rounded-lg border border-white/[0.08] bg-black/[0.28] px-3 text-[13px] text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/[0.24]"
                 />
               </label>
             )}
@@ -276,7 +276,7 @@ function ExperimentalAiSettings({
               <select
                 value={timeoutSec}
                 onChange={event => onTimeoutSecChange(Number(event.currentTarget.value) as AiTimeoutSec)}
-                className="h-10 rounded-lg border border-white/[0.08] bg-black/28 px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/24"
+                className="h-10 rounded-lg border border-white/[0.08] bg-black/[0.28] px-3 text-[13px] text-[var(--mimir-text)] outline-none transition focus:border-white/[0.24]"
               >
                 {aiTimeoutOptions.map(option => (
                   <option key={option} value={option}>{option} seconds</option>
@@ -330,14 +330,14 @@ function LocalAiSetupAssistant({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-[13px] font-semibold text-green-100/90">AI review ready.</div>
-            <p className="mt-1 text-[12px] leading-5 text-green-100/68">
+            <p className="mt-1 text-[12px] leading-5 text-green-100/[0.68]">
               Mimir is ready to analyze footage.
             </p>
           </div>
           <button
             type="button"
             onClick={onOpen}
-            className="rounded-md border border-white/10 bg-black/18 px-3 py-2 text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.045]"
+            className="rounded-md border border-white/10 bg-black/[0.18] px-3 py-2 text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.045]"
           >
             Details
           </button>
@@ -351,10 +351,10 @@ function LocalAiSetupAssistant({
       <div className="mt-4 rounded-lg border border-[rgba(173,139,85,0.22)] bg-[rgba(173,139,85,0.08)] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[13px] font-semibold text-amber-100/92">
+            <div className="text-[13px] font-semibold text-amber-100/[0.92]">
               AI review is not ready.
             </div>
-            <p className="mt-1 text-[12px] leading-5 text-amber-100/72">
+            <p className="mt-1 text-[12px] leading-5 text-amber-100/[0.72]">
               Mimir needs to finish setup before scanning.
             </p>
           </div>
@@ -391,23 +391,23 @@ function LocalAiSetupAssistant({
       <div className="mt-4 rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
         {isCheckingLocalAi ? (
           <div className="flex items-center gap-3 text-[13px] text-[var(--mimir-text-muted)]">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/16 border-t-white/70" />
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/[0.16] border-t-white/70" />
             Checking AI review setup...
           </div>
         ) : ready ? (
           <div>
             <div className="text-[13px] font-semibold text-green-100/90">AI review ready.</div>
-            <p className="mt-2 text-[12px] leading-5 text-green-100/68">
+            <p className="mt-2 text-[12px] leading-5 text-green-100/[0.68]">
               Mimir can analyze footage with the configured review model.
             </p>
           </div>
         ) : engineMissing ? (
           <div>
-            <div className="text-[13px] font-semibold text-amber-100/92">Local AI setup needs repair</div>
-            <p className="mt-2 text-[12px] leading-5 text-amber-100/72">
+            <div className="text-[13px] font-semibold text-amber-100/[0.92]">Local AI setup needs repair</div>
+            <p className="mt-2 text-[12px] leading-5 text-amber-100/[0.72]">
               Mimir needs local AI setup to review footage on your device.
             </p>
-            <p className="mt-2 text-[12px] leading-5 text-amber-100/64">
+            <p className="mt-2 text-[12px] leading-5 text-amber-100/[0.64]">
               Install it, then return to Mimir and click Recheck.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -421,7 +421,7 @@ function LocalAiSetupAssistant({
               <button
                 type="button"
                 onClick={onRecheck}
-                className="rounded-md border border-white/10 bg-black/18 px-3 py-2 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.045]"
+                className="rounded-md border border-white/10 bg-black/[0.18] px-3 py-2 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.045]"
               >
                 Recheck
               </button>
@@ -429,11 +429,11 @@ function LocalAiSetupAssistant({
           </div>
         ) : modelMissing ? (
           <div>
-            <div className="text-[13px] font-semibold text-amber-100/92">Local AI setup is incomplete</div>
-            <p className="mt-2 text-[12px] leading-5 text-amber-100/72">
+            <div className="text-[13px] font-semibold text-amber-100/[0.92]">Local AI setup is incomplete</div>
+            <p className="mt-2 text-[12px] leading-5 text-amber-100/[0.72]">
               Mimir needs to download the local review model before scanning. This can take several GB.
             </p>
-            <div className="mt-3 rounded-md border border-amber-100/12 bg-black/20 p-3 text-[12px] leading-5 text-amber-100/72">
+            <div className="mt-3 rounded-md border border-amber-100/[0.12] bg-black/20 p-3 text-[12px] leading-5 text-amber-100/[0.72]">
               The model may require several GB of free disk space.
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -441,7 +441,7 @@ function LocalAiSetupAssistant({
                 type="button"
                 onClick={onPullModel}
                 disabled={isPullingModel}
-                className="inline-flex items-center gap-2 rounded-md bg-[var(--mimir-text)] px-3 py-2 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-wait disabled:bg-white/22 disabled:text-white/50"
+                className="inline-flex items-center gap-2 rounded-md bg-[var(--mimir-text)] px-3 py-2 text-[12px] font-semibold text-black transition hover:bg-white disabled:cursor-wait disabled:bg-white/[0.22] disabled:text-white/50"
               >
                 {isPullingModel && (
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-black/20 border-t-black/80" />
@@ -452,7 +452,7 @@ function LocalAiSetupAssistant({
                 type="button"
                 onClick={onRecheck}
                 disabled={isPullingModel}
-                className="rounded-md border border-white/10 bg-black/18 px-3 py-2 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.045] disabled:cursor-wait disabled:opacity-60"
+                className="rounded-md border border-white/10 bg-black/[0.18] px-3 py-2 text-[12px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.045] disabled:cursor-wait disabled:opacity-60"
               >
                 Recheck
               </button>
@@ -460,20 +460,20 @@ function LocalAiSetupAssistant({
           </div>
         ) : (
           <div>
-            <div className="text-[13px] font-semibold text-amber-100/92">
+            <div className="text-[13px] font-semibold text-amber-100/[0.92]">
               AI review is not ready.
             </div>
-            <p className="mt-2 text-[12px] leading-5 text-amber-100/72">
+            <p className="mt-2 text-[12px] leading-5 text-amber-100/[0.72]">
               Mimir needs to finish setup before scanning.
             </p>
           </div>
         )}
 
         {(isPullingModel || installLine || installResult || setupError) && (
-          <div className="mt-4 rounded-md border border-white/[0.08] bg-black/24 p-3">
+          <div className="mt-4 rounded-md border border-white/[0.08] bg-black/[0.24] p-3">
             <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--mimir-text)]">
               {isPullingModel && (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/16 border-t-white/70" />
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/[0.16] border-t-white/70" />
               )}
               {isPullingModel ? 'Downloading local vision model' : installResult?.ok ? 'Install complete' : 'Install status'}
             </div>
@@ -483,7 +483,7 @@ function LocalAiSetupAssistant({
               </div>
             )}
             {installResult?.ok && (
-              <div className="mt-2 text-[12px] leading-5 text-green-100/76">{installResult.message}</div>
+              <div className="mt-2 text-[12px] leading-5 text-green-100/[0.76]">{installResult.message}</div>
             )}
             {(setupError || installResult?.ok === false) && (
               <div className="mt-2 text-[12px] leading-5 text-red-100/80">
@@ -493,7 +493,7 @@ function LocalAiSetupAssistant({
           </div>
         )}
 
-        <details className="mt-4 rounded-md border border-white/[0.08] bg-black/18 p-3">
+        <details className="mt-4 rounded-md border border-white/[0.08] bg-black/[0.18] p-3">
           <summary className="cursor-pointer text-[12px] font-medium text-[var(--mimir-text-muted)]">
             Technical details
           </summary>
@@ -515,24 +515,24 @@ function SystemCheckWarning({ failures }: { failures: SystemCheckItem[] }) {
 
   return (
     <div className="mb-4 rounded-lg border border-[rgba(173,139,85,0.24)] bg-[rgba(173,139,85,0.09)] p-4">
-      <div className="text-[14px] font-semibold text-amber-100/92">Setup warning</div>
-      <p className="mt-2 text-[13px] leading-6 text-amber-100/78">
+      <div className="text-[14px] font-semibold text-amber-100/[0.92]">Setup warning</div>
+      <p className="mt-2 text-[13px] leading-6 text-amber-100/[0.78]">
         Mimir found a local requirement that needs attention before scanning works reliably.
       </p>
 
       <div className="mt-3 grid gap-3">
         {failures.map(item => (
-          <div key={item.id} className="rounded-lg border border-amber-100/12 bg-black/16 p-3">
+          <div key={item.id} className="rounded-lg border border-amber-100/[0.12] bg-black/[0.16] p-3">
             <div className="text-[13px] font-semibold text-amber-50/95">{item.message}</div>
-            <div className="mt-2 text-[12px] leading-5 text-amber-100/72">{item.why_it_matters}</div>
-            <div className="mt-2 text-[12px] leading-5 text-amber-100/86">{item.suggested_fix}</div>
+            <div className="mt-2 text-[12px] leading-5 text-amber-100/[0.72]">{item.why_it_matters}</div>
+            <div className="mt-2 text-[12px] leading-5 text-amber-100/[0.86]">{item.suggested_fix}</div>
 
             {item.technical_details && (
-              <details className="mt-3 rounded-md border border-amber-100/12 bg-black/20 p-3">
+              <details className="mt-3 rounded-md border border-amber-100/[0.12] bg-black/20 p-3">
                 <summary className="cursor-pointer text-[12px] font-medium text-amber-100/80">
                   Technical details
                 </summary>
-                <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-amber-50/68">
+                <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-amber-50/[0.68]">
                   {item.technical_details}
                 </pre>
               </details>
@@ -571,7 +571,7 @@ function ReadinessPanel({
     return (
       <div className="mb-4 rounded-lg border border-[var(--mimir-border)] bg-white/[0.025] p-4">
         <div className="flex items-center gap-3">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/16 border-t-white/70" />
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/[0.16] border-t-white/70" />
           <div>
             <div className="text-[14px] font-semibold text-[var(--mimir-text)]">Checking Mimir setup...</div>
             <p className="mt-1 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
@@ -608,7 +608,7 @@ function ReadinessPanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-[15px] font-semibold text-red-50">{title}</div>
-            <p className="mt-2 text-[13px] leading-6 text-red-100/78">
+            <p className="mt-2 text-[13px] leading-6 text-red-100/[0.78]">
               {description}
             </p>
           </div>
@@ -616,7 +616,7 @@ function ReadinessPanel({
             <button
               type="button"
               onClick={onRecheckSystem}
-              className="rounded-lg border border-red-100/16 bg-black/18 px-4 py-2.5 text-[13px] font-semibold text-red-50 transition hover:bg-white/[0.045]"
+              className="rounded-lg border border-red-100/[0.16] bg-black/[0.18] px-4 py-2.5 text-[13px] font-semibold text-red-50 transition hover:bg-white/[0.045]"
             >
               Recheck
             </button>
@@ -624,7 +624,7 @@ function ReadinessPanel({
               <button
                 type="button"
                 onClick={() => setShowDetails(value => !value)}
-                className="rounded-lg border border-red-100/16 bg-black/18 px-4 py-2.5 text-[13px] font-semibold text-red-100/80 transition hover:bg-white/[0.045]"
+                className="rounded-lg border border-red-100/[0.16] bg-black/[0.18] px-4 py-2.5 text-[13px] font-semibold text-red-100/80 transition hover:bg-white/[0.045]"
               >
                 Show details
               </button>
@@ -632,7 +632,7 @@ function ReadinessPanel({
           </div>
         </div>
         {details && showDetails && (
-          <div className="mt-3 rounded-md border border-red-200/14 bg-black/22 p-3">
+          <div className="mt-3 rounded-md border border-red-200/[0.14] bg-black/[0.22] p-3">
             <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-red-50/70">
               {details}
             </pre>
@@ -649,7 +649,7 @@ function ReadinessPanel({
     return (
       <div className="mb-4 rounded-lg border border-[var(--mimir-border)] bg-white/[0.025] p-4">
         <div className="flex items-center gap-3">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/16 border-t-white/70" />
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/[0.16] border-t-white/70" />
           <div>
             <div className="text-[15px] font-semibold text-[var(--mimir-text)]">Checking AI review...</div>
             <p className="mt-1 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
@@ -678,7 +678,7 @@ function ReadinessPanel({
             <div className="text-[15px] font-semibold text-amber-50">
               Mimir needs to finish setup before scanning.
             </div>
-            <p className="mt-2 text-[13px] leading-6 text-amber-100/78">
+            <p className="mt-2 text-[13px] leading-6 text-amber-100/[0.78]">
               AI review is not ready.
             </p>
           </div>
@@ -693,14 +693,14 @@ function ReadinessPanel({
             <button
               type="button"
               onClick={onRecheckLocalAi}
-              className="rounded-lg border border-white/10 bg-black/18 px-4 py-2.5 text-[13px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.045]"
+              className="rounded-lg border border-white/10 bg-black/[0.18] px-4 py-2.5 text-[13px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.045]"
             >
               Recheck
             </button>
             <button
               type="button"
               onClick={() => setShowDetails(value => !value)}
-              className="rounded-lg border border-white/10 bg-black/18 px-4 py-2.5 text-[13px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.045]"
+              className="rounded-lg border border-white/10 bg-black/[0.18] px-4 py-2.5 text-[13px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.045]"
             >
               Show details
             </button>
@@ -708,7 +708,7 @@ function ReadinessPanel({
         </div>
 
         {showDetails && (
-          <pre className="mt-4 max-h-44 overflow-auto whitespace-pre-wrap rounded-md border border-amber-100/12 bg-black/24 p-3 text-[11px] leading-5 text-amber-50/72">
+          <pre className="mt-4 max-h-44 overflow-auto whitespace-pre-wrap rounded-md border border-amber-100/[0.12] bg-black/[0.24] p-3 text-[11px] leading-5 text-amber-50/[0.72]">
             {detailText || 'No details available.'}
           </pre>
         )}
@@ -841,7 +841,7 @@ export function ImportPanel({
               )}
 
               {hasLatestSession && (
-                <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-white/[0.055] bg-black/18 px-4 py-3">
+                <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-white/[0.055] bg-black/[0.18] px-4 py-3">
                   <div>
                     <div className="text-[13px] font-semibold text-[var(--mimir-text)]">Latest session is still open</div>
                     <div className="mt-1 text-[12px] text-[var(--mimir-text-subtle)]">
@@ -859,7 +859,7 @@ export function ImportPanel({
               )}
 
               {sessionHistory.length > 1 && (
-                <details className="mb-4 rounded-xl border border-white/[0.05] bg-black/12 px-4 py-3">
+                <details className="mb-4 rounded-xl border border-white/[0.05] bg-black/[0.12] px-4 py-3">
                   <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)]">
                     Recent sessions
                   </summary>
@@ -924,7 +924,7 @@ export function ImportPanel({
                 className={`group flex min-h-[268px] flex-1 items-center justify-center rounded-2xl border border-dashed px-6 text-center transition disabled:cursor-wait disabled:opacity-70 ${
                   isDraggingFolder
                     ? 'border-[rgba(157,183,170,0.46)] bg-[var(--mimir-accent-soft)]'
-                    : 'border-[var(--mimir-border-strong)] bg-black/22 hover:border-[rgba(157,183,170,0.28)] hover:bg-white/[0.032]'
+                    : 'border-[var(--mimir-border-strong)] bg-black/[0.22] hover:border-[rgba(157,183,170,0.28)] hover:bg-white/[0.032]'
                 }`}
               >
                 <div className="max-w-[520px]">
@@ -978,7 +978,7 @@ export function ImportPanel({
                           Pick how deeply Mimir should review this folder.
                         </p>
                       </div>
-                      <div className="rounded-full border border-white/[0.08] bg-black/18 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.13em] text-[var(--mimir-text-subtle)]">
+                      <div className="rounded-full border border-white/[0.08] bg-black/[0.18] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.13em] text-[var(--mimir-text-subtle)]">
                         Recommended: Balanced
                       </div>
                     </div>
@@ -995,8 +995,8 @@ export function ImportPanel({
                             disabled={isWorking}
                             className={`rounded-lg border p-3 text-left transition disabled:cursor-wait disabled:opacity-65 ${
                               active
-                                ? 'border-white/22 bg-white/[0.07]'
-                                : 'border-[var(--mimir-border)] bg-black/18 hover:border-white/16 hover:bg-white/[0.035]'
+                                ? 'border-white/[0.22] bg-white/[0.07]'
+                                : 'border-[var(--mimir-border)] bg-black/[0.18] hover:border-white/[0.16] hover:bg-white/[0.035]'
                             }`}
                           >
                             <span className="flex items-center gap-2">
@@ -1027,7 +1027,7 @@ export function ImportPanel({
                       <button
                         onClick={onAnalyze}
                         disabled={!canAnalyze}
-                        className="h-12 rounded-full bg-[var(--mimir-text)] px-7 text-[15px] font-semibold text-black shadow-[0_16px_38px_rgba(255,255,255,0.075)] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/35 disabled:shadow-none"
+                        className="h-12 rounded-full bg-[var(--mimir-text)] px-7 text-[15px] font-semibold text-black shadow-[0_16px_38px_rgba(255,255,255,0.075)] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-white/[0.12] disabled:text-white/35 disabled:shadow-none"
                       >
                         Analyze footage
                       </button>
@@ -1036,7 +1036,7 @@ export function ImportPanel({
                 </div>
               )}
 
-              <details className="mt-4 rounded-lg border border-white/[0.045] bg-black/12 p-3">
+              <details className="mt-4 rounded-lg border border-white/[0.045] bg-black/[0.12] p-3">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[12px] font-semibold text-[var(--mimir-text-muted)]">
                   <span>Labs</span>
                   <span className="text-[11px] font-normal text-[var(--mimir-text-subtle)]">

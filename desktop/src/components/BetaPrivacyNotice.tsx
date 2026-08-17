@@ -15,9 +15,9 @@ export function BetaPrivacyNotice({ open, onAccept }: BetaPrivacyNoticeProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/74 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/[0.74] p-4 backdrop-blur-sm">
       <section className="w-full max-w-[560px] rounded-[24px] border border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.06),transparent_34%),var(--mimir-bg-depth)] p-6 shadow-[0_34px_110px_rgba(0,0,0,0.68)] sm:p-7">
-        <div className="mb-5 h-1 w-12 rounded-full bg-white/24" />
+        <div className="mb-5 h-1 w-12 rounded-full bg-white/[0.24]" />
         <div className="text-[12px] font-medium uppercase tracking-[0.22em] text-[var(--mimir-text-subtle)]">
           Mimir Free Beta
         </div>
@@ -69,7 +69,7 @@ export function BetaNoticeFooter({ onOpen }: BetaNoticeFooterProps) {
     <footer className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-4">
       <button
         onClick={onOpen}
-        className="pointer-events-auto rounded-full border border-white/[0.075] bg-black/38 px-3.5 py-2 text-[11px] font-medium text-[var(--mimir-text-subtle)] shadow-[0_12px_34px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:border-white/14 hover:bg-black/52 hover:text-[var(--mimir-text-muted)]"
+        className="pointer-events-auto rounded-full border border-white/[0.075] bg-black/[0.38] px-3.5 py-2 text-[11px] font-medium text-[var(--mimir-text-subtle)] shadow-[0_12px_34px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:border-white/[0.14] hover:bg-black/[0.52] hover:text-[var(--mimir-text-muted)]"
       >
         Beta notice
       </button>

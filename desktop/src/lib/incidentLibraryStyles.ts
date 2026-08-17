@@ -22,15 +22,15 @@ export function severityStripeClass(severity: string) {
 
 export function storageBadgeClass(state: string) {
   if (state === 'In Mimir Library') {
-    return 'border-green-300/18 bg-green-500/10 text-green-100/86'
+    return 'border-green-300/[0.18] bg-green-500/10 text-green-100/[0.86]'
   }
 
   if (state === 'In Mimir Trash') {
-    return 'border-red-300/18 bg-red-500/10 text-red-100/86'
+    return 'border-red-300/[0.18] bg-red-500/10 text-red-100/[0.86]'
   }
 
   if (state === 'Missing file') {
-    return 'border-amber-300/20 bg-amber-500/10 text-amber-100/88'
+    return 'border-amber-300/20 bg-amber-500/10 text-amber-100/[0.88]'
   }
 
   return 'border-white/[0.08] bg-white/[0.035] text-[var(--mimir-text-muted)]'

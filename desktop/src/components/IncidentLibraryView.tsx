@@ -80,7 +80,7 @@ function IncidentImage({ incident, large = false }: { incident: MimirIncident; l
 
   return (
     <div
-      className={`relative overflow-hidden rounded-md bg-black/32 ${
+      className={`relative overflow-hidden rounded-md bg-black/[0.32] ${
         large ? 'min-h-[320px]' : 'h-[154px]'
       }`}
     >
@@ -180,7 +180,7 @@ function IncidentCard({
       >
         <div className="relative">
           <IncidentImage incident={incident} />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/82 via-black/28 to-transparent opacity-75 transition group-hover:opacity-95" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/[0.82] via-black/[0.28] to-transparent opacity-75 transition group-hover:opacity-95" />
           <span
             className={`absolute right-2.5 top-2.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md ${severityClass(
               severityResolution.displaySeverity,
@@ -226,7 +226,7 @@ function IncidentCard({
           checkbox inside a <button> is invalid, and a screen reader reaching
           the checkbox had no way to operate it independently of the card. */}
       {selectionMode && (
-        <label className="absolute left-2.5 top-2.5 z-20 grid h-7 w-7 place-items-center rounded-full border border-white/16 bg-black/50 backdrop-blur">
+        <label className="absolute left-2.5 top-2.5 z-20 grid h-7 w-7 place-items-center rounded-full border border-white/[0.16] bg-black/50 backdrop-blur">
           <span className="sr-only">Select this incident</span>
           <input
             type="checkbox"
@@ -405,7 +405,7 @@ function FilesDrawer({
                 const clipState = clip.trash_path ? 'Trash' : clip.library_path ? 'Library' : clip.exists === false ? 'Missing' : 'Source'
 
                 return (
-                  <div key={`${clip.camera || 'camera'}-${name || index}`} className="rounded-md bg-black/16 px-3 py-2">
+                  <div key={`${clip.camera || 'camera'}-${name || index}`} className="rounded-md bg-black/[0.16] px-3 py-2">
                     <div className="flex items-center justify-between gap-3">
                       <span className="min-w-0 truncate text-[13px] font-medium text-[var(--mimir-text)]">
                         {cameraNameLabel(clip.camera) || `Camera ${index + 1}`}
@@ -486,7 +486,7 @@ function SelectionToolbar({
         <button type="button" disabled={busy || count === 0} onClick={() => onSetStatus('REVIEW')} className="h-9 rounded-md bg-white/[0.04] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50">Mark Review</button>
         <button type="button" disabled={busy || count === 0} onClick={() => onSetStatus('IGNORE')} className="h-9 rounded-md bg-white/[0.04] px-3 text-[12px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50">Mark Ignore</button>
         <button type="button" disabled={busy || count === 0} onClick={onMoveToLibrary} className="h-9 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:bg-white/[0.06] hover:text-[var(--mimir-text)] disabled:cursor-not-allowed disabled:opacity-50">Move to Library</button>
-        <button type="button" disabled={busy || count === 0} onClick={onMoveToTrash} className="h-9 rounded-md border border-red-300/18 bg-red-500/10 px-3 text-[12px] font-semibold text-red-100/88 transition hover:bg-red-500/16 disabled:cursor-not-allowed disabled:opacity-50">Move to Mimir Trash</button>
+        <button type="button" disabled={busy || count === 0} onClick={onMoveToTrash} className="h-9 rounded-md border border-red-300/[0.18] bg-red-500/10 px-3 text-[12px] font-semibold text-red-100/[0.88] transition hover:bg-red-500/[0.16] disabled:cursor-not-allowed disabled:opacity-50">Move to Mimir Trash</button>
         <button
           type="button"
           disabled={busy || count === 0}
@@ -607,7 +607,7 @@ function TrashPanel({ onEmptied }: { onEmptied: () => Promise<MimirSession | nul
       )}
 
       {confirming && report && (
-        <div className="mt-3.5 rounded-lg border border-red-300/18 bg-red-500/[0.05] p-3.5">
+        <div className="mt-3.5 rounded-lg border border-red-300/[0.18] bg-red-500/[0.05] p-3.5">
           <p className="text-[12.5px] leading-5 text-[var(--mimir-text)]">
             Empty {report.count} file{report.count === 1 ? '' : 's'} ({formatBytes(report.bytes)})?
             {' '}The clips in here were already removed from your USB drive, so this is the last copy.
@@ -641,7 +641,7 @@ function TrashPanel({ onEmptied }: { onEmptied: () => Promise<MimirSession | nul
             <button
               onClick={() => void empty()}
               disabled={busy}
-              className="h-9 rounded-lg border border-red-300/20 bg-red-500/12 px-3.5 text-[12.5px] font-semibold text-red-100 transition hover:bg-red-500/18 disabled:cursor-wait disabled:opacity-60"
+              className="h-9 rounded-lg border border-red-300/20 bg-red-500/[0.12] px-3.5 text-[12.5px] font-semibold text-red-100 transition hover:bg-red-500/[0.18] disabled:cursor-wait disabled:opacity-60"
             >
               {busy ? 'Emptying...' : skipRecycleBin ? 'Delete permanently' : 'Empty trash'}
             </button>
@@ -1278,7 +1278,7 @@ export function IncidentLibraryView({
               }}
               className={`h-9 rounded-lg border px-3.5 text-[12px] font-semibold transition ${
                 selectionMode
-                  ? 'border-white/18 bg-white/[0.075] text-[var(--mimir-text)] hover:bg-white/[0.1]'
+                  ? 'border-white/[0.18] bg-white/[0.075] text-[var(--mimir-text)] hover:bg-white/[0.1]'
                   : 'border-white/[0.065] bg-white/[0.022] text-[var(--mimir-text-muted)] hover:bg-white/[0.055] hover:text-[var(--mimir-text)]'
               }`}
             >
@@ -1476,12 +1476,12 @@ export function IncidentLibraryView({
             </div>
           </div>
 
-          <div className="mt-4 rounded-xl border border-amber-200/14 bg-amber-300/8 px-3.5 py-2.5 text-[12px] leading-5 text-amber-50/82">
+          <div className="mt-4 rounded-xl border border-amber-200/[0.14] bg-amber-300/[0.08] px-3.5 py-2.5 text-[12px] leading-5 text-amber-50/[0.82]">
             Detection accuracy hasn't been measured against a real evaluation set yet. Review every flagged incident yourself, especially anything marked Ignore.
           </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.045] pt-4">
-            <div className="flex flex-wrap gap-2 rounded-full bg-black/16 p-1">
+            <div className="flex flex-wrap gap-2 rounded-full bg-black/[0.16] p-1">
               <FilterChip label="Important" count={counts.important} active={filter === 'IMPORTANT'} onClick={() => setFilter('IMPORTANT')} />
               <FilterChip label="Review" count={counts.review} active={filter === 'REVIEW'} onClick={() => setFilter('REVIEW')} />
               <FilterChip label="Ignore" count={counts.ignore} active={filter === 'IGNORE'} onClick={() => setFilter('IGNORE')} />
@@ -1496,7 +1496,7 @@ export function IncidentLibraryView({
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 placeholder="Search incidents"
-                className="h-10 w-full rounded-full border border-white/[0.055] bg-black/16 px-4 text-[13px] text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-[rgba(157,183,170,0.28)] focus:bg-white/[0.045]"
+                className="h-10 w-full rounded-full border border-white/[0.055] bg-black/[0.16] px-4 text-[13px] text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-[rgba(157,183,170,0.28)] focus:bg-white/[0.045]"
               />
             </label>
           </div>
@@ -1697,7 +1697,7 @@ function TechnicalDetailsModal({
           </div>
           <h2 className="mt-2 text-[24px] font-semibold text-[var(--mimir-text)]">Technical details</h2>
           {staleWarning && (
-            <div className="mt-4 rounded-lg border border-amber-300/18 bg-amber-400/10 p-3 text-[12px] leading-5 text-amber-100/90">
+            <div className="mt-4 rounded-lg border border-amber-300/[0.18] bg-amber-400/10 p-3 text-[12px] leading-5 text-amber-100/90">
               Session may be stale or generated by an older backend.
             </div>
           )}

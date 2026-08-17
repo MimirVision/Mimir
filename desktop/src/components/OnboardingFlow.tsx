@@ -46,7 +46,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
           key={step}
           className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition ${
             index === currentStep
-              ? 'border-white/24 bg-white/[0.08] text-[var(--mimir-text)]'
+              ? 'border-white/[0.24] bg-white/[0.08] text-[var(--mimir-text)]'
               : index < currentStep
                 ? 'border-white/[0.09] bg-white/[0.035] text-[var(--mimir-text-muted)]'
                 : 'border-white/[0.055] bg-black/10 text-[var(--mimir-text-subtle)]'
@@ -58,7 +58,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
                 ? 'bg-[var(--mimir-text)]'
                 : index < currentStep
                   ? 'bg-[var(--mimir-status-green)]'
-                  : 'bg-white/18'
+                  : 'bg-white/[0.18]'
             }`}
           />
           {step}
@@ -162,15 +162,15 @@ export function OnboardingFlow({ initialScanMode, onComplete }: OnboardingFlowPr
                       onClick={() => setSelectedScanMode(option.value)}
                       className={`min-h-[152px] rounded-xl border p-4 text-left transition ${
                         active
-                          ? 'border-white/26 bg-white/[0.075] shadow-[0_18px_56px_rgba(0,0,0,0.24)]'
-                          : 'border-white/[0.06] bg-white/[0.022] hover:border-white/14 hover:bg-white/[0.04]'
+                          ? 'border-white/[0.26] bg-white/[0.075] shadow-[0_18px_56px_rgba(0,0,0,0.24)]'
+                          : 'border-white/[0.06] bg-white/[0.022] hover:border-white/[0.14] hover:bg-white/[0.04]'
                       }`}
                     >
                       <span className="flex items-center justify-between gap-3">
                         <span className="text-[17px] font-semibold text-[var(--mimir-text)]">{option.title}</span>
                         <span
                           className={`grid h-5 w-5 place-items-center rounded-full border ${
-                            active ? 'border-white/70' : 'border-white/18'
+                            active ? 'border-white/70' : 'border-white/[0.18]'
                           }`}
                         >
                           {active && <span className="h-2.5 w-2.5 rounded-full bg-[var(--mimir-text)]" />}
@@ -207,7 +207,7 @@ export function OnboardingFlow({ initialScanMode, onComplete }: OnboardingFlowPr
 
         <aside className="flex flex-col justify-between rounded-[22px] border border-white/[0.065] bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.014))] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.28)]">
           <div>
-            <div className="mb-8 h-1 w-12 rounded-full bg-white/22" />
+            <div className="mb-8 h-1 w-12 rounded-full bg-white/[0.22]" />
             <div className="text-[13px] uppercase tracking-[0.18em] text-[var(--mimir-text-subtle)]">
               Setup
             </div>
