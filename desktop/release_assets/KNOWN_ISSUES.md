@@ -56,18 +56,30 @@ So Mimir rules out a bit over half, and asks you to look at the rest. Better
 than watching all 656. Nowhere near "ten instead of seven hundred", and Important
 has become a tier that essentially never fires.
 
-The cause is now understood precisely, which is worth saying plainly because it
-is not a mystery any more: almost every one of those 278 is flagged because
-something was near the car and something moved. On a parked car that is the
-permanent condition -- in a real dump, the "nearby vehicle" that triggers it
-fills 60% of the camera frame on average and sits against the bottom edge,
-which is the car's own bodywork or whatever is parked alongside, not something
-arriving.
+Almost every one of those 278 is flagged because something was near the car and
+something moved. On a parked car, that is the permanent condition.
 
-Fixing that changes how **every** incident is judged, and doing it on a hunch
-could bury a real hit-and-run. So it waits for a properly labelled set of
-footage to measure against. Contributing clips is what builds that set, and it
-is the reason the contribute button exists.
+An earlier version of this page said the "nearby vehicle" setting it off was the
+car's own bodywork or whatever is parked alongside. **That was measured on
+2026-08-17 and it is not the main cause.** Only about 12% of those detections
+sit where the car's own body is. What the measurement did find is a different
+fault: on low-contrast night footage the detector sometimes returns a box around
+the *entire frame*, sky and ground included, and calls it a vehicle. That was
+17% of them -- 104 out of 619 -- with a clean gap separating those boxes from
+every real detection, so they are unambiguous. They are now discarded.
+
+Being straight about the result: **that fix changed no verdicts.** Rescanning 25
+real events with it on and off gives the same answer both ways, because an event
+with one bogus box also has real ones. It was worth doing, since a wrong
+measurement should not feed a decision, but the number above has not moved and
+this page is not going to claim it has.
+
+So the over-flagging is still open, and the reason it is still open has not
+changed: fixing it means changing how **every** incident is judged, and doing
+that on a hunch could bury a real hit-and-run. Three tuning passes have already
+been made against 19 pieces of feedback, which is a hint, not a measurement. It
+waits for a properly labelled set of footage. Contributing clips is what builds
+that set, and it is the reason the contribute button exists.
 
 **The single most useful thing you can do is tell us when it is wrong.** The
 detector cannot improve without examples, and a clip Mimir got wrong is worth
@@ -164,8 +176,14 @@ Not bugs -- design decisions, listed because they surprise people:
 
 - **Nothing is uploaded unless you press a button.** Scanning is entirely local.
   Feedback and footage contributions are separate, explicit, per-item actions.
-- **Scanning never moves or deletes your clips.** File actions are separate
-  commands you invoke yourself.
+- **Scanning copies your clips, and never edits them.** Footage on another drive
+  is copied into your Mimir library as the scan reaches it, so the scan reads
+  from your own disk rather than the drive -- reading video off a USB stick is
+  the slowest part, and on some machines the sustained load has crashed Windows
+  partway through. Footage already on the library's drive is scanned where it
+  sits. Your originals are left alone unless you tick *Clear the drive as it
+  goes*, which is off by default and only removes an event after its copy has
+  been checked byte for byte and scanned.
 - **Contributions ask for consent details the first time.** Footage of other
   people carries obligations that feedback text does not, so the first
   contribution walks through who you are and on what basis you hold the

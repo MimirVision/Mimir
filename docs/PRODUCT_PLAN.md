@@ -23,14 +23,31 @@ Re-resolving all 4,173 incidents on this machine through the current rules:
 Everything else in this document is worth less than fixing that. A tool that
 turns 656 clips into 278 is a tool people try once.
 
-The cause is known precisely (see `§0.7` in the release plan): a detection
-counts as "close" at `bottom_ratio >= 0.86`, the bottom of a Tesla repeater
-frame is the car's own bodywork, so `contact_level` is MEDIUM on almost every
-event, which sets `possible_contact`, which blocks the `normal_traffic` rule
-that exists to say "this is just a car park".
+The mechanism is known precisely: something counts as "close", which sets
+`contact_level` MEDIUM, which sets `possible_contact`, which blocks the
+`normal_traffic` rule that exists to say "this is just a car park". The rule
+written to prevent exactly this is held shut by the thing it was written to
+prevent.
 
-**It cannot be fixed safely without labelled footage.** Which brings us to the
-thing that actually blocks everything.
+What was *not* known was why "close" fires everywhere. The answer here used to
+be the car's own bodywork filling the bottom of a repeater frame. **Measured
+2026-08-17, that is wrong**: only ~12% of close-vehicle detections fall inside
+the ego region. Two things the measurement did establish:
+
+- On low-contrast night footage the detector sometimes returns a box covering the
+  whole frame and labels it a vehicle -- 104 of 619 detections, separated from
+  every real one by an empty band, so removing them is not a judgement call.
+  Fixed, and honestly: **it changed no verdicts** on a 25-event A/B, because an
+  event with one such box also has real ones.
+- The likely structural fault is that `_contact_level_from_motion` requires
+  something close *and* a localised motion spike, computed independently, with
+  nothing requiring them to be the same object. Proximity from the car parked
+  beside you plus motion from a car driving past reads as possible contact.
+
+**That last one cannot be fixed safely without labelled footage** -- it changes
+every verdict Mimir has produced, and three tuning passes have already been made
+against 19 selection-biased labels. Which brings us to the thing that actually
+blocks everything.
 
 ---
 
