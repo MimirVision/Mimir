@@ -942,7 +942,7 @@ export function ImportPanel({
 
               <div className="mt-4">
                 <p className="text-[13px] leading-6 text-[var(--mimir-text-subtle)]">
-                  Scanning does not move or delete clips.
+                  Mimir never edits your clips, and deletes nothing unless you ask.
                 </p>
               </div>
 

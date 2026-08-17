@@ -1635,7 +1635,7 @@ export function IncidentLibraryView({
               Mimir scans locally and helps review vehicle/security footage.
             </p>
             <p className="mt-3 text-[13px] leading-6 text-[var(--mimir-text-subtle)]">
-              Scanning does not move or delete clips. File movement only happens when you choose Move to Library or Move to Mimir Trash.
+              Scanning copies clips into your library and never edits the originals. They are only removed if you asked the scan to clear the drive, or you choose Move to Library or Move to Mimir Trash.
             </p>
             <div className="mt-6 flex justify-end">
               <button

@@ -33,7 +33,7 @@ const scanModeOptions: Array<{
 
 const privacyNotes = [
   'Processing stays on this device in the beta.',
-  'Scan does not move or delete original clips.',
+  'Scan copies clips to your library and never edits the originals.',
   'Delete means Move to Mimir Trash.',
   'You can manually set status per incident.',
 ]

@@ -30,8 +30,10 @@ export function BetaPrivacyNotice({ open, onAccept }: BetaPrivacyNoticeProps) {
             Mimir is still learning. Always review important footage yourself before deleting or moving clips.
           </p>
           <p>
-            Your footage stays under your control. Scanning is local-first, and Mimir does not move or delete
-            clips during scan. You decide what to move to your Library or Mimir Trash.
+            Your footage stays under your control. Scanning is local-first. Footage on another drive is copied
+            into your Mimir library first, so the scan reads from your own disk rather than the drive; the
+            originals are left where they are unless you ask Mimir to clear the drive as it goes. You decide
+            what to move to your Library or Mimir Trash.
           </p>
           <p>
             Mimir may misclassify events. Use the feedback export feature to report mistakes.

@@ -30,6 +30,10 @@ TOP_LEVEL_EVIDENCE_FIELDS = [
     "abrupt_scene_change",
     "scene_change_score",
     "object_detection_available",
+    # How many detections were discarded for covering the whole frame. Without
+    # it a session where the detector failed on every frame is indistinguishable
+    # from one where nothing happened.
+    "frame_filling_detections",
     "strong_impact_like_motion",
     "possible_impact",
     "impact_level",

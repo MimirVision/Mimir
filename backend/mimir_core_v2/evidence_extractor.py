@@ -698,9 +698,10 @@ def _close_object_evidence(detections: list[dict]) -> dict:
         "max_width_ratio": round(max_width_ratio, 4),
         "max_height_ratio": round(max_height_ratio, 4),
         "hard_close_vehicle": hard_close_vehicle,
-        # Reported rather than silently dropped: a camera that suddenly starts
-        # returning nothing but whole-frame boxes is a detector or footage
-        # problem, and this is the only place that would ever notice.
+        # Carried through to per-camera and group evidence, so it reaches the
+        # session: a camera that starts returning nothing but whole-frame boxes
+        # is a detector or footage problem, and this count is the only thing
+        # that would distinguish it from a genuinely quiet scene.
         "frame_filling_detections": frame_filling_detections,
     }
 
@@ -1975,6 +1976,7 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
             "normal_traffic_evidence": normal_traffic,
             "sampled_frames": len(samples),
             "object_detection_sampled_frames": len(detection_samples),
+            "frame_filling_detections": int(close_evidence.get("frame_filling_detections") or 0),
         }
         camera_evidence[camera]["evidence_score"] = _camera_score(camera_evidence[camera])
 
@@ -2225,6 +2227,12 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
         "person_close_detected": person_close_detected,
         "vehicle_detected": vehicle_detected,
         "vehicle_close_detected": vehicle_close_detected,
+        # Summed across cameras. A group where this is high and nothing else
+        # fired means the detector was failing on this footage, not that the
+        # scene was quiet -- the one signal that tells those two apart.
+        "frame_filling_detections": sum(
+            int(item.get("frame_filling_detections") or 0) for item in camera_evidence.values()
+        ),
         "person_passby_detected": person_passby,
         "person_passby": person_passby,
         "person_lingering_detected": person_lingering,
