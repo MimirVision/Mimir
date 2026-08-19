@@ -94,6 +94,11 @@ impl ForgeError {
 pub struct Settings {
     #[serde(default)]
     pub dataset_root: String,
+    /// Scan output folder whose event groups are waiting for a verdict.
+    /// Separate from dataset_root: that holds what testers contributed, this is
+    /// a local scan being labelled to seed the evaluation set.
+    #[serde(default)]
+    pub scan_session: String,
     #[serde(default)]
     pub inbox: String,
     #[serde(default)]
@@ -759,6 +764,58 @@ pub async fn get_status(app: tauri::AppHandle) -> Result<Value, ForgeError> {
     })
     .await
     .map_err(|error| ForgeError::new(format!("Status task panicked: {error}")))?
+}
+
+/// Event groups from the configured scan that still need a verdict.
+///
+/// The work of deciding what "still needs labelling" means lives in
+/// build_label_worksheet.py, which the CLI uses too -- two answers to that
+/// question would drift, and the one that drifted would be the one nobody ran.
+#[tauri::command]
+pub async fn list_label_candidates(app: tauri::AppHandle, limit: u32) -> Result<Value, ForgeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let settings = read_settings(&app)?;
+        if settings.scan_session.trim().is_empty() {
+            return Err(ForgeError::new(
+                "No scan session set. Choose one in Settings, or on the Labelling screen.",
+            ));
+        }
+        let limit = limit.to_string();
+        let output = require_success(run_backend(
+            &["labels", "list", "--session", &settings.scan_session, "--limit", &limit],
+            &[],
+        )?)?;
+        parse_json_stdout(&output)
+    })
+    .await
+    .map_err(|error| ForgeError::new(format!("Label list task panicked: {error}")))?
+}
+
+/// Record one verdict. Appends, and refuses to label the same group twice.
+#[tauri::command]
+pub async fn save_label(
+    group: String,
+    severity: String,
+    category: String,
+    notes: String,
+    source_set: String,
+) -> Result<Value, ForgeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = require_success(run_backend(
+            &[
+                "labels", "save",
+                "--group", &group,
+                "--severity", &severity,
+                "--category", &category,
+                "--notes", &notes,
+                "--source-set", &source_set,
+            ],
+            &[],
+        )?)?;
+        parse_json_stdout(&output)
+    })
+    .await
+    .map_err(|error| ForgeError::new(format!("Label save task panicked: {error}")))?
 }
 
 #[tauri::command]

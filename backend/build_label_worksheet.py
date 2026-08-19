@@ -163,20 +163,18 @@ def already_labelled(labels_csv: Path) -> set[str]:
         }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--session", required=True, help="Scan output folder, or a session JSON directly.")
-    parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    parser.add_argument("--labels", default=str(DEFAULT_LABELS), help="Existing labels, to skip what is done.")
-    parser.add_argument("--include-labelled", action="store_true", help="Do not skip already-labelled groups.")
-    args = parser.parse_args()
+def pending_rows(session: dict, labels_csv: Path, include_labelled: bool = False) -> tuple[list[dict], int]:
+    """The groups still needing a verdict, most-likely-positive first.
 
-    session = load_session(Path(args.session))
+    Extracted so Forge's labelling screen and this CLI build a row the same way.
+    Two implementations of "which groups still need labelling" would drift, and
+    the one that drifted would be the one nobody ran.
+
+    Returns the rows and how many were skipped as already labelled.
+    """
+
     incidents = session.get("incidents") or []
-    if not incidents:
-        raise SystemExit("That session contains no incidents.")
-
-    done = set() if args.include_labelled else already_labelled(Path(args.labels))
+    done = set() if include_labelled else already_labelled(labels_csv)
 
     # One row per event group, keeping the most severe incident in each --
     # the group is the unit MODEL_CARD counts, not the individual clip.
@@ -213,6 +211,22 @@ def main() -> int:
         )
 
     rows.sort(key=lambda row: (-SEVERITY_RANK.get(str(row["mimir_said"]), -1), str(row["filename_or_group"])))
+    return rows, skipped
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--session", required=True, help="Scan output folder, or a session JSON directly.")
+    parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
+    parser.add_argument("--labels", default=str(DEFAULT_LABELS), help="Existing labels, to skip what is done.")
+    parser.add_argument("--include-labelled", action="store_true", help="Do not skip already-labelled groups.")
+    args = parser.parse_args()
+
+    session = load_session(Path(args.session))
+    if not (session.get("incidents") or []):
+        raise SystemExit("That session contains no incidents.")
+
+    rows, skipped = pending_rows(session, Path(args.labels), args.include_labelled)
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

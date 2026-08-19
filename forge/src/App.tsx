@@ -5,11 +5,13 @@ import { SettingsScreen } from './screens/SettingsScreen'
 import { DashboardScreen } from './screens/DashboardScreen'
 import { FeedbackScreen } from './screens/FeedbackScreen'
 import { CollectionsScreen } from './screens/CollectionsScreen'
+import { LabelScreen } from './screens/LabelScreen'
 
-type Tab = 'dashboard' | 'feedback' | 'collections' | 'settings'
+type Tab = 'dashboard' | 'labelling' | 'feedback' | 'collections' | 'settings'
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'labelling', label: 'Labelling' },
   { id: 'feedback', label: 'Feedback' },
   { id: 'collections', label: 'Collections' },
   { id: 'settings', label: 'Settings' },
@@ -70,6 +72,7 @@ export default function App() {
             onFocusConsumed={() => setFeedbackFocusId(null)}
           />
         )}
+        {tab === 'labelling' && <LabelScreen sourceSet="local_scan_set" />}
         {tab === 'collections' && <CollectionsScreen ready={configured === true} />}
         {tab === 'settings' && <SettingsScreen onSaved={checkConfigured} />}
       </main>

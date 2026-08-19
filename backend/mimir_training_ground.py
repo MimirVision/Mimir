@@ -50,6 +50,7 @@ at all, only directly to R2's S3-compatible API.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
@@ -514,7 +515,86 @@ def build_parser() -> argparse.ArgumentParser:
     collections_show.add_argument("--cvat-token", default="")
     collections_show.add_argument("--cvat-token-file", default="")
 
+    labels = commands.add_parser("labels", help="Build the locked evaluation set.")
+    labels_commands = labels.add_subparsers(dest="labels_command", required=True)
+    labels_list = labels_commands.add_parser("list", help="Groups still needing a verdict, as JSON.")
+    labels_list.add_argument("--session", required=True, help="Scan output folder, or a session JSON.")
+    labels_list.add_argument("--labels-csv", default="", help="Defaults to mimir_core_v2/benchmark_labels.csv.")
+    labels_list.add_argument("--limit", type=int, default=0, help="0 means all.")
+    labels_save = labels_commands.add_parser("save", help="Record one verdict.")
+    labels_save.add_argument("--group", required=True)
+    labels_save.add_argument("--severity", required=True, choices=("IMPORTANT", "REVIEW", "IGNORE"))
+    labels_save.add_argument("--category", required=True)
+    labels_save.add_argument("--notes", default="")
+    labels_save.add_argument("--source-set", required=True)
+    labels_save.add_argument("--labels-csv", default="")
+
     return parser
+
+
+def _labels_csv_path(value: str) -> Path:
+    return Path(value) if value.strip() else Path(__file__).resolve().parent / "mimir_core_v2" / "benchmark_labels.csv"
+
+
+def labels_list_command(args) -> int:
+    """Report the groups still needing a verdict, richest-signal first.
+
+    Reuses build_label_worksheet so the CLI and Forge agree on what "still needs
+    labelling" means; two answers to that would drift apart silently.
+    """
+
+    from build_label_worksheet import VALID_CATEGORIES, load_session, pending_rows
+
+    rows, skipped = pending_rows(load_session(Path(args.session)), _labels_csv_path(args.labels_csv))
+    if args.limit > 0:
+        rows = rows[: args.limit]
+
+    print(json.dumps({
+        "pending": rows,
+        "skipped_already_labelled": skipped,
+        "categories": list(VALID_CATEGORIES),
+    }, indent=2))
+    return 0
+
+
+def labels_save_command(args) -> int:
+    """Append one verdict to benchmark_labels.csv, refusing to double-label.
+
+    Appends rather than rewrites: this file is the evaluation set, and a
+    partial write that truncated it would destroy labelling work that cannot be
+    reconstructed.
+    """
+
+    from build_label_worksheet import VALID_CATEGORIES, already_labelled
+
+    category = args.category.strip()
+    if category not in VALID_CATEGORIES:
+        print(f"Unknown category {category!r}. Use one of: {', '.join(VALID_CATEGORIES)}", file=sys.stderr)
+        return 1
+
+    path = _labels_csv_path(args.labels_csv)
+    group = args.group.strip()
+    if group.lower() in already_labelled(path):
+        print(json.dumps({"saved": False, "reason": "already labelled", "group": group}))
+        return 0
+
+    columns = ["filename_or_group", "expected_severity", "category", "notes", "source_set"]
+    is_new = not path.is_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        if is_new:
+            writer.writeheader()
+        writer.writerow({
+            "filename_or_group": group,
+            "expected_severity": args.severity,
+            "category": category,
+            "notes": args.notes.strip(),
+            "source_set": args.source_set.strip(),
+        })
+
+    print(json.dumps({"saved": True, "group": group, "labels_csv": str(path)}))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -535,6 +615,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.collections_command == "list":
                 return collections_list_command(args)
             return collections_show_command(args)
+        if args.command == "labels":
+            if args.labels_command == "list":
+                return labels_list_command(args)
+            return labels_save_command(args)
     except (DatasetPackageError, OSError, ValueError) as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 1

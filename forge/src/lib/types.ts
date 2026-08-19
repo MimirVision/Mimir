@@ -138,3 +138,29 @@ export interface CollectionDetail {
   item_count: number
   live_cvat_tasks: LiveCvatTask[]
 }
+
+/** One event group awaiting a verdict, as build_label_worksheet builds it. */
+export interface LabelCandidate {
+  filename_or_group: string
+  source: string
+  mimir_said: string
+  impact_level: string
+  contact_level: string
+  motion_score: string
+  detected: string
+  mimir_reasons: string
+  key_moment_sec: string
+  contact_sheet: string
+}
+
+export interface LabelQueue {
+  pending: LabelCandidate[]
+  skipped_already_labelled: number
+  categories: string[]
+}
+
+export interface LabelSaveResult {
+  saved: boolean
+  reason?: string
+  group: string
+}
