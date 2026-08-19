@@ -57,6 +57,33 @@ jobs:
       - name: Build
         run: npm run build
 
+      # tauri-build checks that every resource named in tauri.conf.json exists,
+      # and fails the build if one does not. The sidecars are build artifacts and
+      # are gitignored, so in a fresh checkout none of them are there and
+      # `cargo test` died with:
+      #
+      #   resource path `resources\mimir-backend\mimir-core-v2-scan.exe` doesn't exist
+      #
+      # That is why this job failed on every run since it was written. Building
+      # the real sidecars here would add PyInstaller to every desktop push for no
+      # benefit: these are Rust unit tests for the Outbox and its upload paths,
+      # and they never execute a sidecar. Empty stand-ins satisfy the check.
+      # release.yml builds the real ones and verifies them properly.
+      - name: Stand in for the packaged sidecars
+        run: |
+          $resources = "src-tauri\resources\mimir-backend"
+          New-Item -ItemType Directory -Force -Path $resources | Out-Null
+          $names = @(
+            "mimir-core-v2-scan.exe", "mimir-core-v2-ai-enrich.exe",
+            "mimir-core-v2-actions.exe", "mimir-core-v2-dataset.exe",
+            "mimir-core-v2-model-update.exe", "age.exe", "AGE-LICENSE.txt"
+          )
+          foreach ($name in $names) {
+            $path = Join-Path $resources $name
+            if (-not (Test-Path $path)) { New-Item -ItemType File -Path $path | Out-Null }
+          }
+          Get-ChildItem $resources | Select-Object -ExpandProperty Name
+
       - name: Rust tests
         # The Outbox and its upload paths live here, and were previously only
         # ever run locally.
