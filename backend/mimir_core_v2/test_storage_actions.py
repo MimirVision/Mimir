@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -107,6 +108,37 @@ class StorageActionTests(unittest.TestCase):
             self.assertTrue(report["ok"])
             self.assertTrue(source_dir.exists(), "a shared RecentClips folder must survive")
             self.assertFalse(report["source_folders_removed"][0]["removed"])
+
+    def test_a_shared_folder_survives_even_when_spelled_differently(self) -> None:
+        """The sibling check must survive two spellings of one folder.
+
+        The incident's own folder is resolved before comparison; the other
+        incident's is whatever the session recorded. Where those differ -- a
+        junction, a mapped drive, an 8.3 short name like RUNNER~1 -- the sibling
+        was skipped and the folder removed while that incident still had clips
+        in it. CI hit this for eleven days: its temp directory and its checkout
+        are on different volumes and the paths did not match textually.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            real = root / "real" / "SentryClips" / "2026-07-15_14-30-00"
+            real.mkdir(parents=True)
+            junction = root / "via_junction"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction), str(root / "real")],
+                capture_output=True,
+            )
+            if created.returncode != 0:
+                self.skipTest("could not create a junction on this filesystem")
+
+            through_junction = junction / "SentryClips" / "2026-07-15_14-30-00"
+            self.assertNotEqual(
+                actions.path_key(str(through_junction)),
+                actions.path_key(str(real.resolve())),
+                "the two spellings must actually differ, or this proves nothing",
+            )
+            self.assertTrue(actions._same_folder(through_junction, real.resolve()))
 
     def test_shared_source_folder_is_not_removed(self) -> None:
         # Defense in depth: even a folder-per-event category is left alone if

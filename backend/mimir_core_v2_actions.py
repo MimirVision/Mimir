@@ -78,6 +78,31 @@ def path_key(value: Any) -> str:
     return os.path.normcase(os.path.normpath(text))
 
 
+def _same_folder(candidate: Path, resolved: Path) -> bool:
+    """Whether two paths name the same folder, comparing them in the same form.
+
+    The incident's own folder is resolved before this comparison; the other
+    incident's is whatever the session recorded. Comparing a resolved path
+    against an unresolved one means two spellings of one folder do not match:
+    an 8.3 short name (`RUNNER~1` for `runneradmin`), a junction, a mapped
+    drive, a symlinked temp directory.
+
+    That mattered. When it fails to match, the sibling holding clips in the
+    folder is skipped, and the folder is removed while that incident still
+    needs it. It is the check that stops Mimir deleting footage a user has not
+    finished with, so both sides are resolved before comparing, and an
+    unresolvable path is treated as a match rather than risk clearing a folder
+    that something else may still be using.
+    """
+
+    if path_key(str(candidate)) == path_key(str(resolved)):
+        return True
+    try:
+        return path_key(str(candidate.resolve())) == path_key(str(resolved))
+    except OSError:
+        return True
+
+
 def as_path(value: Any) -> Path | None:
     text = clean_text(value)
     if not text:
@@ -376,7 +401,7 @@ def source_folder_removal_eligibility(session: dict[str, Any], incident: dict[st
         if other_id == this_id:
             continue
         other_folder = as_path(clean_text(other.get("event_folder")))
-        if other_folder is None or path_key(str(other_folder)) != path_key(str(resolved)):
+        if other_folder is None or not _same_folder(other_folder, resolved):
             continue
         # An incident whose clips have already been trashed or deleted no
         # longer has anything in this folder to protect.
