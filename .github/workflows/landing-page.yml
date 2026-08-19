@@ -81,12 +81,19 @@ jobs:
           [ "$missing" -eq 0 ] && echo "All local references resolve."
           exit $missing
 
-      # enablement: turns Pages on for the repository if it is not already,
-      # rather than failing. Every run of this workflow so far has died here with
-      # "Get Pages site failed. Please verify that the repository has Pages
-      # enabled" -- the site has never been published, and the download link on
-      # it has never resolved. The workflow needs pages: write for this, which it
-      # already has.
+      # Every run of this workflow has died here, so the site has never been
+      # published and no link on it has ever resolved.
+      #
+      # Without enablement it fails "Get Pages site failed. Please verify that
+      # the repository has Pages enabled". With it, the action tries to create
+      # the site and fails "Resource not accessible by integration" -- pages:
+      # write on the job is not sufficient, because creating a Pages site also
+      # needs the repository to allow workflows read and write access
+      # (Settings -> Actions -> General -> Workflow permissions).
+      #
+      # Left switched on so this starts working the moment that setting changes,
+      # or Pages is turned on by hand at Settings -> Pages -> Source: GitHub
+      # Actions. Either one is enough; neither can be done from in here.
       - uses: actions/configure-pages@v5
         with:
           enablement: true
