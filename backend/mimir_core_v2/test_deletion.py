@@ -152,7 +152,15 @@ class DeletionScopeTest(unittest.TestCase):
         sibling["storage_state"] = "trash"
 
         targets = actions.deletion_targets(session, self.incident)
-        self.assertEqual(targets["source_folder"], str(self.folder))
+        # Compared the way the code compares folders, not by string. What comes
+        # back is resolved; self.folder is however tempfile spelled it. On CI
+        # those differ -- 'C:\\Users\\RUNNER~1' against 'C:\\Users\\runneradmin'
+        # -- and asserting raw equality failed there for eleven days while
+        # passing on any machine with 8.3 name generation switched off.
+        self.assertEqual(
+            actions.path_key(targets["source_folder"]),
+            actions.path_key(str(self.folder.resolve())),
+        )
 
         actions.delete_incidents(session, [self.incident], use_recycle_bin=False, dry_run=False)
         self.assertFalse(self.folder.exists(), "The event folder stayed on the drive.")
