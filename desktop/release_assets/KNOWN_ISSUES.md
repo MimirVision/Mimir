@@ -116,11 +116,12 @@ GPU, detection falls back to CPU and runs roughly 10x slower** -- a large dump
 can take hours rather than minutes. The system check on the import screen tells
 you which one you are getting.
 
-## Copy the footage off the USB drive before scanning
+## Scanning off a USB drive, and why Mimir copies first
 
-Reading footage off a USB stick is often the real bottleneck, so copying to
-your internal drive first is usually faster overall. That was the whole of this
-advice until 2026-08-05, when it turned into something stronger.
+Reading footage off a USB stick is often the real bottleneck, so working from a
+copy on your internal drive is usually faster overall. That used to be advice
+you had to follow yourself. It is now what the scan does, for a stronger reason
+than speed.
 
 **Scanning directly from a Tesla USB drive has crashed Windows itself.** On the
 development machine, three `DRIVER_POWER_STATE_FAILURE` blue screens happened
@@ -132,11 +133,16 @@ run, which is a far heavier load than these drives normally see.
 This is not Mimir corrupting anything — nothing is written to the drive, and no
 footage was lost. But a scan is the workload that provokes it.
 
-**Mimir can now do the copying for you.** After you pick a folder, the import
-screen offers **Copy footage to this PC**. It copies each file, reads it back,
-and checks it byte for byte, then scans the local copy. Verification costs
-about 5% on top of the copy -- roughly one minute on a 49 GB import -- which is
-not a reason to skip it.
+**Mimir does the copying for you, and decides for itself when to.** If the
+footage is on a different drive from your Mimir library, the scan copies each
+incident across, reads it back, checks it byte for byte, and then scans the
+local copy. Footage already on the library's own drive is scanned where it
+sits, since copying it would duplicate tens of gigabytes for nothing.
+
+This used to be a checkbox on the import screen. It is not any more: there was
+only one sensible answer for any given folder, and it depended on something the
+app already knew. Verification costs about 5% on top of the copy -- roughly one
+minute on a 49 GB import -- which is not a reason to skip it.
 
 There is a checkbox to **clear the drive afterwards**. Nothing is removed until
 its copy has been verified, and any file that does not match is left exactly

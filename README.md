@@ -66,10 +66,15 @@ That is it. No account, no sign-up, no licence key, nothing to configure.
 
 ## Your first scan
 
-### 1. Get your footage onto your PC first
+### 1. Point Mimir at your footage and scan
 
-**Do not scan directly from the USB stick.** This matters more than it sounds
-like it should:
+Plug in the Tesla USB stick, pick the folder, press Scan. There is no separate
+copy step and nothing to decide first.
+
+**Mimir copies as it goes, and works out for itself when to.** If the footage is
+on another drive, each incident is copied into your Mimir library, checked byte
+for byte, and then read off your own disk rather than the stick. That is not a
+preference worth weighing up, which is why it is no longer a checkbox:
 
 - It is genuinely faster. Reading video off a USB stick is usually the slowest
   part of the whole process.
@@ -78,28 +83,25 @@ like it should:
   — a `DRIVER_POWER_STATE_FAILURE` blue screen, which is Windows' way of saying
   a storage device stopped answering.
 
-**Mimir will do this for you.** Point it at the drive and use **Copy footage to
-this PC** on the import screen. Every file is copied, read back, and checked
-byte for byte before Mimir considers it safe.
-
-There is a checkbox to clear the drive afterwards, which is how you get the
-stick empty and back in the car in one step. Nothing is deleted until its copy
-has been verified — any file that does not match is left exactly where it is.
+Footage that already lives on the same drive as your library is scanned where it
+sits, because copying it there would duplicate tens of gigabytes for nothing.
 
 Make sure you have room first; a full drive's worth of footage can be 50 GB or
-more. You can also copy the folders across yourself if you would rather.
+more.
 
-### 2. Point Mimir at the folder and scan
-
-Open Mimir, choose the folder you just copied, and start the scan. The import
-screen tells you what hardware it found before you commit to anything.
+**Clearing the drive is the one choice you make.** A checkbox on the scan screen
+empties the stick as the scan goes, which is how you get it back in the car in
+one step. It is off by default. Nothing is removed until its copy has been read
+back and verified byte for byte, and any file that does not match is left
+exactly where it is.
 
 **How long it takes:** roughly **25 minutes for a full 679-clip dump** on a
 machine with a DirectX 12 graphics card. Without one, object detection falls
 back to the processor and runs about ten times slower — budget hours, not
-minutes. Mimir tells you which one you are getting up front.
+minutes. Mimir tells you which one you are getting before you commit to
+anything.
 
-### 3. Review what it found
+### 2. Review what it found
 
 Everything is sorted into **Important**, **Review**, and **Ignore**. Start at
 the top. Every clip has a timeline showing where Mimir thinks something
@@ -108,7 +110,7 @@ happened, so you can jump straight there instead of watching the whole minute.
 You can change any verdict. Your correction is kept separately from Mimir's
 original answer — it never quietly overwrites what the scan said.
 
-### 4. Tell it when it is wrong
+### 3. Tell it when it is wrong
 
 This is the part that actually matters, and it takes ten seconds.
 
@@ -141,6 +143,21 @@ rejected while keeping the one they agreed with. Those clips drop to Review,
 not Ignore — nothing gets hidden from you.
 
 **It should over-flag less than it did. It still over-flags.**
+
+### And once, it went too quiet
+
+Tightening a rule can overshoot, and on 17 August 2026 one was caught doing it.
+Rescanning the feedback clips whose whole event group is still on hand, five
+could be scored against what the person actually asked for: three are still
+noisier than they wanted, one agrees, and **one is now quieter** — a clip where
+someone asked for Review and Mimir today says Ignore.
+
+That is one clip, not a rate. It is here anyway, because the two mistakes do not
+cost the same thing. Mimir being noisier than you wanted costs you a minute;
+Mimir being quieter means you never see the clip at all.
+
+**So do not read Ignore as "nothing happened" either.** If you know something
+happened and roughly when, go and look rather than trusting the sort.
 
 ### What it will not do
 

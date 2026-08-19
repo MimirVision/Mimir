@@ -15,7 +15,7 @@
 4. Confirm the selected path is shown on the import screen.
 5. Pick a scan mode and click **Analyze footage**.
 
-Scanning reads the selected folder and builds a local incident timeline. It does not move, copy, or delete clips during scan; your original clips stay where they are until you manually choose an action after reviewing an incident.
+Scanning reads the selected folder and builds a local incident timeline. If the footage is on a different drive from your Mimir library, each incident is copied into the library first and scanned from there -- reading video straight off a USB stick is slow and, on some machines, has crashed Windows mid-scan. Your originals are never edited, and nothing is deleted unless you tick **Clear the drive as it goes**, which is off by default and only removes an incident once its copy has been verified byte for byte.
 
 ## Scan Modes
 
