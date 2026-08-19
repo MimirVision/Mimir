@@ -39,15 +39,21 @@ the ego region. Two things the measurement did establish:
   every real one by an empty band, so removing them is not a judgement call.
   Fixed, and honestly: **it changed no verdicts** on a 25-event A/B, because an
   event with one such box also has real ones.
-- The likely structural fault is that `_contact_level_from_motion` requires
-  something close *and* a localised motion spike, computed independently, with
-  nothing requiring them to be the same object. Proximity from the car parked
-  beside you plus motion from a car driving past reads as possible contact.
+- A third theory, that `_contact_level_from_motion` ANDs proximity and motion
+  without requiring them to be the same object, was **measured on 2026-08-17 and
+  is also wrong**. Patching the real functions and comparing motion regions
+  against the close-object boxes across 31 cameras that reached MEDIUM/HIGH: the
+  motion covers a median **94%** of the close object, 26 of 31 are above half,
+  and exactly one is below 10%. The close thing genuinely is the thing moving.
 
-**That last one cannot be fixed safely without labelled footage** -- it changes
-every verdict Mimir has produced, and three tuning passes have already been made
-against 19 selection-biased labels. Which brings us to the thing that actually
-blocks everything.
+Three explanations proposed, three measured false: the ego vehicle, the
+frame-filling boxes, and un-co-located motion. What is left is uncomfortable but
+probably right -- "something large is close to the camera and it is moving" is a
+truthful description of a car driving past a parked car in a repeater view. The
+signal is real; it just does not mean contact. Separating those two needs
+examples of both, which is to say **labelled footage**, and no amount of
+re-reading the code substitutes for it. Which brings us to the thing that
+actually blocks everything.
 
 ---
 
