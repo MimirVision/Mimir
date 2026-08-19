@@ -42,7 +42,7 @@ describe('Tailwind opacity modifiers', () => {
   it('are all on a scale step, so none is silently discarded', () => {
     const dropped: string[] = []
 
-    for (const path of sourceFiles(join(__dirname))) {
+    for (const path of sourceFiles(join(process.cwd(), "src"))) {
       const lines = readFileSync(path, 'utf8').split('\n')
       lines.forEach((line, index) => {
         for (const match of line.matchAll(MODIFIER)) {

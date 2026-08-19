@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime, sourceEventReason, sourceEventTimestamp } from './incidentDisplay'
+import { formatDateTime, sourceEventReason, sourceEventTimestamp, sourceFilename } from './incidentDisplay'
+import { cleanPath } from './incidentVideoPaths'
 
 describe('formatDateTime', () => {
   it('returns an empty string for missing input', () => {
@@ -42,5 +43,34 @@ describe('sourceEventTimestamp', () => {
     expect(sourceEventTimestamp({ source_event_timestamp: 'a', tesla_event_timestamp: 'b', created_at: 'c' } as never)).toBe('a')
     expect(sourceEventTimestamp({ tesla_event_timestamp: 'b', created_at: 'c' } as never)).toBe('b')
     expect(sourceEventTimestamp({ created_at: 'c' } as never)).toBe('c')
+  })
+})
+
+describe('the viewer source label', () => {
+  // Mirrors IncidentViewerScreen's sourceLabel chain. The viewer used to derive
+  // the name from a path only, which works while the path resolves and loses
+  // the filename once the clip is moved to the library or the trash -- exactly
+  // when someone wants to know which clip an incident came from.
+  const sourceLabel = (incident: {
+    source_filename?: string | null
+    source_video?: string | null
+    video_path?: string | null
+  }) =>
+    sourceFilename(incident.source_filename ?? undefined) ||
+    sourceFilename(cleanPath(incident.source_video) || cleanPath(incident.video_path)) ||
+    'Source filename not provided'
+
+  it('uses the recorded filename when the paths are gone', () => {
+    expect(sourceLabel({ source_filename: '2026-04-18_16-03-46-back.mp4', video_path: null })).toBe(
+      '2026-04-18_16-03-46-back.mp4',
+    )
+  })
+
+  it('still falls back to the path when no filename was recorded', () => {
+    expect(sourceLabel({ video_path: String.raw`C:\Mimir Library\Footage\clip.mp4` })).toBe('clip.mp4')
+  })
+
+  it('admits when it has neither rather than showing an empty heading', () => {
+    expect(sourceLabel({})).toBe('Source filename not provided')
   })
 })

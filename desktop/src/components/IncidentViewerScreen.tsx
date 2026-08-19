@@ -2158,7 +2158,12 @@ export function IncidentViewerScreen({
 }: IncidentViewerScreenProps) {
   const title = eventDisplayTitle(incident)
   const timestamp = formatDateTime(sourceEventTimestamp(incident))
+  // source_filename first: it is the name the scan recorded, and it survives the
+  // clip being moved to the library or the trash. Deriving the name from a path
+  // works only while that path still resolves, so on its own it loses the name
+  // in exactly the case where someone most wants to know which clip this was.
   const sourceLabel =
+    sourceFilename(incident.source_filename) ||
     sourceFilename(cleanPath(incident.source_video) || cleanPath(incident.original_source_video) || cleanPath(incident.video_path)) ||
     'Source filename not provided'
   const isGenericBestEffort = incident.filename_timestamp_detected === false
