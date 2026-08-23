@@ -17,10 +17,12 @@ review are fully offline; internet access is used only for the optional, explici
 act of submitting feedback or a contribution, and for the one-time installer setup
 step described in SYSTEM_REQUIREMENTS.md.
 
-Beta users may submit diagnostics or footage only through a separate, explicit
-action -- one deliberate click per item, never automatic and never in the
-background. Footage contributions require clip-level rights confirmation. Both
-feedback and contributions are encrypted on-device before they are sent; only
+Beta users may submit footage only through a separate, explicit action -- one
+deliberate click per item, never automatic and never in the background. Verdict
+corrections are different: they carry no footage, and after the user agrees once
+they are sent without further prompting. Consent is asked before the first one
+and can be withdrawn. Footage contributions require clip-level rights
+confirmation. Both are encrypted on-device before they are sent; only
 Mimir's developer holds the key that can decrypt them. Contribution is optional and
 does not affect access to the free beta. Any future paid product will use separate
 terms and a separate decision.

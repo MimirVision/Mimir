@@ -53,9 +53,9 @@ hours without one. Mimir tells you which you're getting before it starts.
 Ignore. Each one has a timeline marking where Mimir thinks something happened,
 so you can jump straight there. Change any verdict you disagree with.
 
-**And tell it when it's wrong.** There's a feedback button on every clip. It
-takes ten seconds and it's the most useful thing you can do — the detector only
-improves with examples of what it got wrong.
+**And tell it when it's wrong.** Changing a verdict is how — one key, `I`, `R`
+or `G`. That correction is what teaches the detector, and it's the most useful
+thing you can do. Agreeing counts too.
 
 ---
 
@@ -76,11 +76,12 @@ read number plates, and it never moves or deletes a file unless you tell it to.
 
 No account, no cloud, no telemetry. Scanning happens entirely on your machine.
 
-Two things can leave, and only when you press a button: written feedback about a
-verdict, and — separately — a clip you choose to contribute so the detector can
-learn from it. Both are encrypted before they're sent, and contributing asks for
-a few details first, because footage of other people carries obligations that a
-text comment doesn't.
+Two things can leave. When you correct a verdict, that correction is sent — what
+Mimir said, what you said, and why it decided that. Mimir asks the first time and
+you can stop whenever you like. It contains no video.
+
+A clip is only sent if you tick *Send the clip too* on that incident. Both are
+encrypted before they leave your machine.
 
 ---
 
@@ -99,8 +100,8 @@ No macOS, Linux, 32-bit or ARM build.
 
 ## Something went wrong
 
-For a wrong verdict, use the feedback button in the app — it carries the context
-needed to diagnose it. For anything else, open an
+For a wrong verdict, just change it in the app — that carries the context needed
+to diagnose it. For anything else, open an
 [issue](https://github.com/MimirVision/Mimir/issues) or email
 <feedback.mimir@gmail.com>.
 

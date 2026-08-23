@@ -31,12 +31,16 @@ Scanning happens entirely on your machine. There is no account, no cloud, no
 telemetry, no analytics. Nothing about your footage leaves your computer as a
 side effect of using Mimir.
 
-Two things can leave, and only when you press a button:
+Two things can leave:
 
-- **Feedback** — your verdict on an incident, and optionally the clip it refers to.
-- **A contribution** — footage you deliberately send to improve the detector.
+- **Your verdict on an incident** — what Mimir decided, what you decided, and the
+  evidence behind it. The first time you correct a verdict Mimir asks whether to
+  send them; if you say yes, later corrections go without asking. No video.
+- **A clip** — only for an incident where you tick *Send the clip too*. That
+  stays a per-item choice.
 
-Both are encrypted on your machine before they are sent.
+Both are encrypted on your machine before they are sent, and you can stop
+sending corrections at any time.
 
 ## 3. What you promise about anything you send
 
