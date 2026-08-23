@@ -518,7 +518,8 @@ def build_parser() -> argparse.ArgumentParser:
     labels = commands.add_parser("labels", help="Build the locked evaluation set.")
     labels_commands = labels.add_subparsers(dest="labels_command", required=True)
     labels_list = labels_commands.add_parser("list", help="Groups still needing a verdict, as JSON.")
-    labels_list.add_argument("--session", required=True, help="Scan output folder, or a session JSON.")
+    labels_list.add_argument("--session", default="", help="Scan output folder, or a session JSON.")
+    labels_list.add_argument("--feedback-inbox", default="", help="Received corrections to offer first.")
     labels_list.add_argument("--labels-csv", default="", help="Defaults to mimir_core_v2/benchmark_labels.csv.")
     labels_list.add_argument("--limit", type=int, default=0, help="0 means all.")
     labels_save = labels_commands.add_parser("save", help="Record one verdict.")
@@ -536,6 +537,56 @@ def _labels_csv_path(value: str) -> Path:
     return Path(value) if value.strip() else Path(__file__).resolve().parent / "mimir_core_v2" / "benchmark_labels.csv"
 
 
+def feedback_label_candidates(feedback_inbox: Path, labels_csv: Path) -> list[dict]:
+    """Received corrections, shaped like the rows the labelling screen shows.
+
+    A tester's correction is an evaluation label: a clip, what Mimir said, and
+    what a person said about it. It is not a training item -- audit_dataset
+    wants clip-by-clip consent, a train/validation/test split and an annotation
+    per clip, none of which a correction carries. So corrections feed the
+    benchmark set, and this is the join: what arrived over the wire lands in the
+    same queue as groups labelled from a local scan.
+
+    The severity a person asked for is filled in; the category is not, because
+    door_ding and person_near cannot be inferred from a severity choice.
+    Somebody still has to watch the clip.
+    """
+
+    from build_label_worksheet import already_labelled
+    from harvest_feedback_labels import read_packages
+
+    if not feedback_inbox.is_dir():
+        return []
+
+    done = already_labelled(labels_csv)
+    rows = []
+    for row in read_packages(feedback_inbox):
+        name = str(row.get("filename_or_group") or "")
+        if not name or name.lower() in done:
+            continue
+        user_said = str(row.get("user_feedback") or "")
+        rows.append({
+            "filename_or_group": name,
+            "expected_severity": str(row.get("expected_severity") or ""),
+            "category": "",
+            "notes": str(row.get("notes") or ""),
+            "source": str(row.get("submitted_at") or "date unknown"),
+            "mimir_said": str(row.get("mimir_severity") or ""),
+            "impact_level": "",
+            "contact_level": "",
+            "motion_score": "",
+            "detected": "",
+            "mimir_reasons": f"They said: {user_said}" if user_said else "",
+            "key_moment_sec": "",
+            # The packaged clip, so the screen can show something to judge.
+            "contact_sheet": "",
+            "from_feedback": True,
+            "package_id": str(row.get("package_id") or ""),
+            "has_video": row.get("has_video") == "yes",
+        })
+    return rows
+
+
 def labels_list_command(args) -> int:
     """Report the groups still needing a verdict, richest-signal first.
 
@@ -545,12 +596,26 @@ def labels_list_command(args) -> int:
 
     from build_label_worksheet import VALID_CATEGORIES, load_session, pending_rows
 
-    rows, skipped = pending_rows(load_session(Path(args.session)), _labels_csv_path(args.labels_csv))
+    labels_csv = _labels_csv_path(args.labels_csv)
+
+    # Corrections first. Someone took the trouble to send those, and each is a
+    # verdict a real user disagreed with -- far likelier to be a useful label
+    # than an untouched group from a local scan.
+    rows = feedback_label_candidates(Path(args.feedback_inbox), labels_csv) if args.feedback_inbox else []
+    from_feedback = len(rows)
+
+    skipped = 0
+    if args.session:
+        scanned, skipped = pending_rows(load_session(Path(args.session)), labels_csv)
+        seen = {str(row["filename_or_group"]).lower() for row in rows}
+        rows.extend(row for row in scanned if str(row["filename_or_group"]).lower() not in seen)
+
     if args.limit > 0:
         rows = rows[: args.limit]
 
     print(json.dumps({
         "pending": rows,
+        "from_feedback": from_feedback,
         "skipped_already_labelled": skipped,
         "categories": list(VALID_CATEGORIES),
     }, indent=2))

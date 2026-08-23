@@ -142,6 +142,7 @@ export interface CollectionDetail {
 /** One event group awaiting a verdict, as build_label_worksheet builds it. */
 export interface LabelCandidate {
   filename_or_group: string
+  expected_severity?: string
   source: string
   mimir_said: string
   impact_level: string
@@ -151,10 +152,13 @@ export interface LabelCandidate {
   mimir_reasons: string
   key_moment_sec: string
   contact_sheet: string
+  from_feedback?: boolean
+  has_video?: boolean
 }
 
 export interface LabelQueue {
   pending: LabelCandidate[]
+  from_feedback?: number
   skipped_already_labelled: number
   categories: string[]
 }

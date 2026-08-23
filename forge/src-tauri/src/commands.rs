@@ -781,8 +781,15 @@ pub async fn list_label_candidates(app: tauri::AppHandle, limit: u32) -> Result<
             ));
         }
         let limit = limit.to_string();
+        // Received corrections come first: someone bothered to send those, and
+        // each is a verdict a real user disagreed with.
         let output = require_success(run_backend(
-            &["labels", "list", "--session", &settings.scan_session, "--limit", &limit],
+            &[
+                "labels", "list",
+                "--session", &settings.scan_session,
+                "--feedback-inbox", &settings.feedback_inbox,
+                "--limit", &limit,
+            ],
             &[],
         )?)?;
         parse_json_stdout(&output)

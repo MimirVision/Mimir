@@ -31,6 +31,7 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
   const [queue, setQueue] = useState<LabelCandidate[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [alreadyDone, setAlreadyDone] = useState(0)
+  const [fromFeedback, setFromFeedback] = useState(0)
   const [severity, setSeverity] = useState<string>('')
   const [category, setCategory] = useState<string>('')
   const [notes, setNotes] = useState('')
@@ -41,6 +42,10 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
 
   const current = queue[0]
 
+  useEffect(() => {
+    setSeverity(current?.expected_severity || '')
+  }, [current?.filename_or_group, current?.expected_severity])
+
   const load = useCallback(() => {
     setLoading(true)
     setError(null)
@@ -50,6 +55,7 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
         setQueue(result.pending)
         setCategories(result.categories)
         setAlreadyDone(result.skipped_already_labelled)
+        setFromFeedback(result.from_feedback ?? 0)
       })
       .catch(problem => setError(describeError(problem, 'Could not load groups to label.')))
       .finally(() => setLoading(false))
@@ -114,6 +120,7 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
           <h1 className="text-xl font-semibold text-slate-100">Labelling</h1>
           <p className="text-sm text-slate-400">
             {queue.length} waiting · {saved} done this session · {alreadyDone} already labelled
+            {fromFeedback > 0 && <> · <span className="text-sky-300">{fromFeedback} sent in by testers</span></>}
           </p>
         </div>
         <button
@@ -147,8 +154,13 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
                 No contact sheet for this group. Judge it from the evidence on the right, or skip it.
               </p>
             )}
-            <p className="mt-2 truncate text-xs text-slate-500" title={current.source}>
-              {current.source}
+            <p className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+              {current.from_feedback && (
+                <span className="rounded-full bg-sky-500/15 px-2 py-0.5 font-medium text-sky-300">
+                  from a tester
+                </span>
+              )}
+              <span className="truncate" title={current.source}>{current.source}</span>
             </p>
           </section>
 
