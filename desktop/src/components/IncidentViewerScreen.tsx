@@ -21,6 +21,7 @@ import {
   correctionConsent,
   correctionOutcome,
   setCorrectionConsent,
+  shouldSendCorrection,
 } from '../lib/verdictCorrection'
 import {
   actionButtonTone,
@@ -1969,8 +1970,8 @@ function ReviewActionsPanel({
           })}
         </div>
         <p className="mt-2 text-[11.5px] leading-4 text-[var(--mimir-text-subtle)]">
-          Agreeing counts too — confirming what Mimir got right is how it learns the difference.
-          Your verdict is sent so the detector can learn from it.
+          Disagreeing is what teaches it — a corrected verdict is sent so the detector can learn
+          from it. Agreeing is kept on this machine.
         </p>
 
         {/* Note and clip sit under the buttons that send them, not in a panel
@@ -2316,7 +2317,13 @@ export function IncidentViewerScreen({
 
     // The correction is the feedback. Changing a verdict used to write the
     // local session and stop there, so thousands of judgements never reached
-    // anyone; it now travels unless the user has said not to.
+    // anyone; a disagreement now travels unless the user has said not to.
+    // Agreement stays local -- it is still saved to the session, but sending a
+    // confirmation for every clip someone skims past is mostly traffic.
+    if (!shouldSendCorrection(incident, status)) {
+      return
+    }
+
     const outcome = correctionOutcome(correctionConsent())
     if (outcome === 'skip') {
       return

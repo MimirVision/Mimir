@@ -33,9 +33,10 @@ side effect of using Mimir.
 
 Two things can leave:
 
-- **Your verdict on an incident** — what Mimir decided, what you decided, and the
+- **A verdict you disagree with** — what Mimir decided, what you decided, and the
   evidence behind it. The first time you correct a verdict Mimir asks whether to
-  send them; if you say yes, later corrections go without asking. No video.
+  send them; if you say yes, later corrections go without asking. Agreeing with
+  Mimir is kept on your machine. No video.
 - **A clip** — only for an incident where you tick *Send the clip too*. That
   stays a per-item choice.
 

@@ -20,7 +20,8 @@ step described in SYSTEM_REQUIREMENTS.md.
 Beta users may submit footage only through a separate, explicit action -- one
 deliberate click per item, never automatic and never in the background. Verdict
 corrections are different: they carry no footage, and after the user agrees once
-they are sent without further prompting. Consent is asked before the first one
+a correction that disagrees with Mimir is sent without further prompting.
+Agreeing with a verdict is recorded locally and not sent. Consent is asked before the first one
 and can be withdrawn. Footage contributions require clip-level rights
 confirmation. Both are encrypted on-device before they are sent; only
 Mimir's developer holds the key that can decrypt them. Contribution is optional and

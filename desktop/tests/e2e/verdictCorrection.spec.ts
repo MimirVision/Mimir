@@ -51,8 +51,15 @@ test('correcting a verdict asks once, then sends', async ({ page }) => {
   await page.getByRole('button', { name: 'Send corrections' }).click()
   await expect.poll(() => calls.filter(c => c === 'submit_incident_feedback').length).toBe(1)
 
-  // Second correction sends with no prompt.
+  // Second disagreement sends with no prompt.
   await page.getByRole('button', { name: /Review/ }).first().click()
   await expect.poll(() => calls.filter(c => c === 'submit_incident_feedback').length).toBe(2)
   await expect(page.getByRole('dialog', { name: 'Send your corrections to Mimir?' })).toHaveCount(0)
+
+  // Agreeing with Mimir is saved locally and not sent. The incident is
+  // IMPORTANT, so pressing Important is agreement.
+  await page.getByRole('button', { name: /Important/ }).first().click()
+  await expect.poll(() => calls.filter(c => c === 'save_manual_status').length).toBeGreaterThan(0)
+  await new Promise(resolve => setTimeout(resolve, 400))
+  expect(calls.filter(c => c === 'submit_incident_feedback')).toHaveLength(2)
 })

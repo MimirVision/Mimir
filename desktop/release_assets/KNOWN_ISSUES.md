@@ -198,10 +198,10 @@ on the list.
 Not bugs -- design decisions, listed because they surprise people:
 
 - **No footage is uploaded unless you ask for it.** Scanning is entirely local.
-  Correcting a verdict does send that correction once you have agreed to it --
-  what Mimir said, what you said, and the evidence -- because a correction nobody
-  sends teaches nothing. It carries no video. A clip goes only when you tick
-  *Send the clip too* on that incident.
+  Disagreeing with a verdict does send that correction once you have agreed to
+  it -- what Mimir said, what you said, and the evidence -- because a correction
+  nobody sends teaches nothing. Agreeing is kept on your machine. Corrections
+  carry no video; a clip goes only when you tick *Send the clip too*.
 - **Scanning copies your clips, and never edits them.** Footage on another drive
   is copied into your Mimir library as the scan reaches it, so the scan reads
   from your own disk rather than the drive -- reading video off a USB stick is

@@ -19,10 +19,35 @@ import { normalizeSeverity, type SeverityGroup } from './incidentStatus'
 
 export const CORRECTION_CONSENT_KEY = 'mimir_send_corrections'
 
+/**
+ * Whether this verdict is worth sending.
+ *
+ * Only disagreements travel. Agreeing is still recorded locally -- the session
+ * keeps `user_status` either way -- but sending a confirmation for every clip
+ * someone skims past is mostly traffic, and a reviewer works through hundreds
+ * in a sitting.
+ *
+ * The cost is real and worth stating: a set built only from disagreements has
+ * no examples of Mimir being right, so it can measure how often Mimir is wrong
+ * when someone corrects it, and not a false-positive rate. The locked
+ * evaluation set is what answers that, and it is built deliberately in Forge
+ * rather than sampled from whoever happened to press a key.
+ */
+export function shouldSendCorrection(incident: MimirIncident, status: SeverityGroup): boolean {
+  // normalizeSeverity falls back to IGNORE for anything it cannot read, so an
+  // incident with no severity would look like agreement the moment someone
+  // pressed Ignore, and the correction would vanish. Only a severity actually
+  // recorded on the incident can count as something to agree with.
+  const recorded = String(incident.final_severity ?? incident.severity ?? '').toUpperCase()
+  if (!['IMPORTANT', 'REVIEW', 'IGNORE'].includes(recorded)) {
+    return true
+  }
+
+  return normalizeSeverity(recorded) !== status
+}
+
 /** The choice string for a correction, in the vocabulary the harvester parses. */
 export function correctionChoiceFor(incident: MimirIncident, status: SeverityGroup): string {
-  // Agreeing is worth sending too: a set of only disagreements measures
-  // nothing, because it has no examples of Mimir being right.
   if (normalizeSeverity(incident.final_severity ?? incident.severity) === status) {
     return 'Correct'
   }

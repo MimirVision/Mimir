@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   correctionChoiceFor,
+  shouldSendCorrection,
   correctionConsent,
   correctionOutcome,
   setCorrectionConsent,
@@ -21,10 +22,27 @@ describe('correctionChoiceFor', () => {
   })
 
   it('reports agreement when the user picks what Mimir picked', () => {
-    // Worth sending: a set with only disagreements has no examples of Mimir
-    // being right, and measures nothing.
     expect(correctionChoiceFor(incident('REVIEW'), 'REVIEW')).toBe('Correct')
     expect(correctionChoiceFor(incident('IGNORE'), 'IGNORE')).toBe('Correct')
+  })
+})
+
+describe('shouldSendCorrection', () => {
+  it('sends a disagreement', () => {
+    expect(shouldSendCorrection(incident('IMPORTANT'), 'IGNORE')).toBe(true)
+    expect(shouldSendCorrection(incident('IGNORE'), 'REVIEW')).toBe(true)
+  })
+
+  it('keeps agreement on the machine', () => {
+    // Still written to the session as user_status; just not uploaded. A
+    // confirmation for every clip someone skims past is mostly traffic.
+    expect(shouldSendCorrection(incident('REVIEW'), 'REVIEW')).toBe(false)
+    expect(shouldSendCorrection(incident('IMPORTANT'), 'IMPORTANT')).toBe(false)
+  })
+
+  it('treats an unreadable severity as a disagreement rather than dropping it', () => {
+    // Losing a real correction is worse than one redundant upload.
+    expect(shouldSendCorrection({} as never, 'IGNORE')).toBe(true)
   })
 
   it('treats a missing severity as something to correct, not agree with', () => {

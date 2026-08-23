@@ -55,7 +55,7 @@ so you can jump straight there. Change any verdict you disagree with.
 
 **And tell it when it's wrong.** Changing a verdict is how — one key, `I`, `R`
 or `G`. That correction is what teaches the detector, and it's the most useful
-thing you can do. Agreeing counts too.
+thing you can do. Agreeing is kept on your machine and not sent.
 
 ---
 
@@ -76,9 +76,10 @@ read number plates, and it never moves or deletes a file unless you tell it to.
 
 No account, no cloud, no telemetry. Scanning happens entirely on your machine.
 
-Two things can leave. When you correct a verdict, that correction is sent — what
-Mimir said, what you said, and why it decided that. Mimir asks the first time and
-you can stop whenever you like. It contains no video.
+Two things can leave. When you *disagree* with a verdict, that correction is
+sent — what Mimir said, what you said, and why it decided that. Agreeing is kept
+on your machine. Mimir asks the first time and you can stop whenever you like.
+Corrections contain no video.
 
 A clip is only sent if you tick *Send the clip too* on that incident. Both are
 encrypted before they leave your machine.

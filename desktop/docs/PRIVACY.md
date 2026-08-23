@@ -19,10 +19,11 @@ creates an `age`-encrypted package for a recipient key that only Mimir's develop
 holds; sending it is a separate, explicit in-app action distinct from the export
 itself, and nothing is sent until that action is taken.
 
-Verdict corrections work differently, and this changed. Changing a verdict sends
-that correction -- what Mimir decided, what the user decided, and the evidence
-behind it. The first correction asks permission and nothing is sent unless it is
-given; after that they send without further prompting, which is the point, since
+Verdict corrections work differently, and this changed. Disagreeing with a
+verdict sends that correction -- what Mimir decided, what the user decided, and
+the evidence behind it. Agreeing with a verdict is recorded in the local session
+and not sent. The first correction asks permission and nothing is sent unless it
+is given; after that they send without further prompting, which is the point, since
 a correction that needs a second deliberate action is one that mostly does not
 get made. A correction carries no video. Footage is included only when the user
 ticks "Send the clip too" on that incident, so footage remains a per-item choice
