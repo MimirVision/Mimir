@@ -17,9 +17,14 @@ import { describeError, friendlyMessage, type DescribedError } from '../lib/erro
 import { ErrorNotice } from './ErrorNotice'
 import { ModalOverlay } from './ModalOverlay'
 import {
+  correctionChoiceFor,
+  correctionConsent,
+  correctionOutcome,
+  setCorrectionConsent,
+} from '../lib/verdictCorrection'
+import {
   actionButtonTone,
   currentVideoPath,
-  feedbackChoices,
   findIncident,
   incidentActionId,
   incidentFeedbackPayload,
@@ -1510,12 +1515,12 @@ function DetailsPanel({
 
 function AiFeedbackPanel({
   selectedFeedback,
+  onSelectFeedback,
   notes,
   includeVideo,
   busy,
   message,
   error,
-  onSelectFeedback,
   onNotesChange,
   onIncludeVideoChange,
   onSubmit,
@@ -1533,12 +1538,13 @@ function AiFeedbackPanel({
 }) {
   return (
     <div className="mt-4 rounded-xl bg-black/10 p-3.5">
-      <div className="mb-3">
-        <div className="text-[12px] font-semibold text-[var(--mimir-text)]">AI feedback</div>
-      </div>
+      <p className="text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+        For a verdict that is simply wrong, change it above — that sends itself. This is for the two
+        things a verdict cannot say.
+      </p>
 
-      <div className="grid grid-cols-2 gap-2">
-        {feedbackChoices.map(choice => (
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {(['Missed obvious event', 'Weird AI flag'] as const).map(choice => (
           <button
             key={choice}
             type="button"
@@ -1550,7 +1556,7 @@ function AiFeedbackPanel({
                 : 'border-white/[0.07] bg-white/[0.025] text-[var(--mimir-text-muted)] hover:bg-white/[0.055] hover:text-[var(--mimir-text)]'
             }`}
           >
-            {choice}
+            {choice === 'Missed obvious event' ? 'Mimir missed an event' : 'This flag makes no sense'}
           </button>
         ))}
       </div>
@@ -1579,22 +1585,6 @@ function AiFeedbackPanel({
       <p className="mt-3 text-[11px] leading-5 text-[var(--mimir-text-subtle)]">
         Encrypted on this device before sending. Only Mimir's developer can decrypt it. Nothing is sent until you press Send.
       </p>
-
-      {(selectedFeedback === 'Weird AI flag' || selectedFeedback === 'Missed obvious event') && (
-        <div className="mt-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 text-[11px] leading-5 text-[var(--mimir-text-muted)]">
-          Feedback alone flags the problem, but doesn't teach Mimir -- footage only becomes training data
-          through a separate rights confirmation, since feedback and training data have different consent
-          requirements.{' '}
-          <button
-            type="button"
-            onClick={() => revealContributePanel()}
-            className="font-semibold text-[var(--mimir-text)] underline decoration-white/30 underline-offset-2 hover:decoration-white/60"
-          >
-            Contribute this incident too
-          </button>{' '}
-          to put it toward the next model update.
-        </div>
-      )}
 
       <button
         type="button"
@@ -1868,6 +1858,8 @@ function ReviewActionsPanel({
   onCancelNote,
   onSaveNote,
   onSetStatus,
+  sendClipWithCorrection,
+  onSendClipWithCorrectionChange,
   onMoveToLibrary,
   onConfirmDelete,
   onRestoreFromTrash,
@@ -1899,6 +1891,8 @@ function ReviewActionsPanel({
   onCancelNote: () => void
   onSaveNote: () => void
   onSetStatus: (status: SeverityGroup) => void
+  sendClipWithCorrection: boolean
+  onSendClipWithCorrectionChange: (value: boolean) => void
   onMoveToLibrary: () => void
   onConfirmDelete: () => void
   onRestoreFromTrash: () => void
@@ -1976,7 +1970,36 @@ function ReviewActionsPanel({
         </div>
         <p className="mt-2 text-[11.5px] leading-4 text-[var(--mimir-text-subtle)]">
           Agreeing counts too — confirming what Mimir got right is how it learns the difference.
+          Your verdict is sent so the detector can learn from it.
         </p>
+
+        {/* Note and clip sit under the buttons that send them, not in a panel
+            of their own. Setting them after pressing a verdict would be too
+            late, and the old layout asked for the same judgement twice in two
+            vocabularies -- "Ignore" here and "Should be Ignore" below. */}
+        <textarea
+          value={feedbackNotes}
+          onChange={event => onFeedbackNotesChange(event.target.value)}
+          disabled={disabled}
+          rows={2}
+          className="mt-3 w-full resize-none rounded-lg border border-white/[0.08] bg-black/[0.18] p-2.5 text-[12.5px] leading-5 text-[var(--mimir-text)] outline-none transition placeholder:text-[var(--mimir-text-subtle)] focus:border-white/[0.18] disabled:cursor-wait disabled:opacity-60"
+          placeholder="Anything worth adding? (optional)"
+          aria-label="Note to send with your verdict"
+        />
+
+        <label className="mt-2 flex items-start gap-2 text-[12px] leading-5 text-[var(--mimir-text-muted)]">
+          <input
+            type="checkbox"
+            checked={sendClipWithCorrection}
+            onChange={event => onSendClipWithCorrectionChange(event.target.checked)}
+            disabled={disabled}
+            className="mt-0.5 h-4 w-4 accent-white disabled:cursor-wait"
+          />
+          <span>
+            <span className="font-semibold text-[var(--mimir-text)]">Send the clip too.</span>{' '}
+            Footage is what actually teaches the detector. Encrypted before it leaves this machine.
+          </span>
+        </label>
       </div>
 
       <div className="mt-4 grid gap-2">
@@ -2035,18 +2058,22 @@ function ReviewActionsPanel({
         </button>}
       </div>
 
+      {/* Everything a verdict can say is said by the three buttons above, which
+          now send themselves. What is left is the one complaint no verdict can
+          express: Mimir never raised an incident here at all, so there is no
+          status to correct. */}
       <details className="mt-4 rounded-xl border border-white/[0.035] bg-transparent p-3.5">
         <summary className="cursor-pointer text-[12px] font-semibold text-[var(--mimir-text-muted)] transition hover:text-[var(--mimir-text)]">
-          Feedback
+          Something else went wrong
         </summary>
         <AiFeedbackPanel
           selectedFeedback={feedbackChoice}
+          onSelectFeedback={onFeedbackChoiceChange}
           notes={feedbackNotes}
           includeVideo={feedbackIncludeVideo}
           busy={busyAction === 'save_feedback'}
           message={feedbackMessage}
           error={feedbackError}
-          onSelectFeedback={onFeedbackChoiceChange}
           onNotesChange={onFeedbackNotesChange}
           onIncludeVideoChange={onFeedbackIncludeVideoChange}
           onSubmit={onSubmitFeedback}
@@ -2195,6 +2222,8 @@ export function IncidentViewerScreen({
   const [feedbackChoice, setFeedbackChoice] = useState<AiFeedbackChoice | ''>('')
   const [feedbackNotes, setFeedbackNotes] = useState('')
   const [feedbackIncludeVideo, setFeedbackIncludeVideo] = useState(false)
+  const [sendClipWithCorrection, setSendClipWithCorrection] = useState(false)
+  const [pendingCorrection, setPendingCorrection] = useState<{ status: SeverityGroup; withClip: boolean } | null>(null)
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackError, setFeedbackError] = useState('')
   const [showKeyMoments, setShowKeyMoments] = useState(true)
@@ -2259,11 +2288,56 @@ export function IncidentViewerScreen({
     }
   }
 
+  /** Send a correction through the path feedback already uses. */
+  const sendCorrection = async (status: SeverityGroup, withClip: boolean) => {
+    const videoPath = withClip ? currentVideoPath(incident) : null
+    const choice = correctionChoiceFor(incident, status) as AiFeedbackChoice
+
+    // Saved locally first and unconditionally, exactly as the feedback button
+    // does: failing to reach the network must never mean the correction itself
+    // was lost.
+    const saved = await invoke<IncidentFeedbackResult>('save_incident_feedback', {
+      feedback: incidentFeedbackPayload(incident, choice, feedbackNotes, withClip, session),
+      includeVideo: withClip,
+      videoPath,
+    })
+    await invoke<OutboxSubmitResult>('submit_incident_feedback', {
+      feedbackJsonPath: saved.feedback_file,
+      videoPath,
+      attemptSend: true,
+    })
+  }
+
   const updateManualStatus = (status: SeverityGroup) => {
     onManualStatusChange(status)
     setActionError('')
     setActionDetails('')
     setActionMessage(`Status changed to ${severityCopy(status)}.`)
+
+    // The correction is the feedback. Changing a verdict used to write the
+    // local session and stop there, so thousands of judgements never reached
+    // anyone; it now travels unless the user has said not to.
+    const outcome = correctionOutcome(correctionConsent())
+    if (outcome === 'skip') {
+      return
+    }
+    if (outcome === 'ask') {
+      setPendingCorrection({ status, withClip: sendClipWithCorrection })
+      return
+    }
+
+    const withClip = sendClipWithCorrection
+    setSendClipWithCorrection(false)
+    void sendCorrection(status, withClip)
+      .then(() => {
+        setFeedbackNotes('')
+        setActionMessage(
+          withClip
+            ? `Status changed to ${severityCopy(status)}. Correction and clip sent.`
+            : `Status changed to ${severityCopy(status)}. Correction sent.`,
+        )
+      })
+      .catch(error => setFeedbackError(friendlyMessage(error, 'That correction could not be sent.')))
   }
 
   const runCoreV2StorageAction = async (
@@ -2841,6 +2915,8 @@ export function IncidentViewerScreen({
                 }}
                 onSaveNote={saveNote}
                 onSetStatus={updateManualStatus}
+                sendClipWithCorrection={sendClipWithCorrection}
+                onSendClipWithCorrectionChange={setSendClipWithCorrection}
                 onMoveToLibrary={() => setShowLibraryConfirm(true)}
                 onConfirmDelete={() => {
                   setDeleteChoice('trash')
@@ -2862,6 +2938,62 @@ export function IncidentViewerScreen({
           onClose={() => setShowFilesDrawer(false)}
           onOpenFileAction={openViewerFileAction}
         />
+      )}
+
+      {pendingCorrection && (
+        <ModalOverlay label="Send your corrections to Mimir?" onClose={() => setPendingCorrection(null)}>
+          <section className="w-full max-w-[480px] rounded-2xl border border-white/[0.08] bg-[var(--mimir-bg-depth)] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.62)]">
+            <div className="text-[18px] font-semibold text-[var(--mimir-text)]">
+              Send your corrections to Mimir?
+            </div>
+            <p className="mt-3 text-[14px] leading-6 text-[var(--mimir-text-muted)]">
+              You just changed a verdict. Sending that correction is the single most useful thing a
+              tester can do — it is how the detector learns the difference between a car going past
+              and a car hitting yours.
+            </p>
+            <ul className="mt-3 space-y-1.5 text-[13px] leading-6 text-[var(--mimir-text-subtle)]">
+              <li>· What Mimir said, what you said, and the evidence behind the verdict.</li>
+              <li>· No video, unless you tick <span className="text-[var(--mimir-text-muted)]">Send the clip too</span>.</li>
+              <li>· Encrypted before it leaves your machine.</li>
+            </ul>
+            <p className="mt-3 text-[13px] leading-6 text-[var(--mimir-text-subtle)]">
+              Asked once. You can stop at any time in the beta notice.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setCorrectionConsent('declined')
+                  setPendingCorrection(null)
+                }}
+                className="h-10 rounded-lg bg-white/[0.04] px-4 text-[13px] font-medium text-[var(--mimir-text-muted)] transition hover:bg-white/[0.07] hover:text-[var(--mimir-text)]"
+              >
+                Not now
+              </button>
+              <button
+                onClick={() => {
+                  const correction = pendingCorrection
+                  setCorrectionConsent('granted')
+                  setPendingCorrection(null)
+                  if (!correction) {
+                    return
+                  }
+                  setSendClipWithCorrection(false)
+                  void sendCorrection(correction.status, correction.withClip)
+                    .then(() => {
+                      setFeedbackNotes('')
+                      setActionMessage('Correction sent. Thank you — that one is genuinely useful.')
+                    })
+                    .catch(error =>
+                      setFeedbackError(friendlyMessage(error, 'That correction could not be sent.')),
+                    )
+                }}
+                className="h-10 rounded-lg border border-white/[0.1] bg-white/[0.08] px-4 text-[13px] font-semibold text-[var(--mimir-text)] transition hover:bg-white/[0.12]"
+              >
+                Send corrections
+              </button>
+            </div>
+          </section>
+        </ModalOverlay>
       )}
 
       {showLibraryConfirm && (
