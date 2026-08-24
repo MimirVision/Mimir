@@ -7,6 +7,7 @@ import { BetaNoticeFooter, BetaPrivacyNotice } from './components/BetaPrivacyNot
 import { CrashSafeBoundary } from './components/CrashSafeBoundary'
 import { friendlyMessage } from './lib/errorMessages'
 import { ImportPanel } from './components/ImportPanel'
+import { UpdateNotice } from './components/UpdateNotice'
 import { IncidentLibraryView } from './components/IncidentLibraryView'
 import { OnboardingFlow } from './components/OnboardingFlow'
 import { USE_MIMIR_CORE_V2 } from './config'
@@ -893,6 +894,9 @@ export default function App() {
     <div className="min-h-screen overflow-hidden bg-[var(--mimir-bg)] text-[var(--mimir-text)]">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-18%,rgba(255,255,255,0.06),transparent_34%),linear-gradient(140deg,rgba(255,255,255,0.028),transparent_46%)]" />
       <div className="relative h-screen overflow-y-auto">
+        <div className="px-5 pt-5 sm:px-7">
+          <UpdateNotice busy={scanState === 'running'} />
+        </div>
         <ImportPanel
           selectedFolder={selectedFolder}
           clearSourceAfterImport={clearSourceAfterImport}
