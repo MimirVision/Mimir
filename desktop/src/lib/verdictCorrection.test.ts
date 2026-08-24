@@ -81,3 +81,24 @@ describe('correctionOutcome', () => {
     expect(correctionOutcome('declined')).toBe('skip')
   })
 })
+
+describe('withdrawing consent', () => {
+  // The terms, the privacy notice and the README all say consent can be taken
+  // back. Until the control existed that was false, so this pins the round trip.
+  it('turns sending off again once it was on', () => {
+    const store: Record<string, string> = {}
+    const read = (key: string) => store[key] ?? null
+    const write = (key: string, value: string) => {
+      store[key] = value
+    }
+
+    setCorrectionConsent('granted', write)
+    expect(correctionOutcome(correctionConsent(read))).toBe('send')
+
+    setCorrectionConsent('declined', write)
+    expect(correctionOutcome(correctionConsent(read))).toBe('skip')
+
+    setCorrectionConsent('granted', write)
+    expect(correctionOutcome(correctionConsent(read))).toBe('send')
+  })
+})

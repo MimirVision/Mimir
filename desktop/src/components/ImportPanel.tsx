@@ -4,6 +4,7 @@ import { MIMIR_VERSION, USE_MIMIR_CORE_V2 } from '../config'
 import { ActiveScanStatus } from './ActiveScanStatus'
 import type { ScanOutput } from './ActiveScanStatus'
 import { ModelUpdatePanel } from './ModelUpdatePanel'
+import { CorrectionSharing } from './CorrectionSharing'
 import { OutboxPanel } from './OutboxPanel'
 import type {
   AiTimeoutSec,
@@ -1052,6 +1053,7 @@ export function ImportPanel({
                   onTimeoutSecChange={onExperimentalAiTimeoutSecChange}
                 />
                 <ModelUpdatePanel />
+                <CorrectionSharing />
               </details>
 
               {/* Renders nothing unless something has actually been submitted,
