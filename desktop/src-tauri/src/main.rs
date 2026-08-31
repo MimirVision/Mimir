@@ -3854,6 +3854,39 @@ async fn open_mimir_storage_folder(kind: String) -> Result<(), ScanFailure> {
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+/// The tail of the crash log, for a report the user chooses to send.
+///
+/// Bounded rather than whole-file: the log rotates at 2 MB and nobody needs to
+/// send that. The most recent entries are the ones that explain what just
+/// happened, and a smaller payload is likelier to survive a bad connection.
+#[tauri::command]
+async fn read_recent_crash_log(max_bytes: usize) -> Result<String, ScanFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let log_path = default_documents_root()?.join("Mimir Logs").join("app_crash_log.txt");
+        let text = match fs::read_to_string(&log_path) {
+            Ok(value) => value,
+            // Nothing has crashed. Not an error worth surfacing.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+            Err(error) => return Err(ScanFailure::new(error.to_string())),
+        };
+
+        let limit = max_bytes.clamp(1_024, 256 * 1024);
+        if text.len() <= limit {
+            return Ok(text);
+        }
+        // Cut on a record boundary so a report never opens mid-stack-trace.
+        let tail = &text[text.len() - limit..];
+        Ok(match tail.find("
+---
+") {
+            Some(index) => tail[index + 5..].to_string(),
+            None => tail.to_string(),
+        })
+    })
+    .await
+    .map_err(|error| ScanFailure::new(error.to_string()))?
+}
+
 #[tauri::command]
 async fn log_incident_diagnostic(
     incident_id: String,
@@ -4111,7 +4144,41 @@ mod tests {
     }
 }
 
+/// Write Rust panics into the same log the UI already uses.
+///
+/// A panic in the Rust half left no trace anywhere: the crash log only ever
+/// received React component errors, so the half of the app that touches the
+/// filesystem, spawns the scanner and moves footage was the half that could
+/// fail silently. The default hook still runs, so stderr output is unchanged.
+fn install_panic_logger() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let message = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|value| value.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "panic with no message".to_string());
+        let location = info
+            .location()
+            .map(|value| format!("{}:{}:{}", value.file(), value.line(), value.column()))
+            .unwrap_or_else(|| "unknown location".to_string());
+
+        // Best effort by design: a panic handler that panics, or that returns
+        // an error nobody can act on, helps nobody.
+        let _ = append_app_crash_log_sync(
+            "rust-panic".to_string(),
+            String::new(),
+            message,
+            location,
+        );
+        previous(info);
+    }));
+}
+
 fn main() {
+    install_panic_logger();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -4150,7 +4217,8 @@ fn main() {
             active_model_status,
             open_containing_folder,
             open_mimir_storage_folder,
-            log_incident_diagnostic
+            log_incident_diagnostic,
+            read_recent_crash_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

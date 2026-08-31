@@ -5,6 +5,7 @@ import { ActiveScanStatus } from './ActiveScanStatus'
 import type { ScanOutput } from './ActiveScanStatus'
 import { ModelUpdatePanel } from './ModelUpdatePanel'
 import { CorrectionSharing } from './CorrectionSharing'
+import { CrashReportPanel } from './CrashReportPanel'
 import { OutboxPanel } from './OutboxPanel'
 import type {
   AiTimeoutSec,
@@ -1054,6 +1055,7 @@ export function ImportPanel({
                 />
                 <ModelUpdatePanel />
                 <CorrectionSharing />
+                <CrashReportPanel />
               </details>
 
               {/* Renders nothing unless something has actually been submitted,

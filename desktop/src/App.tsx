@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { BetaNoticeFooter, BetaPrivacyNotice } from './components/BetaPrivacyNotice'
+import { logIncidentDiagnostic } from './components/CrashSafeBoundary'
 import { CrashSafeBoundary } from './components/CrashSafeBoundary'
 import { friendlyMessage } from './lib/errorMessages'
 import { ImportPanel } from './components/ImportPanel'
@@ -664,6 +665,17 @@ export default function App() {
         return
       }
       setScanState('error')
+
+      // Write it down as well as showing it. A failed scan was visible in the
+      // UI and nowhere else, so the half of the app most likely to break --
+      // spawning the scanner, reading a USB drive -- left nothing behind once
+      // the window closed.
+      void logIncidentDiagnostic({
+        incidentId: 'scan',
+        attemptedVideoPath: selectedFolder,
+        errorMessage: isLocalScanFailure(error) ? error.message : String(error),
+        stackTrace: isLocalScanFailure(error) ? (error.stderr ?? '') : '',
+      })
 
       if (isLocalScanFailure(error)) {
         setScanError(error.message)
