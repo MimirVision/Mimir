@@ -60,15 +60,6 @@ export interface IncidentFeedbackResult {
   message: string
 }
 
-export interface TrainingContributionResult {
-  ok: boolean
-  output_path: string
-  package_id: string
-  backend_runner: string
-  backend_command: string
-  message: string
-}
-
 export interface OutboxSubmitResult {
   package_id: string
   // 'blocked' means the entry cannot be sent at all -- its encrypted package is
@@ -77,15 +68,6 @@ export interface OutboxSubmitResult {
   status: 'sent' | 'pending' | 'blocked'
   message: string
 }
-
-export const feedbackChoices: AiFeedbackChoice[] = [
-  'Correct',
-  'Should be Important',
-  'Should be Review',
-  'Should be Ignore',
-  'Weird AI flag',
-  'Missed obvious event',
-]
 
 export function readLocalSetting(key: string) {
   try {

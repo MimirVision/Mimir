@@ -16,15 +16,6 @@ import { check, type Update } from '@tauri-apps/plugin-updater'
  * connection would be rude.
  */
 
-export interface AvailableUpdate {
-  version: string
-  notes: string
-  /** Bytes, once the download starts and the server tells us. */
-  totalBytes: number
-  downloadedBytes: number
-  installing: boolean
-}
-
 /** Look for a newer version. Returns null when there is nothing, or on any failure. */
 export async function findUpdate(): Promise<Update | null> {
   try {
@@ -33,16 +24,6 @@ export async function findUpdate(): Promise<Update | null> {
     // No connection, no published release, an unreachable manifest: all of
     // these are ordinary for an offline-first app, and none is worth a dialog.
     return null
-  }
-}
-
-export function describeUpdate(update: Update): AvailableUpdate {
-  return {
-    version: update.version,
-    notes: (update.body || '').trim(),
-    totalBytes: 0,
-    downloadedBytes: 0,
-    installing: false,
   }
 }
 

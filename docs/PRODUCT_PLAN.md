@@ -162,9 +162,12 @@ forced by any of the features in §2.
 Accuracy is one half. The other half is that the product never surprises you
 with what it did to your files.
 
-- **Crash reporting does not exist**, by policy. That policy was right for a
-  local-only beta and is wrong the moment there are testers: the last three
-  real bugs were found by a person, not a test. Opt-in, EU-hosted, disclosed.
+- ~~**Crash reporting does not exist**, by policy.~~ **Done 2026-08-24.** Crashes
+  were always written to a crash log in Documents and never
+  reached anyone, because seeing one meant asking a tester to email a file.
+  Reports now travel the existing encrypted submission pipeline and appear in
+  Forge -- no hosted error service, so no account, dependency or data-residency
+  decision. Rust panics and failed scans are logged too; neither was before.
 - **The scan cannot resume.** Interrupt a 25-minute scan and it starts over.
   The streamed import made the *copy* resumable; the scan itself is not.
 - **There is no undo for a batch action.** Move 200 clips to Trash by

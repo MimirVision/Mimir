@@ -53,19 +53,32 @@ Use **Move to Mimir Trash** for clips you no longer want in normal review. This 
 
 Deleted/trash incidents are hidden from normal Important, Review, and Ignored lists by default, and can be recovered from Mimir Trash.
 
-## How to Send Feedback
+## How to Tell Mimir It Was Wrong
 
-Open an incident, pick an AI feedback label, add a note if you want, and click **Send feedback**. Mimir saves the feedback locally, then encrypts it on your device and sends it in that same action -- nothing is sent until you click that button, and Mimir's developer is the only one who can decrypt what arrives. There's no email step anymore: no clipboard copying, no mail app to configure.
+Open an incident and change the verdict -- `I` for Important, `R` for Review,
+`G` for Ignore, or click the buttons. That correction is the feedback. Mimir
+asks permission the first time and then sends them quietly; you can stop at any
+point under **Labs -> Sending your corrections**, which also shows how many you
+have sent.
 
-For each issue, it helps to mention in the notes field:
+A correction carries what Mimir decided, what you decided, and the evidence
+behind it. It contains no video. If a clip is worth sending too, tick **Send the
+clip too** on that incident before changing the verdict.
 
-- Original clip filename.
-- What Mimir classified it as.
+Only disagreements are sent. Agreeing still updates the verdict on your machine.
+
+There is a notes field if something needs explaining, and it is worth using for:
+
 - What you expected: Important, Review, or Ignore.
-- Whether it involved possible impact, door contact, vandalism, normal traffic, or harmless movement.
+- Whether it involved possible impact, door contact, vandalism, normal traffic,
+  or harmless movement.
 - Whether the video played correctly in the viewer.
 - Whether the timeline markers made sense.
 - Any error message shown by the app.
+
+If Mimir crashes, it records what happened and offers to send it under **Labs**.
+That report shows you exactly what it contains before anything leaves, and it is
+the only way anyone finds out the crash happened.
 
 If you'd rather not send footage over the network for a particular clip, Mimir also offers **Save without sending** wherever Send/Contribute appears -- it still encrypts locally, just doesn't attempt delivery, and you can send it later. For anything you don't want going through Mimir's submission flow at all, reach feedback.mimir@gmail.com directly -- but do not share footage over public channels (forums, social media, chat rooms).
 
