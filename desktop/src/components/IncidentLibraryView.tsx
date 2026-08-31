@@ -100,15 +100,6 @@ function IncidentImage({ incident, large = false }: { incident: MimirIncident; l
   )
 }
 
-function SummaryMetric({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-xl bg-white/[0.026] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
-      <div className="text-[11px] font-medium text-[var(--mimir-text-subtle)]">{label}</div>
-      <div className="mt-1 text-[21px] font-semibold text-[var(--mimir-text)]">{value}</div>
-    </div>
-  )
-}
-
 function FilterChip({
   label,
   count,
@@ -1468,11 +1459,6 @@ export function IncidentLibraryView({
               <div className="mt-3 inline-flex rounded-full border border-[rgba(157,183,170,0.16)] bg-[var(--mimir-accent-soft)] px-3 py-1 text-[12px] font-medium text-[var(--mimir-text-muted)]">
                 {reviewModeCopy(session)}
               </div>
-            </div>
-            <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[330px]">
-              <SummaryMetric label="Important" value={counts.important} />
-              <SummaryMetric label="Review" value={counts.review} />
-              <SummaryMetric label="Ignore" value={counts.ignore} />
             </div>
           </div>
 
