@@ -651,6 +651,10 @@ export default function App() {
       } else {
         setScanProgress(null)
         void refreshSessionHistory()
+        // A scan runs for 25 minutes or more and people go and do something
+        // else. Nothing told them it had ended, so a long scan and a hung one
+        // felt the same.
+        void invoke('alert_long_task_finished').catch(() => {})
         setAppView('library')
       }
     } catch (error) {
@@ -665,6 +669,7 @@ export default function App() {
         return
       }
       setScanState('error')
+      void invoke('alert_long_task_finished').catch(() => {})
 
       // Write it down as well as showing it. A failed scan was visible in the
       // UI and nowhere else, so the half of the app most likely to break --

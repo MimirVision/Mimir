@@ -19,6 +19,7 @@ import { ModalOverlay } from './ModalOverlay'
 import {
   correctionChoiceFor,
   correctionConsent,
+  recordCorrectionSent,
   correctionOutcome,
   setCorrectionConsent,
   shouldSendCorrection,
@@ -2337,6 +2338,7 @@ export function IncidentViewerScreen({
     setSendClipWithCorrection(false)
     void sendCorrection(status, withClip)
       .then(() => {
+        recordCorrectionSent()
         setFeedbackNotes('')
         setActionMessage(
           withClip

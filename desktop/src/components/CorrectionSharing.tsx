@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { correctionConsent, setCorrectionConsent } from '../lib/verdictCorrection'
+import { correctionConsent, correctionsSent, setCorrectionConsent } from '../lib/verdictCorrection'
 
 /**
  * Turn correction sending on or off, after the first time it was asked.
@@ -16,6 +16,7 @@ import { correctionConsent, setCorrectionConsent } from '../lib/verdictCorrectio
  */
 export function CorrectionSharing() {
   const [consent, setConsent] = useState(correctionConsent())
+  const sent = correctionsSent()
 
   if (consent === 'unasked') {
     return null
@@ -38,6 +39,14 @@ export function CorrectionSharing() {
             {granted
               ? 'When you change a verdict, that correction is sent so the detector can learn from it. No video is included.'
               : 'Corrections stay on this PC. Changing a verdict still updates it here, but nothing is sent.'}
+            {sent > 0 && (
+              <>
+                {' '}
+                <span className="text-[var(--mimir-text-muted)]">
+                  You have sent {sent} {sent === 1 ? 'correction' : 'corrections'}.
+                </span>
+              </>
+            )}
           </p>
         </div>
 

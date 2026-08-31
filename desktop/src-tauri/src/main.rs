@@ -3854,6 +3854,30 @@ async fn open_mimir_storage_folder(kind: String) -> Result<(), ScanFailure> {
     .map_err(|error| ScanFailure::new(error.to_string()))?
 }
 
+/// Flash the taskbar when a long scan ends and nobody is watching.
+///
+/// A scan runs for 25 minutes or several hours, so people start one and go and
+/// do something else. Until now the only way to learn it had finished was to
+/// come back and look, which makes a long scan feel indistinguishable from a
+/// hung one.
+///
+/// Deliberately not a desktop notification: that needs another plugin, another
+/// permission and, on Windows, whatever the user's focus-assist settings decide
+/// to do with it. Flashing the taskbar button is built into the window API,
+/// respects the same settings everything else does, and is what a background
+/// job finishing conventionally looks like on Windows.
+///
+/// Silent when the window already has focus -- the user is looking at it, and
+/// the results are on screen.
+#[tauri::command]
+async fn alert_long_task_finished(window: tauri::Window) -> Result<(), ScanFailure> {
+    if window.is_focused().unwrap_or(false) {
+        return Ok(());
+    }
+    let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
+    Ok(())
+}
+
 /// The tail of the crash log, for a report the user chooses to send.
 ///
 /// Bounded rather than whole-file: the log rotates at 2 MB and nobody needs to
@@ -4218,7 +4242,8 @@ fn main() {
             open_containing_folder,
             open_mimir_storage_folder,
             log_incident_diagnostic,
-            read_recent_crash_log
+            read_recent_crash_log,
+            alert_long_task_finished
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

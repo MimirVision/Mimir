@@ -3,6 +3,8 @@ import {
   correctionChoiceFor,
   shouldSendCorrection,
   correctionConsent,
+  correctionsSent,
+  recordCorrectionSent,
   correctionOutcome,
   setCorrectionConsent,
 } from './verdictCorrection'
@@ -100,5 +102,34 @@ describe('withdrawing consent', () => {
 
     setCorrectionConsent('granted', write)
     expect(correctionOutcome(correctionConsent(read))).toBe('send')
+  })
+})
+
+describe('counting corrections', () => {
+  it('starts at nothing and counts up', () => {
+    const store: Record<string, string> = {}
+    const read = (key: string) => store[key] ?? null
+    const write = (key: string, value: string) => {
+      store[key] = value
+    }
+
+    expect(correctionsSent(read)).toBe(0)
+    expect(recordCorrectionSent(read, write)).toBe(1)
+    expect(recordCorrectionSent(read, write)).toBe(2)
+    expect(correctionsSent(read)).toBe(2)
+  })
+
+  it('treats a corrupted count as none rather than NaN', () => {
+    expect(correctionsSent(() => 'not a number')).toBe(0)
+    expect(correctionsSent(() => '-5')).toBe(0)
+    expect(correctionsSent(() => null)).toBe(0)
+  })
+
+  it('never lets a blocked store break the correction itself', () => {
+    // A full or disabled localStorage must not throw out of the send path.
+    const write = () => {
+      throw new Error('storage disabled')
+    }
+    expect(() => recordCorrectionSent(() => '3', write)).not.toThrow()
   })
 })
