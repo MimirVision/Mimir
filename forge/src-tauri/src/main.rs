@@ -5,7 +5,7 @@ mod commands;
 use commands::{
     clear_secret, generate_feedback_report, get_feedback_reviews, get_settings, get_status, list_collections,
     list_feedback, list_label_candidates, list_recent_reports, open_in_cvat, open_report_file, run_sync,
-    save_feedback_review, save_label, save_secret, save_settings, show_collection, show_feedback,
+    save_feedback_review, save_label, score_labels, save_secret, save_settings, show_collection, show_feedback,
 };
 
 fn main() {
@@ -20,6 +20,7 @@ fn main() {
             get_status,
             list_label_candidates,
             save_label,
+            score_labels,
             list_feedback,
             show_feedback,
             get_feedback_reviews,

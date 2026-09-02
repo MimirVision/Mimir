@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import { describeError, type DescribedError } from '../lib/errorMessages'
 import { ErrorNotice } from '../components/ErrorNotice'
 import { Spinner } from '../components/Spinner'
-import type { LabelCandidate } from '../lib/types'
+import type { LabelCandidate, LabelScore } from '../lib/types'
 
 /**
  * Give a verdict to one event group at a time.
@@ -39,6 +39,7 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<DescribedError | null>(null)
+  const [score, setScore] = useState<LabelScore | null>(null)
 
   const current = queue[0]
 
@@ -61,7 +62,12 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const refreshScore = useCallback(() => {
+    api.scoreLabels().then(setScore).catch(() => setScore(null))
+  }, [])
+
   useEffect(load, [load])
+  useEffect(refreshScore, [refreshScore])
 
   const commit = () => {
     if (!current || !severity || !category || busy) {
@@ -79,6 +85,9 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
         }
         setSaved(count => count + 1)
         setQueue(rest => rest.slice(1))
+        // Cheap enough to redo every time, and the whole point: labelling into
+        // a void is what made thousands of reviewed incidents produce nothing.
+        refreshScore()
         setSeverity('')
         setCategory('')
         setNotes('')
@@ -132,6 +141,30 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
         </button>
       </header>
 
+      {score && score.scored > 0 && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span className="text-slate-200">
+              Mimir agrees with{' '}
+              <strong className="text-sky-300">
+                {Math.round((score.agreement ?? 0) * 100)}%
+              </strong>{' '}
+              of your {score.scored} scored {score.scored === 1 ? 'label' : 'labels'}
+            </span>
+            <span className="text-xs text-slate-500">
+              {score.noisier} too noisy · {score.quieter} too quiet
+              {score.unmatched > 0 && ` · ${score.unmatched} not in this scan`}
+            </span>
+          </div>
+          {score.scored < 50 && (
+            <p className="mt-1 text-xs text-slate-500">
+              Too few to draw a conclusion from yet -- around fifty is where this starts meaning
+              something.
+            </p>
+          )}
+        </div>
+      )}
+
       <ErrorNotice error={error} />
 
       {!current && (
@@ -143,7 +176,20 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
       {current && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-            {current.contact_sheet ? (
+            {current.video_path ? (
+              // The clip, not just a still. A contact sheet shows the moment
+              // but not the motion, and "did anything touch the car" is
+              // usually a question about motion.
+              <video
+                key={current.video_path}
+                src={convertFileSrc(current.video_path)}
+                controls
+                autoPlay
+                loop
+                muted
+                className="max-h-[62vh] w-full rounded-lg bg-black"
+              />
+            ) : current.contact_sheet ? (
               <img
                 src={convertFileSrc(current.contact_sheet)}
                 alt={`Contact sheet for ${current.source}`}
@@ -151,8 +197,22 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
               />
             ) : (
               <p className="p-6 text-sm text-slate-400">
-                No contact sheet for this group. Judge it from the evidence on the right, or skip it.
+                Nothing to view for this group -- no clip and no contact sheet. Judge it from the
+                evidence on the right, or skip it.
               </p>
+            )}
+
+            {current.video_path && current.contact_sheet && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-300">
+                  Show the contact sheet as well
+                </summary>
+                <img
+                  src={convertFileSrc(current.contact_sheet)}
+                  alt={`Contact sheet for ${current.source}`}
+                  className="mt-2 w-full rounded-lg"
+                />
+              </details>
             )}
             <p className="mt-2 flex items-center gap-2 text-xs text-slate-500">
               {current.from_feedback && (

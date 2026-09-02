@@ -152,6 +152,7 @@ export interface LabelCandidate {
   mimir_reasons: string
   key_moment_sec: string
   contact_sheet: string
+  video_path?: string
   from_feedback?: boolean
   has_video?: boolean
 }
@@ -167,4 +168,15 @@ export interface LabelSaveResult {
   saved: boolean
   reason?: string
   group: string
+}
+
+/** How well Mimir agrees with the labels so far. */
+export interface LabelScore {
+  labelled: number
+  scored: number
+  unmatched: number
+  agrees: number
+  noisier: number
+  quieter: number
+  agreement: number | null
 }

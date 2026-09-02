@@ -8,3 +8,4 @@ filename_or_group,expected_severity,category,notes,source_set
 "Reddit 1.mp4,Important,door ding.mp4",IMPORTANT,door_ding,known door ding/contact clip should be important,current_crash_door_ding_set
 "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",IMPORTANT,rear_impact,hard rear-end crash should never be review or ignore,current_crash_door_ding_set
 2026-04-17_19-07-22,REVIEW,close_door_no_contact,user-confirmed adjacent door activity without impact must never become important,known_close_door_no_contact_set
+2026-04-17_20-04-31-back.mp4,IGNORE,distant_pedestrian,,local_scan_set

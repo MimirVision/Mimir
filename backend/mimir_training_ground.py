@@ -529,12 +529,26 @@ def build_parser() -> argparse.ArgumentParser:
     labels_save.add_argument("--notes", default="")
     labels_save.add_argument("--source-set", required=True)
     labels_save.add_argument("--labels-csv", default="")
+    labels_score = labels_commands.add_parser("score", help="How well Mimir agrees with the labels so far.")
+    labels_score.add_argument("--session", default="")
+    labels_score.add_argument("--labels-csv", default="")
+    labels_score.add_argument("--feedback-inbox", default="")
 
     return parser
 
 
 def _labels_csv_path(value: str) -> Path:
     return Path(value) if value.strip() else Path(__file__).resolve().parent / "mimir_core_v2" / "benchmark_labels.csv"
+
+
+def _feedback_video_path(feedback_inbox: Path, package_id: str) -> str:
+    """The clip inside a feedback package, if one was sent with it."""
+
+    video_dir = feedback_inbox / package_id / "video"
+    if not package_id or not video_dir.is_dir():
+        return ""
+    clips = sorted(item for item in video_dir.glob("*") if item.is_file())
+    return str(clips[0]) if clips else ""
 
 
 def feedback_label_candidates(feedback_inbox: Path, labels_csv: Path) -> list[dict]:
@@ -578,13 +592,101 @@ def feedback_label_candidates(feedback_inbox: Path, labels_csv: Path) -> list[di
             "detected": "",
             "mimir_reasons": f"They said: {user_said}" if user_said else "",
             "key_moment_sec": "",
-            # The packaged clip, so the screen can show something to judge.
             "contact_sheet": "",
+            # The clip that came with the correction. Without this the row had
+            # nothing to look at at all, which made it unjudgeable.
+            "video_path": _feedback_video_path(feedback_inbox, str(row.get("package_id") or "")),
             "from_feedback": True,
             "package_id": str(row.get("package_id") or ""),
             "has_video": row.get("has_video") == "yes",
         })
     return rows
+
+
+def labels_score_command(args) -> int:
+    """How well Mimir agrees with the labels so far, using no rescan.
+
+    Reads verdicts already stored in the session and compares them with the
+    answer key. That takes about a third of a second, which is what makes it
+    usable after every single label rather than as an occasional ceremony.
+
+    Noisier and quieter are counted apart, not merged into one accuracy figure.
+    Mimir being louder than a person wanted costs a minute of attention; being
+    quieter means they never see the clip. Averaging those two into a single
+    percentage hides the only one that can lose evidence.
+    """
+
+    from build_label_worksheet import group_key, load_session, severity_of
+    from score_feedback_labels import compare
+
+    labels_csv = _labels_csv_path(args.labels_csv)
+    answers: dict[str, str] = {}
+    if labels_csv.is_file():
+        with labels_csv.open(encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                name = str(row.get("filename_or_group") or "").strip().lower()
+                expected = str(row.get("expected_severity") or "").strip().upper()
+                if name and expected:
+                    answers[name] = expected
+
+    # Indexed by every name a label might carry. Labels arrive with two
+    # different keys: rows built from a scan use the event group id, while rows
+    # harvested from tester feedback use the clip filename, because that is all
+    # a feedback package knows about itself. Matching on only one silently
+    # scored nothing.
+    verdicts: dict[str, str] = {}
+    if args.session:
+        for incident in load_session(Path(args.session)).get("incidents") or []:
+            severity = severity_of(incident)
+            names = {
+                group_key(incident).lower(),
+                str(incident.get("source_filename") or "").strip().lower(),
+                str(incident.get("source_stem") or "").strip().lower(),
+            }
+            for name in names:
+                if not name:
+                    continue
+                # The group's verdict is its most severe incident, which is what
+                # a person saw when they judged it.
+                current = verdicts.get(name)
+                if current is None or _SEVERITY_ORDER.get(severity, -1) > _SEVERITY_ORDER.get(current, -1):
+                    verdicts[name] = severity
+
+    # Tester-sent rows are usually footage this machine does not have -- only
+    # the clip inside the package, which is not part of any scan. But the
+    # package records what Mimir decided at the time, so those labels can still
+    # be scored. Without this they counted as unmatched forever, and labelling
+    # the corrections people took the trouble to send would have moved nothing.
+    if args.feedback_inbox:
+        for row in feedback_label_candidates(Path(args.feedback_inbox), Path("nonexistent")):
+            name = str(row.get("filename_or_group") or "").strip().lower()
+            said = str(row.get("mimir_said") or "").strip().upper()
+            if name and said and name not in verdicts:
+                verdicts[name] = said
+
+    outcomes = {"agrees": 0, "noisier": 0, "quieter": 0}
+    unmatched = 0
+    for name, expected in answers.items():
+        mimir = verdicts.get(name)
+        if not mimir:
+            unmatched += 1
+            continue
+        result = compare(expected, mimir)
+        if result in outcomes:
+            outcomes[result] += 1
+
+    scored = sum(outcomes.values())
+    print(json.dumps({
+        "labelled": len(answers),
+        "scored": scored,
+        "unmatched": unmatched,
+        **outcomes,
+        "agreement": round(outcomes["agrees"] / scored, 3) if scored else None,
+    }, indent=2))
+    return 0
+
+
+_SEVERITY_ORDER = {"IGNORE": 0, "REVIEW": 1, "IMPORTANT": 2}
 
 
 def labels_list_command(args) -> int:
@@ -683,6 +785,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "labels":
             if args.labels_command == "list":
                 return labels_list_command(args)
+            if args.labels_command == "score":
+                return labels_score_command(args)
             return labels_save_command(args)
     except (DatasetPackageError, OSError, ValueError) as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

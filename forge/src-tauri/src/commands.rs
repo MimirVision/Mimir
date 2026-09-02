@@ -798,6 +798,29 @@ pub async fn list_label_candidates(app: tauri::AppHandle, limit: u32) -> Result<
     .map_err(|error| ForgeError::new(format!("Label list task panicked: {error}")))?
 }
 
+/// How well Mimir agrees with the labels so far.
+///
+/// Cheap enough to run after every save -- it re-reads stored verdicts rather
+/// than rescanning -- which is the point. Labelling into a void is what made
+/// 4,837 reviewed incidents produce zero corrections.
+#[tauri::command]
+pub async fn score_labels(app: tauri::AppHandle) -> Result<Value, ForgeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let settings = read_settings(&app)?;
+        let output = require_success(run_backend(
+            &[
+                "labels", "score",
+                "--session", &settings.scan_session,
+                "--feedback-inbox", &settings.feedback_inbox,
+            ],
+            &[],
+        )?)?;
+        parse_json_stdout(&output)
+    })
+    .await
+    .map_err(|error| ForgeError::new(format!("Label score task panicked: {error}")))?
+}
+
 /// Record one verdict. Appends, and refuses to label the same group twice.
 #[tauri::command]
 pub async fn save_label(

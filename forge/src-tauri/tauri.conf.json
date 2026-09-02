@@ -19,7 +19,9 @@
           "allow": [
             "$APPDATA/**",
             "$APPLOCALDATA/**",
-            "C:/MimirDev/backend/**"
+            "C:/MimirDev/backend/**",
+            "$VIDEO/**",
+            "$HOME/Videos/**"
           ],
           "deny": [
             "**/.git/**",

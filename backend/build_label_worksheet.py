@@ -70,6 +70,7 @@ COLUMNS = [
     "mimir_reasons",
     "key_moment_sec",
     "contact_sheet",
+    "video_path",
 ]
 
 
@@ -207,6 +208,9 @@ def pending_rows(session: dict, labels_csv: Path, include_labelled: bool = False
                 "mimir_reasons": reasons_of(incident),
                 "key_moment_sec": text(incident.get("primary_key_moment_sec")),
                 "contact_sheet": text(incident.get("contact_sheet") or incident.get("hero_thumbnail")),
+                # A contact sheet shows the moment; judging contact often needs
+                # the motion around it, so the clip travels too.
+                "video_path": text(incident.get("video_path")),
             }
         )
 
