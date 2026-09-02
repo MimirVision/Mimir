@@ -10,6 +10,7 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -19,7 +20,53 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_FRONTEND_ROOT = ROOT.parent / "Mimir"
+
+
+def _default_frontend_root() -> Path:
+    """Where the desktop app lives, worked out rather than assumed.
+
+    This was `ROOT.parent / "Mimir"`, which stopped existing when the repos
+    were consolidated into the monorepo and the app moved to `desktop/`. The
+    gate went on running against the vanished directory and reporting every
+    artifact in it as missing -- SBOM, security scan, accessibility report,
+    the release documents, every signed binary. All of them were present the
+    whole time, one directory over.
+
+    That is worse than a crash. The gate exists to say which work is still
+    outstanding, and a gate that fails for a reason unrelated to the work
+    trains you to read BLOCK as noise, which is precisely when it stops
+    protecting anything. RELEASE_READINESS.md says this gate is expected to be
+    red before the free beta -- so the failures it prints have to be the real
+    ones.
+
+    Resolved by looking for the app rather than naming it, with
+    MIMIR_FRONTEND_ROOT as an override. Same fix as Forge's backend_root() and
+    desktop/scripts/build-sidecar.ps1, which both had this identical bug.
+    """
+
+    override = os.environ.get("MIMIR_FRONTEND_ROOT", "").strip()
+    if override:
+        return Path(override)
+
+    def is_app(candidate: Path) -> bool:
+        return (candidate / "src-tauri" / "tauri.conf.json").is_file()
+
+    for name in ("desktop", "Mimir"):
+        candidate = ROOT.parent / name
+        if is_app(candidate):
+            return candidate
+
+    # Nothing named as expected: take any sibling that is unambiguously the
+    # Tauri app, so a future rename fails loudly on its own terms instead of
+    # silently reporting a full set of phantom missing artifacts.
+    siblings = sorted(child for child in ROOT.parent.iterdir() if child.is_dir() and is_app(child))
+    if len(siblings) == 1:
+        return siblings[0]
+
+    return ROOT.parent / "desktop"
+
+
+DEFAULT_FRONTEND_ROOT = _default_frontend_root()
 DEFAULT_OUTPUT_DIR = ROOT / "MimirOutputV2"
 MIN_LOCKED_LABELS = 750
 MIN_POSITIVE_LABELS = 300
