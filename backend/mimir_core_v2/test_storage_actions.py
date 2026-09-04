@@ -212,5 +212,86 @@ class StorageActionTests(unittest.TestCase):
             self.assertEqual(incident["storage_state"], "source")
 
 
+
+class DeletePartialFailure(unittest.TestCase):
+    """A clip that refuses to delete must not cost the incident its thumbnail.
+
+    The library showed rows with a blank frame where the picture should be.
+    Deletion sent clips and thumbnails to the Recycle Bin in one flat list and
+    only marked the incident deleted when every path succeeded -- so a clip on
+    a USB stick (removable drives mostly have no Recycle Bin) failed while its
+    thumbnail on the internal disk went, leaving a live incident advertising an
+    image that no longer existed.
+    """
+
+    def test_thumbnail_survives_a_clip_that_will_not_delete(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            clip = root / "front.mp4"
+            clip.write_bytes(b"0" * 32)
+            thumbnail = root / "front.jpg"
+            thumbnail.write_bytes(b"0" * 8)
+
+            incident = {
+                "id": "one",
+                "video_path": str(clip),
+                "thumbnail": str(thumbnail),
+            }
+
+            def refuse_clips(paths, use_recycle_bin):
+                return [
+                    {
+                        "path": str(path),
+                        "ok": path.suffix != ".mp4",
+                        "reason": "" if path.suffix != ".mp4" else "the Recycle Bin refused this file",
+                        "recycled": False,
+                    }
+                    for path in paths
+                ]
+
+            with patch.object(actions, "_remove_paths", refuse_clips):
+                report = actions.delete_incidents({}, [incident], True, False)
+
+            self.assertFalse(report["ok"])
+            # The footage is still here, so the incident stays out of trash...
+            self.assertNotEqual(incident.get("user_deleted"), True)
+            # ...and it must still have its picture, rather than a dead path.
+            self.assertEqual(incident["thumbnail"], str(thumbnail))
+
+    def test_incident_is_deleted_even_if_tidying_up_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            clip = root / "front.mp4"
+            clip.write_bytes(b"0" * 32)
+            thumbnail = root / "front.jpg"
+            thumbnail.write_bytes(b"0" * 8)
+
+            incident = {
+                "id": "one",
+                "video_path": str(clip),
+                "thumbnail": str(thumbnail),
+            }
+
+            def refuse_thumbnails(paths, use_recycle_bin):
+                return [
+                    {
+                        "path": str(path),
+                        "ok": path.suffix == ".mp4",
+                        "reason": "" if path.suffix == ".mp4" else "locked",
+                        "recycled": False,
+                    }
+                    for path in paths
+                ]
+
+            with patch.object(actions, "_remove_paths", refuse_thumbnails):
+                report = actions.delete_incidents({}, [incident], True, False)
+
+            # The failure is reported honestly, but the footage is gone, so the
+            # incident belongs in trash rather than back in the library.
+            self.assertFalse(report["ok"])
+            self.assertTrue(incident["user_deleted"])
+            self.assertFalse(incident["video_exists"])
+
+
 if __name__ == "__main__":
     unittest.main()

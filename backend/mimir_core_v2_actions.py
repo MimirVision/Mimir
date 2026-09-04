@@ -971,12 +971,34 @@ def delete_incidents(
             report["bytes_deleted"] += targets["bytes"]
             continue
 
-        paths = [Path(p) for p in targets["clips"]]
-        paths.extend(Path(p) for p in targets["derived_artifacts"])
-        if targets["source_folder"]:
-            paths.append(Path(targets["source_folder"]))
+        clip_paths = [Path(p) for p in targets["clips"]]
+        artifact_paths = [Path(p) for p in targets["derived_artifacts"]]
+        folder_paths = [Path(targets["source_folder"])] if targets["source_folder"] else []
 
-        results = _remove_paths(paths, use_recycle_bin)
+        # The footage goes first, and the thumbnails only follow if it actually
+        # went. Deleting them in one flat list is what produced incidents that
+        # sat in the library with a blank frame where the picture used to be:
+        # a clip on a USB stick refuses the Recycle Bin (removable drives
+        # mostly have none), the thumbnail on the internal disk recycles fine,
+        # and the incident is left advertising an image that no longer exists.
+        results = _remove_paths(clip_paths, use_recycle_bin)
+        removed = {path_key(item["path"]) for item in results if item.get("ok")}
+        clips_gone = all(path_key(str(path)) in removed for path in clip_paths)
+
+        if clips_gone:
+            results.extend(_remove_paths(artifact_paths + folder_paths, use_recycle_bin))
+            removed = {path_key(item["path"]) for item in results if item.get("ok")}
+        else:
+            for path in artifact_paths + folder_paths:
+                results.append(
+                    {
+                        "path": str(path),
+                        "ok": True,
+                        "reason": "kept, because the footage it belongs to is still here",
+                        "recycled": False,
+                    }
+                )
+
         entry["results"] = results
 
         failed = [item for item in results if not item.get("ok")]
@@ -985,7 +1007,20 @@ def delete_incidents(
             failure["incident_id"] = incident.get("id")
             report["failures"].append(failure)
 
-        if not failed:
+        # Whatever else happened, stop pointing at an artifact that is gone.
+        # An incident naming a deleted thumbnail renders as a live row with a
+        # hole in it, which reads as a bug in the library rather than as the
+        # deletion it actually is.
+        for key in ("thumbnail", "hero_thumbnail", "contact_sheet"):
+            existing = as_path(clean_text(incident.get(key)))
+            if existing is not None and path_key(str(existing)) in removed:
+                incident[key] = ""
+
+        # Marked on the footage being gone, not on a clean sweep. Holding the
+        # incident back because tidying up a stray artifact failed leaves it in
+        # the library with nothing behind it, which is worse than reporting the
+        # tidy-up failure and moving the incident to trash where it belongs.
+        if clips_gone:
             report["bytes_deleted"] += targets["bytes"]
             incident["user_deleted"] = True
             incident["storage_state"] = "deleted"
