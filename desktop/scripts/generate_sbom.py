@@ -105,7 +105,13 @@ def model_components(backend_root: Path) -> list[dict[str, Any]]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--frontend-root", default=str(Path(__file__).resolve().parents[1]))
-    parser.add_argument("--backend-root", default="C:\\MimirDev\\backend")
+    # Derived, not named. This was hardcoded to C:\MimirDev\backend while the
+    # line above it already worked the frontend out from __file__ -- so the SBOM
+    # would silently describe whatever happened to be at that absolute path, or
+    # nothing at all once the repository moved. The same assumption had already
+    # broken Forge, build-sidecar.ps1 and the release gate after the monorepo
+    # consolidation.
+    parser.add_argument("--backend-root", default=str(Path(__file__).resolve().parents[2] / "backend"))
     parser.add_argument("--output", default="")
     args = parser.parse_args()
     frontend = Path(args.frontend_root).resolve()
