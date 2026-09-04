@@ -1,4 +1,4 @@
-import { FEEDBACK_EMAIL } from '../config'
+import { SUPPORT_EMAIL } from '../config'
 
 interface BetaPrivacyNoticeProps {
   open: boolean
@@ -44,10 +44,10 @@ export function BetaPrivacyNotice({ open, onAccept }: BetaPrivacyNoticeProps) {
           <p>
             Something wrong that feedback cannot capture? Email{' '}
             <a
-              href={`mailto:${FEEDBACK_EMAIL}`}
+              href={`mailto:${SUPPORT_EMAIL}`}
               className="font-semibold text-[var(--mimir-text)] underline decoration-white/30 underline-offset-2 hover:decoration-white/60"
             >
-              {FEEDBACK_EMAIL}
+              {SUPPORT_EMAIL}
             </a>
             . Please don't post footage on forums or social media.
           </p>

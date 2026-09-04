@@ -83,7 +83,7 @@ Contributed footage is used to measure and improve Mimir's detection. It is
 not published, not sold, and not shared with third parties.
 
 You can ask for a contribution to be deleted. Quote the package id shown when
-you sent it, or the approximate date, to <feedback.mimir@gmail.com>. Anything
+you sent it, or the approximate date, to <support@mimirvision.com>. Anything
 already used to train a released model cannot be pulled back out of that model,
 which is a limitation of how training works rather than a policy.
 
@@ -116,7 +116,7 @@ signs you up to anything future.
 Not affiliated with, endorsed by, or sponsored by Tesla, Inc. Tesla, Sentry
 Mode, and TeslaCam are trademarks of Tesla, Inc.
 
-Questions: <feedback.mimir@gmail.com>
+Questions: <hello@mimirvision.com>
 
 > These terms have not been reviewed by a lawyer. They are written to be honest
 > about what the software does rather than to maximise protection, and they are

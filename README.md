@@ -104,7 +104,7 @@ No macOS, Linux, 32-bit or ARM build.
 For a wrong verdict, just change it in the app — that carries the context needed
 to diagnose it. For anything else, open an
 [issue](https://github.com/MimirVision/Mimir/issues) or email
-<feedback.mimir@gmail.com>.
+<hello@mimirvision.com>.
 
 ---
 

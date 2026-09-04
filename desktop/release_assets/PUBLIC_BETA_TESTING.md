@@ -80,7 +80,7 @@ If Mimir crashes, it records what happened and offers to send it under **Labs**.
 That report shows you exactly what it contains before anything leaves, and it is
 the only way anyone finds out the crash happened.
 
-If you'd rather not send footage over the network for a particular clip, Mimir also offers **Save without sending** wherever Send/Contribute appears -- it still encrypts locally, just doesn't attempt delivery, and you can send it later. For anything you don't want going through Mimir's submission flow at all, reach feedback.mimir@gmail.com directly -- but do not share footage over public channels (forums, social media, chat rooms).
+If you'd rather not send footage over the network for a particular clip, Mimir also offers **Save without sending** wherever Send/Contribute appears -- it still encrypts locally, just doesn't attempt delivery, and you can send it later. For anything you don't want going through Mimir's submission flow at all, reach support@mimirvision.com directly -- but do not share footage over public channels (forums, social media, chat rooms).
 
 ## Known Limitations
 
