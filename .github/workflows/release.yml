@@ -90,6 +90,37 @@ jobs:
           npx tsc --noEmit
           npx vitest run
 
+      # Same fix desktop-verify already carries, for the same reason: tauri-build
+      # refuses to run if a resource named in tauri.conf.json is missing, the
+      # sidecars are gitignored build artifacts, and on a fresh checkout none of
+      # them exist yet -- so `cargo test` died with
+      #
+      #   resource path `resources\mimir-backend\mimir-core-v2-scan.exe` doesn't exist
+      #
+      # before running a single test. desktop-verify was fixed and this workflow
+      # was not, so every tagged release failed here.
+      #
+      # Building the real sidecars first would move a PyInstaller build ahead of
+      # the tests for no benefit -- these are Rust unit tests for the Outbox and
+      # they never execute a sidecar. The empty files are replaced by the real
+      # ones during "Build installer": build-sidecar.ps1 copies every sidecar,
+      # age.exe and the licence with `Copy-Item -Force`.
+      - name: Stand in for the packaged sidecars
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $resources = "src-tauri\resources\mimir-backend"
+          New-Item -ItemType Directory -Force -Path $resources | Out-Null
+          $names = @(
+            "mimir-core-v2-scan.exe", "mimir-core-v2-ai-enrich.exe",
+            "mimir-core-v2-actions.exe", "mimir-core-v2-dataset.exe",
+            "mimir-core-v2-model-update.exe", "age.exe", "AGE-LICENSE.txt"
+          )
+          foreach ($name in $names) {
+            $path = Join-Path $resources $name
+            if (-not (Test-Path $path)) { New-Item -ItemType File -Path $path | Out-Null }
+          }
+
       - name: Rust tests
         working-directory: desktop/src-tauri
         run: cargo test
