@@ -17,6 +17,10 @@ export function UpdateNotice({ busy }: { busy: boolean }) {
   const [downloaded, setDownloaded] = useState(0)
   const [total, setTotal] = useState(0)
   const [state, setState] = useState<'idle' | 'downloading' | 'installing' | 'failed'>('idle')
+  // Kept, and shown. Discarding this is what made the first real update
+  // failure in the wild undiagnosable: the user saw "could not be
+  // installed" and neither of us could say why.
+  const [reason, setReason] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -41,7 +45,10 @@ export function UpdateNotice({ busy }: { busy: boolean }) {
         setTotal(size)
       },
       () => setState('installing'),
-    ).catch(() => setState('failed'))
+    ).catch((error: unknown) => {
+      setState('failed')
+      setReason(error instanceof Error ? error.message : String(error))
+    })
   }
 
   const size = formatBytes(total)
@@ -68,7 +75,12 @@ export function UpdateNotice({ busy }: { busy: boolean }) {
             </>
           )}
           {state === 'installing' && 'Mimir will close to finish. Reopen it when the installer is done.'}
-          {state === 'failed' && 'You can download it yourself from the Mimir releases page instead.'}
+          {state === 'failed' && (
+            <>
+              You can download it yourself from the Mimir releases page instead.
+              {reason ? <span className="block opacity-80">{reason}</span> : null}
+            </>
+          )}
           {state === 'idle' && (
             <>
               The update is the full installer, so it is a sizeable download.
