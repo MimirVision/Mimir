@@ -227,44 +227,23 @@
   var links = document.querySelectorAll('a[href$="MimirSetup.exe"]');
   if (!links.length) return;
 
-  function copyLink(button) {
-    var url = 'https://www.mimirvision.com/';
-    var done = function () {
-      var previous = button.getAttribute('data-label');
-      button.firstChild.nodeValue = 'Link copied';
-      setTimeout(function () { button.firstChild.nodeValue = previous; }, 2200);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(done, function () {});
-    }
-  }
-
   Array.prototype.forEach.call(links, function (link) {
+    // The nav keeps a short marker; the page-body buttons say it in full. Both
+    // stop being links, because a link that does nothing useful is worse than
+    // no link.
     var isNav = link.classList.contains('button--small');
+    link.textContent = isNav ? 'Windows only' : 'Windows only';
 
-    // The nav button becomes a plain marker. Shrinking it to a sentence would
-    // break the header layout, and it is not where anyone reads an explanation.
-    if (isNav) {
-      link.textContent = 'Windows only';
-      link.removeAttribute('href');
-      link.setAttribute('aria-disabled', 'true');
-      link.classList.add('is-disabled');
-      return;
+    if (!isNav) {
+      var meta = document.createElement('span');
+      meta.className = 'button__meta';
+      meta.textContent = 'Open this page on a Windows PC to download';
+      link.appendChild(meta);
     }
 
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = link.className;
-    button.setAttribute('data-label', 'Copy link for later');
-    button.appendChild(document.createTextNode('Copy link for later'));
-
-    var meta = document.createElement('span');
-    meta.className = 'button__meta';
-    meta.textContent = 'Mimir runs on Windows 10 / 11';
-    button.appendChild(meta);
-
-    button.addEventListener('click', function () { copyLink(button); });
-    link.parentNode.replaceChild(button, link);
+    link.removeAttribute('href');
+    link.setAttribute('aria-disabled', 'true');
+    link.classList.add('is-disabled');
   });
 
   // Said once, near the top, rather than repeated beside every control.
@@ -272,7 +251,7 @@
   if (hero && !document.querySelector('.platform-note')) {
     var note = document.createElement('p');
     note.className = 'platform-note';
-    note.textContent = 'Mimir is a Windows app. Open this page on your PC to download it.';
+    note.textContent = 'Mimir runs on Windows 10 and 11. There is no macOS or Linux build.';
     hero.parentNode.insertBefore(note, hero.nextSibling);
   }
 })();

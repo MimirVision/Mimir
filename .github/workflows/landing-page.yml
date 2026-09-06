@@ -52,6 +52,12 @@ jobs:
           mkdir -p _site
           cp -r desktop/landing-page/. _site/
           cp design-system/tokens.css _site/tokens.css
+
+          # Working files live beside the page because that is where they are
+          # useful, but they are not part of the site. Without this the local
+          # preview script, the folder's internal README and any in-progress
+          # experiment were all fetchable on the public domain.
+          rm -f _site/serve_preview.py _site/README.md _site/hero-fall.html _site/hero.svg
           # The page is served flat, so rewrite the repo-relative import to sit
           # beside the stylesheet.
           sed -i 's|\.\./\.\./design-system/tokens\.css|./tokens.css|' _site/styles.css
