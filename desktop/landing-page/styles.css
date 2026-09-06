@@ -916,3 +916,19 @@ code {
     width: 52px;
   }
 }
+
+/* Shown only on devices that cannot run the installer -- see the Windows-only
+   block in main.js. */
+.platform-note {
+  margin: 14px auto 0;
+  max-width: 42ch;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--mimir-text-subtle);
+}
+
+.button.is-disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}

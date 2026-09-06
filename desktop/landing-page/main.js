@@ -186,3 +186,93 @@
     }
   }
 })();
+
+/* ---------------------------------------------------------------------------
+ * Windows-only download, handled honestly on everything else.
+ *
+ * Most people will meet this page on a phone, because the link arrives in a
+ * message. Tapping "Download for Windows" there fetches a 206 MB executable
+ * onto a device that can never run it -- a slow, expensive nothing, and a
+ * poor first impression of software that has not even been installed yet.
+ *
+ * Progressive enhancement on purpose: the markup ships a working link, so a
+ * visitor with no JavaScript keeps the download rather than losing it. This
+ * only ever takes the link away from a device that was never going to use it.
+ * ------------------------------------------------------------------------- */
+(function () {
+  // Windows tablets and touch laptops run the installer perfectly well, so the
+  // question is only ever the operating system -- never screen size, never
+  // touch support.
+  //
+  // Client Hints are consulted first and alone, because they are structured
+  // and authoritative. An earlier version OR-ed them with the user-agent
+  // string, which meant any Windows signal from either source won: a phone
+  // whose UA said Android still got the download if Client Hints disagreed.
+  // Falling back to the UA string only when Client Hints are absent keeps one
+  // answer rather than two competing ones.
+  function runsWindows(ua, uaDataPlatform) {
+    if (uaDataPlatform) return /Windows/i.test(uaDataPlatform);
+    if (/Windows Phone|IEMobile/i.test(ua)) return false;
+    return /Windows NT/i.test(ua);
+  }
+
+  // Exposed so the behaviour can be checked without spoofing a whole browser.
+  window.__mimirRunsWindows = runsWindows;
+
+  var ua = navigator.userAgent || '';
+  var uaDataPlatform = (navigator.userAgentData && navigator.userAgentData.platform) || '';
+
+  if (runsWindows(ua, uaDataPlatform)) return;
+
+  var links = document.querySelectorAll('a[href$="MimirSetup.exe"]');
+  if (!links.length) return;
+
+  function copyLink(button) {
+    var url = 'https://www.mimirvision.com/';
+    var done = function () {
+      var previous = button.getAttribute('data-label');
+      button.firstChild.nodeValue = 'Link copied';
+      setTimeout(function () { button.firstChild.nodeValue = previous; }, 2200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () {});
+    }
+  }
+
+  Array.prototype.forEach.call(links, function (link) {
+    var isNav = link.classList.contains('button--small');
+
+    // The nav button becomes a plain marker. Shrinking it to a sentence would
+    // break the header layout, and it is not where anyone reads an explanation.
+    if (isNav) {
+      link.textContent = 'Windows only';
+      link.removeAttribute('href');
+      link.setAttribute('aria-disabled', 'true');
+      link.classList.add('is-disabled');
+      return;
+    }
+
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = link.className;
+    button.setAttribute('data-label', 'Copy link for later');
+    button.appendChild(document.createTextNode('Copy link for later'));
+
+    var meta = document.createElement('span');
+    meta.className = 'button__meta';
+    meta.textContent = 'Mimir runs on Windows 10 / 11';
+    button.appendChild(meta);
+
+    button.addEventListener('click', function () { copyLink(button); });
+    link.parentNode.replaceChild(button, link);
+  });
+
+  // Said once, near the top, rather than repeated beside every control.
+  var hero = document.querySelector('.actions');
+  if (hero && !document.querySelector('.platform-note')) {
+    var note = document.createElement('p');
+    note.className = 'platform-note';
+    note.textContent = 'Mimir is a Windows app. Open this page on your PC to download it.';
+    hero.parentNode.insertBefore(note, hero.nextSibling);
+  }
+})();
