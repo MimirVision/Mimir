@@ -10,6 +10,34 @@
     />
     <meta name="theme-color" content="#050606" />
     <link rel="icon" href="./mimir-mark.png" />
+    <link rel="canonical" href="https://www.mimirvision.com/" />
+
+    <!-- Sharing this link is the whole distribution plan: it goes into DMs,
+         forums and messages one person at a time. Without these it arrives as
+         a bare URL with no picture and no sentence, which reads as a link
+         someone should not click. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Mimir" />
+    <meta property="og:url" content="https://www.mimirvision.com/" />
+    <meta property="og:title" content="Mimir — Find the moments worth watching" />
+    <meta
+      property="og:description"
+      content="Sentry Mode records everything and tells you nothing. Mimir scans a week of it on your own PC and shows you only what is left. Free beta for Windows."
+    />
+    <meta property="og:image" content="https://www.mimirvision.com/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Mimir: a row of night camera frames with one flagged as important."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Mimir — Find the moments worth watching" />
+    <meta
+      name="twitter:description"
+      content="Scans your Tesla Sentry footage locally and sorts hundreds of clips down to the few that matter."
+    />
+    <meta name="twitter:image" content="https://www.mimirvision.com/og-card.png" />
     <!-- Blocking and before the stylesheet, on purpose. It marks the document
          as scriptable before first paint, which is what lets the CSS hide
          reveal targets without a flash, and lets the page stay fully visible
@@ -70,7 +98,7 @@
             <div class="actions actions--center" data-reveal style="--delay: 220ms">
               <a class="button button--primary" href="https://github.com/MimirVision/Mimir/releases/latest/download/MimirSetup.exe">
                 Download for Windows
-                <span class="button__meta">197 MB · Windows 10 / 11</span>
+                <span class="button__meta">206 MB · Windows 10 / 11</span>
               </a>
               <a class="button button--ghost" href="#how">See how it works</a>
             </div>
@@ -163,10 +191,12 @@
           <ol class="steps">
             <li class="step" data-reveal>
               <span class="step__n">01</span>
-              <h3>Copy the footage across</h3>
+              <h3>Plug in the USB stick</h3>
               <p>
-                Drag <code>TeslaCam</code> off the USB stick onto your drive. Scanning straight from
-                the stick is slow, and hard on the drive.
+                Mimir copies each incident to your library and checks the copy byte for byte before
+                it reads anything. Footage already on your drive is scanned where it sits. If you ask
+                it to, it clears the stick as it goes — but only for clips whose copy
+                matched and scanned.
               </p>
             </li>
             <li class="step" data-reveal style="--delay: 80ms">
@@ -211,10 +241,11 @@
 
           <div class="cards">
             <div class="card" data-reveal>
-              <h3>Two things can leave</h3>
+              <h3>Three things can leave</h3>
               <p>
-                Written feedback about a verdict, and — separately — a clip you explicitly choose to
-                contribute. Both only when you press a button.
+                A correction when you disagree with a verdict, a crash report if Mimir falls over,
+                and — separately — a clip you choose to contribute. A correction is text about
+                one event, never the footage.
               </p>
             </div>
             <div class="card" data-reveal style="--delay: 90ms">
@@ -225,10 +256,12 @@
               </p>
             </div>
             <div class="card" data-reveal style="--delay: 180ms">
-              <h3>Nothing is automatic</h3>
+              <h3>Asked once, then honest about it</h3>
               <p>
-                No background sync, no opt-out buried in settings. If you never press the button,
-                nothing is ever sent.
+                The first time you correct a verdict, Mimir asks whether corrections may be sent. Say
+                yes and later ones go on their own, so it is not a decision you make over and over.
+                The switch to stop them is in Settings, and it shows how many have gone. Crash
+                reports and clips are never sent unless you press send.
               </p>
             </div>
           </div>
@@ -245,7 +278,7 @@
           <div class="actions actions--center" data-reveal style="--delay: 160ms">
             <a class="button button--primary" href="https://github.com/MimirVision/Mimir/releases/latest/download/MimirSetup.exe">
               Download for Windows
-              <span class="button__meta">197 MB · Windows 10 / 11</span>
+              <span class="button__meta">206 MB · Windows 10 / 11</span>
             </a>
             <a class="button button--ghost" href="https://github.com/MimirVision/Mimir">Read the docs</a>
           </div>
@@ -299,13 +332,14 @@
                 </div>
                 <div>
                   <dt>Disk</dt>
-                  <dd>About 325 MB installed, plus room for the footage you copy over.</dd>
+                  <dd>About 400 MB installed, plus room for the footage Mimir copies across.</dd>
                 </div>
                 <div>
                   <dt>Internet</dt>
                   <dd>
-                    Only to fetch Microsoft’s WebView2 at install time if your PC lacks it, and if you
-                    choose to send feedback. Scanning and review are fully offline.
+                    To fetch Microsoft’s WebView2 at install time if your PC lacks it, to check
+                    whether a newer Mimir exists when it starts, and if you send a correction or a
+                    clip. Scanning and review themselves are fully offline.
                   </dd>
                 </div>
               </dl>

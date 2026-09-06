@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mimir Falling Clips</title>
+<style>
+  /* ---------------------------------------------------------------------
+     Dials.
+
+       --clip-w   thumbnail width. The column sizes itself from this
+       --fall     seconds for the row to travel its own length
+       --gap      space between thumbnails
+       --dim      how dark an ignored clip sits
+     --------------------------------------------------------------------- */
+  :root {
+    --clip-w: 260px;
+    --fall: 42s;
+    --gap: 16px;
+    --dim: .34;
+
+    /* Mimir's own severity colours from tokens.css. These are the product's
+       vocabulary, not decoration, so the page uses the same three the app does. */
+    --important: #c47772;
+    --review:    #c3a062;
+    --ignore:    #858b8b;
+    --paper:     #f4f1e9;
+  }
+
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+
+  .stage {
+    position: relative;
+    height: 100%;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    /* Clips arrive out of black and leave into it rather than popping at an
+       edge. Masked, so it works whatever sits behind. */
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 15%, #000 85%, transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0%, #000 15%, #000 85%, transparent 100%);
+  }
+
+  .col { position: relative; width: var(--clip-w); overflow: hidden; }
+
+  /* The row is rendered twice and travels exactly half its own height, so the
+     loop rejoins itself with no seam. */
+  .inner {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; flex-direction: column; gap: var(--gap);
+    animation: fall var(--fall) linear infinite;
+    will-change: transform;
+  }
+  @keyframes fall { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+
+  .clip {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border-radius: 5px;
+    border: 1px solid rgba(244, 241, 233, .07);
+    opacity: var(--dim);
+    filter: saturate(.25);
+    flex: none;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .clip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* Ignored clips stay nearly invisible. That ratio is the actual claim:
+     almost all of it is nothing. */
+
+  .clip.review {
+    opacity: .74;
+    filter: saturate(.6);
+    border-color: rgba(195, 160, 98, .55);
+  }
+
+  .clip.important {
+    opacity: 1;
+    filter: saturate(1);
+    border-color: var(--important);
+    box-shadow: 0 0 0 1px rgba(196,119,114,.45), 0 0 36px rgba(196,119,114,.24);
+  }
+
+  /* The label rides with the clip, so a visitor learns the three words the app
+     uses just by watching. */
+  .clip::after {
+    position: absolute; left: 7px; bottom: 7px;
+    font: 500 9px/1.8 ui-monospace, SFMono-Regular, Consolas, monospace;
+    letter-spacing: .14em;
+    padding: 0 6px; border-radius: 2px;
+  }
+  .clip.important::after { content: "IMPORTANT"; background: rgba(196,119,114,.94); color: var(--paper); }
+  .clip.review::after    { content: "REVIEW";    background: rgba(195,160,98,.88);  color: #14110b; }
+  .clip.ignore::after    { content: "IGNORE";    background: rgba(133,139,139,.28); color: rgba(244,241,233,.5); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .inner { animation: none; transform: translateY(-25%); }
+  }
+</style>
+</head>
+<body>
+  <div class="stage"><div class="col"><div class="inner" id="inner"></div></div></div>
+
+<script>
+(function () {
+
+  /* =====================================================================
+     PUT YOUR THUMBNAIL URLS HERE.
+
+     Upload the images to Wix (Media Manager gives you a URL for each), then
+     paste them in. Eight to twelve is plenty -- the row repeats.
+
+     Leave the list empty and it falls back to the drawn placeholders below,
+     so the animation still works before your images exist.
+     ===================================================================== */
+  var IMAGES = [
+    // 'https://static.wixstatic.com/media/your-image-1.jpg',
+    // 'https://static.wixstatic.com/media/your-image-2.jpg',
+  ];
+
+  /* Placeholders. Deliberately crude -- they exist so the layout is testable,
+     not to look like footage. Real images replace them entirely. */
+  var scenes = [
+    'radial-gradient(ellipse 30% 34% at 62% 54%, #7b8684, transparent 68%), linear-gradient(165deg,#1e2223,#080a0a)',
+    'radial-gradient(ellipse 18% 40% at 80% 44%, #89938f, transparent 62%), linear-gradient(150deg,#191d1e,#070808)',
+    'radial-gradient(ellipse 34% 26% at 44% 62%, #776d5c, transparent 68%), linear-gradient(190deg,#1a1d1e,#090a0b)',
+    'radial-gradient(ellipse 22% 34% at 28% 50%, #828b89, transparent 64%), linear-gradient(160deg,#202524,#0a0b0b)',
+    'radial-gradient(ellipse 44% 34% at 55% 40%, #646f6b, transparent 70%), linear-gradient(175deg,#161a1b,#070808)',
+    'radial-gradient(ellipse 20% 28% at 22% 58%, #797771, transparent 66%), linear-gradient(155deg,#1e2223,#080909)',
+    'radial-gradient(ellipse 26% 30% at 70% 66%, #6a7673, transparent 66%), linear-gradient(145deg,#1b1f20,#070909)',
+    'radial-gradient(ellipse 38% 22% at 50% 30%, #77817f, transparent 70%), linear-gradient(200deg,#171b1c,#080a0a)',
+    'radial-gradient(ellipse 16% 36% at 86% 56%, #858f8b, transparent 60%), linear-gradient(168deg,#1d2122,#060808)',
+    'radial-gradient(ellipse 30% 30% at 34% 70%, #6e675b, transparent 68%), linear-gradient(158deg,#1c2021,#080a0a)',
+    'radial-gradient(ellipse 24% 32% at 58% 48%, #7e8785, transparent 64%), linear-gradient(172deg,#191e1f,#070909)',
+    'radial-gradient(ellipse 40% 28% at 46% 58%, #67726e, transparent 70%), linear-gradient(184deg,#1a1e1f,#080909)'
+  ];
+
+  var source = IMAGES.length ? IMAGES : scenes;
+  var usingImages = IMAGES.length > 0;
+  var TOTAL = Math.max(12, source.length);
+
+  /* Roughly one in nine important, one in four review. Tuned to look like a
+     real week rather than a highlight reel: if every third clip were red, the
+     animation would be arguing against the product it is selling. */
+  function pick(i) {
+    if (i % 9 === 4) return 'important';
+    if (i % 4 === 1) return 'review';
+    return 'ignore';
+  }
+
+  var html = '';
+  // Rendered twice so the CSS can travel half the height and rejoin cleanly.
+  for (var pass = 0; pass < 2; pass++) {
+    for (var i = 0; i < TOTAL; i++) {
+      var src = source[i % source.length];
+      var style = usingImages
+        ? 'background-image:url(' + src + ')'
+        : 'background:' + src;
+      html += '<div class="clip ' + pick(i) + '" style="' + style + '"></div>';
+    }
+  }
+  document.getElementById('inner').innerHTML = html;
+})();
+</script>
+</body>
+</html>
