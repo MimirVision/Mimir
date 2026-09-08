@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Update } from '@tauri-apps/plugin-updater'
-import { findUpdate, formatBytes, installUpdate } from '../lib/appUpdate'
+import { describeUpdateFailure, findUpdate, formatBytes, installUpdate } from '../lib/appUpdate'
 
 /**
  * Offers a newer Mimir, quietly.
@@ -47,7 +47,7 @@ export function UpdateNotice({ busy }: { busy: boolean }) {
       () => setState('installing'),
     ).catch((error: unknown) => {
       setState('failed')
-      setReason(error instanceof Error ? error.message : String(error))
+      setReason(describeUpdateFailure(error))
     })
   }
 

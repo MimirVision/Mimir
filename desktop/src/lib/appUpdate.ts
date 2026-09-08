@@ -39,6 +39,44 @@ export async function findUpdate(): Promise<Update | null> {
  * `onProgress` receives bytes so the caller can show something truthful about a
  * download this size rather than an indeterminate spinner.
  */
+/**
+ * Turn whatever downloadAndInstall rejected with into something readable.
+ *
+ * The first failure in the wild produced an empty line under "That update
+ * could not be installed", because the rejection was neither an Error nor a
+ * string and `String(value)` gave "[object Object]" or "". Diagnosing it meant
+ * reading the registry by hand. A failed update has to say what failed, or the
+ * next report is another screenshot of a blank space.
+ */
+export function describeUpdateFailure(value: unknown): string {
+  if (value instanceof Error && value.message.trim()) {
+    return value.message.trim()
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
+  }
+  if (value && typeof value === 'object') {
+    // Tauri rejects with the serialized Rust error, whose shape varies by
+    // plugin version; take whichever field carries text rather than assuming.
+    const record = value as Record<string, unknown>
+    for (const key of ['message', 'error', 'reason', 'description']) {
+      const field = record[key]
+      if (typeof field === 'string' && field.trim()) {
+        return field.trim()
+      }
+    }
+    try {
+      const json = JSON.stringify(value)
+      if (json && json !== '{}') {
+        return json
+      }
+    } catch {
+      // Circular or otherwise unserializable; fall through.
+    }
+  }
+  return 'The installer exited without reporting a reason. This is usually a previous install the updater could not replace -- installing over it by hand fixes it.'
+}
+
 export async function installUpdate(
   update: Update,
   onProgress: (downloadedBytes: number, totalBytes: number) => void,
