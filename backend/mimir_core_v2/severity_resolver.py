@@ -268,12 +268,33 @@ def _extract_ai_evidence(ai_evidence: dict | None) -> dict:
 
 
 def _ai_recommendation(ai_evidence: dict | None) -> str:
+    """What the AI reviewer recommended, or "" when it recommended nothing.
+
+    This used to run the value through _severity(), which maps anything
+    unrecognised to IGNORE. That is the right default for deciding a severity --
+    an unreadable answer must not raise one -- and the wrong one for reporting,
+    because it makes "the reviewer said ignore" and "the reviewer never
+    answered" identical in the debug record.
+
+    Across 33 tester feedback packages this field read IGNORE every single
+    time, including where ai_enabled was false and where the AI had reviewed 20
+    groups, while ai_confidence sat at 0 and ai_scene_type was empty. Anyone
+    reading it -- including whoever is trying to work out why a verdict came
+    out the way it did -- would conclude the reviewer had recommended IGNORE
+    and been overruled. It had returned nothing at all.
+
+    Reported only. Nothing decides anything from this value; the AI severity
+    floors below read raw booleans gated by _ai_confidence_sufficient().
+    """
+
     evidence = _extract_ai_evidence(ai_evidence)
-    return _severity(
+    raw = (
         evidence.get("recommended_severity")
         or evidence.get("recommendation")
         or evidence.get("severity")
     )
+    text = str(raw or "").strip().upper()
+    return text if text in SEVERITY_RANK else ""
 
 
 def choose_primary_camera(local_evidence: dict) -> str:
