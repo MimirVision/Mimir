@@ -107,6 +107,26 @@ export function eventDisplayTitle(incident: MimirIncident) {
   return formatEventType(incident.event_type)
 }
 
+/**
+ * Which other cameras saw the same moment.
+ *
+ * Mimir works this out on every multi-camera scan and, until now, threw the
+ * answer away before it reached the incident record -- so the strongest thing
+ * it can say about an event was invisible to the person judging it.
+ *
+ * Cameras are named, not counted. "Corroborated by left_repeater" tells you
+ * where to look; "2 cameras agree" does not. An empty result says nothing
+ * rather than claiming disagreement: a single-camera event has no second
+ * opinion to offer, and that is not the same as being contradicted.
+ */
+export function cameraAgreement(incident: MimirIncident): string {
+  const supporters = (incident.multi_camera_impact_support_cameras ?? []).filter(Boolean)
+  if (!supporters.length) {
+    return ''
+  }
+  return `Also seen by: ${supporters.join(', ')}`
+}
+
 export function contactLevelCopy(incident: MimirIncident) {
   const level = contactEvidenceLevel(incident)
 

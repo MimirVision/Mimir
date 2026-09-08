@@ -2008,14 +2008,23 @@ def extract_evidence(event_group: dict, sample_result: dict, object_detection_en
     multi_camera_impact_corroborated = any(
         item.get("multi_camera_impact_corroborated") for item in camera_evidence.values()
     )
-    multi_camera_impact_support_cameras = sorted(
-        {
-            camera
-            for item in camera_evidence.values()
-            for camera in item.get("multi_camera_impact_support_cameras", [])
-            if camera
-        }
-    )
+    # Which other cameras were part of an agreement about this moment.
+    #
+    # _apply_group_contact_context records the relationship per camera: "A's
+    # candidate was supported by B". Unioning only the support lists lost half
+    # of that -- it kept B and dropped A -- and could name the primary camera
+    # as its own corroborator, which a four-camera scan duly did. Both sides of
+    # every agreeing pair are collected here, then the primary is removed,
+    # because what a reader needs is "which cameras besides this one saw it".
+    corroborating_cameras: set[str] = set()
+    for camera, item in camera_evidence.items():
+        supporters = [name for name in item.get("multi_camera_impact_support_cameras", []) if name]
+        if not supporters:
+            continue
+        corroborating_cameras.add(camera)
+        corroborating_cameras.update(supporters)
+    corroborating_cameras.discard(best_camera)
+    multi_camera_impact_support_cameras = sorted(corroborating_cameras)
     door_articulation_candidate = any(
         item.get("door_articulation_candidate") for item in camera_evidence.values()
     )

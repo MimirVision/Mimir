@@ -73,6 +73,7 @@ import {
   aiSceneType,
   calmerPersonNearWording,
   classificationDebug,
+  cameraAgreement,
   contactLevelCopy,
   evidenceMetricValue,
   eventDisplayTitle,
@@ -1353,6 +1354,11 @@ function DetailsPanel({
     `Motion: ${evidenceMetricValue(local, 'max_motion_score')}`,
     `Person detected: ${evidenceMetricValue(local, 'person_detected')}`,
     `Vehicle detected: ${evidenceMetricValue(local, 'vehicle_detected')}`,
+    // Four angles of one instant agreeing is the strongest thing Mimir can
+    // say, and it was computed on every scan then dropped before anyone
+    // could see it. Cameras are named rather than counted, because which
+    // one is what tells you where to look.
+    cameraAgreement(incident),
   ].filter(item => !item.endsWith('Not provided') && !item.endsWith(''))
   const filePaths = {
     video_path: incident.video_path || null,

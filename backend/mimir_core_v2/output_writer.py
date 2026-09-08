@@ -34,6 +34,17 @@ TOP_LEVEL_EVIDENCE_FIELDS = [
     # it a session where the detector failed on every frame is indistinguishable
     # from one where nothing happened.
     "frame_filling_detections",
+    # Whether other cameras saw the same moment. _apply_group_contact_context()
+    # in evidence_extractor already works this out and the extractor emits it,
+    # but it stopped here: none of the 590 incidents in a four-camera scan
+    # carried any of it, so the strongest signal Mimir has -- four angles of the
+    # same instant agreeing -- was invisible to the person reviewing, to the
+    # evidence packet, and to any later attempt to measure whether corroboration
+    # predicts a real event.
+    "multi_camera_impact_corroborated",
+    "multi_camera_impact_support_cameras",
+    "single_camera_close_activity",
+    "distributed_uncorroborated_activity",
     "strong_impact_like_motion",
     "possible_impact",
     "impact_level",

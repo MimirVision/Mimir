@@ -87,6 +87,9 @@ export interface MimirIncident {
   possible_impact?: boolean
   contact_level?: string
   contact_score?: number
+  /** Whether another camera saw the same moment, and which. */
+  multi_camera_impact_corroborated?: boolean
+  multi_camera_impact_support_cameras?: string[]
   contact_reasons?: string[]
   possible_contact?: boolean
   person_near_only?: boolean
