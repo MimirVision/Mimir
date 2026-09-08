@@ -80,7 +80,7 @@ function IncidentImage({ incident, large = false }: { incident: MimirIncident; l
 
   return (
     <div
-      className={`relative overflow-hidden rounded-md bg-black/[0.32] ${
+      className={`relative overflow-hidden rounded-md bg-black/[0.32] ring-1 ring-inset ring-white/[0.06] ${
         large ? 'min-h-[320px]' : 'h-[154px]'
       }`}
     >
@@ -89,6 +89,15 @@ function IncidentImage({ incident, large = false }: { incident: MimirIncident; l
           src={convertFileSrc(imagePath, 'asset')}
           alt=""
           onError={() => setFailedIndex(index => index + 1)}
+          onLoad={event => {
+            // A decode failure fires load, not error, and leaves an image with
+            // no dimensions. Without this the card kept a broken source and
+            // rendered as an empty black rectangle instead of falling through
+            // to the next candidate or to the placeholder.
+            if (event.currentTarget.naturalWidth === 0) {
+              setFailedIndex(index => index + 1)
+            }
+          }}
           className="h-full w-full object-cover"
         />
       ) : (
@@ -1462,9 +1471,6 @@ export function IncidentLibraryView({
             </div>
           </div>
 
-          <div className="mt-4 rounded-xl border border-amber-200/[0.14] bg-amber-300/[0.08] px-3.5 py-2.5 text-[12px] leading-5 text-amber-50/[0.82]">
-            Detection accuracy hasn't been measured against a real evaluation set yet. Review every flagged incident yourself, especially anything marked Ignore.
-          </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.045] pt-4">
             <div className="flex flex-wrap gap-2 rounded-full bg-black/[0.16] p-1">
