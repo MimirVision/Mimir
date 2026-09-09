@@ -140,7 +140,16 @@ def check_session() -> dict[str, Any]:
 
             return {"ok": False, "error": _LAST_ERROR or "session did not load"}
 
-        return {"ok": True, "providers_in_use": list(session.get_providers())}
+        in_use = list(session.get_providers())
+        # The first entry is the one ONNX Runtime actually initialised. The
+        # rest are the fallback chain it did not need.
+        active = in_use[0] if in_use else ""
+        return {
+            "ok": True,
+            "providers_in_use": in_use,
+            "active_provider": active,
+            "gpu": active in {"CUDAExecutionProvider", "DmlExecutionProvider", "ROCMExecutionProvider"},
+        }
     except Exception as error:
         return {"ok": False, "error": f"{type(error).__name__}: {error}"}
 
@@ -222,11 +231,28 @@ def main() -> int:
     report["ok"] = all(checks.get(name, {}).get("ok") for name in essential)
     report["model_required"] = not args.allow_missing_model
 
-    on_gpu = bool(checks.get("onnxruntime", {}).get("gpu"))
+    # Read from the loaded session, not from what was requested. Those differ
+    # exactly when it matters: a CUDA build inside a container started without
+    # --gpus reports CUDAExecutionProvider as available, asks for it, fails to
+    # initialise it and falls back to CPU without a word. Gating on the request
+    # would have passed that container -- which is the state --require-gpu
+    # exists to stop.
+    requested = str(checks.get("onnxruntime", {}).get("chosen_provider") or "")
+    session = checks.get("session", {})
+    on_gpu = bool(session.get("gpu"))
     report["gpu_active"] = on_gpu
+    report["requested_provider"] = requested
+    report["active_provider"] = session.get("active_provider", "")
+
+    if session.get("ok") and requested and requested != report["active_provider"]:
+        report["provider_fell_back"] = True
+
     if args.require_gpu and not on_gpu:
         report["ok"] = False
-        report["error"] = "GPU required but the detector resolved to CPU"
+        report["error"] = (
+            f"GPU required but the detector is running on {report['active_provider'] or 'CPU'}"
+            + (f" after asking for {requested}" if requested and requested != report["active_provider"] else "")
+        )
 
     if args.json:
         print(json.dumps(report, indent=2))
@@ -243,10 +269,14 @@ def main() -> int:
             print(f"         {key}: {value}")
 
     print()
-    if on_gpu:
-        print(f"Detector will use {checks['onnxruntime']['chosen_provider']}.")
+    active = report["active_provider"] or "nothing (session did not load)"
+    if report.get("provider_fell_back"):
+        print(f"Asked for {requested}, GOT {active}. The provider is installed but did not initialise --")
+        print("on a GPU box that usually means no device was attached, or a driver too old for this build.")
+    elif on_gpu:
+        print(f"Detector is using {active}.")
     else:
-        print("Detector will run on CPU. Correct for a CPU box; expensive for a GPU one.")
+        print(f"Detector is using {active}. Correct for a CPU box; expensive for a GPU one.")
     print("OVERALL: " + ("PASS" if report["ok"] else "FAIL"))
     return 0 if report["ok"] else 1
 
