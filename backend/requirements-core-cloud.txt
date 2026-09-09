@@ -1,0 +1,17 @@
+# Mimir Core on Linux + NVIDIA CUDA, for containers and cloud GPU workers.
+#
+# Two differences from the Windows runtime, both deliberate:
+#
+#   onnxruntime-gpu        CUDAExecutionProvider instead of DirectML.
+#                          onnx_object_detector.py picks it automatically now;
+#                          MIMIR_ONNX_PROVIDER still overrides.
+#
+#   opencv-python-headless opencv-python links against GUI libraries (libGL,
+#                          libgthread) that a slim container does not have, and
+#                          the failure is an ImportError at the first decode
+#                          rather than at install time. The headless wheel is
+#                          the same OpenCV without the windowing layer, which
+#                          nothing on the scan path uses.
+-r requirements-core-common.txt
+opencv-python-headless==4.13.0.92
+onnxruntime-gpu==1.23.0

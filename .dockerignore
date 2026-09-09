@@ -1,0 +1,50 @@
+# Keep the build context small and keep footage out of images.
+#
+# Without this, `docker build .` from the repository root uploads the whole
+# tree to the daemon -- including target/, node_modules/, the PyInstaller
+# output and every scan session under MimirOutputV2/. That is gigabytes of
+# context for an image that needs a Python package and one 115 MB model.
+
+# Never, under any circumstances, into an image
+**/*.mp4
+**/*.mov
+**/*.avi
+backend/MimirOutput/
+backend/MimirOutputV2/
+backend/Frames/
+Test/
+Ignore/
+**/feedback_inbox/
+**/*.age
+**/*.key
+C:/Mimir_Data/
+
+# Build output
+**/target/
+**/node_modules/
+**/dist/
+**/dist-backend/
+**/dist_backend/
+**/build/
+**/build-backend/
+**/build_backend/
+**/beta-smoke-test/
+**/.venv*/
+**/__pycache__/
+**/*.pyc
+desktop/src-tauri/resources/mimir-backend/
+
+# Training artefacts the container cannot use. The image copies exactly one
+# file out of backend/models/, so the rest is context uploaded for nothing.
+backend/models/*.pth
+backend/training_runs/
+backend/training_data/
+**/*.pt
+
+# Not needed to run Core
+.git/
+.github/
+desktop/
+forge/
+docs/
+**/*.md

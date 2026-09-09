@@ -1,0 +1,9 @@
+# Everything Mimir Core needs that is the same on every platform.
+#
+# The ONNX Runtime package is deliberately NOT here. onnxruntime-directml and
+# onnxruntime-gpu both provide the `onnxruntime` import and cannot be installed
+# together -- whichever landed last wins, silently, and you find out when the
+# detector is mysteriously running on CPU. Pick exactly one from the platform
+# file that includes this one.
+numpy==2.5.0
+pillow==12.3.0
