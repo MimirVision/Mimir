@@ -2328,6 +2328,27 @@ export function IncidentViewerScreen({
     // Agreement stays local -- it is still saved to the session, but sending a
     // confirmation for every clip someone skims past is mostly traffic.
     if (!shouldSendCorrection(incident, status)) {
+      // Agreement does not travel, and must not: consent was given for
+      // "when you change a verdict", so quietly sending confirmations would
+      // widen what leaves the machine beyond what anyone agreed to.
+      //
+      // But confirming an IMPORTANT verdict is the scarcest signal there is.
+      // Disagreements are overwhelmingly "should be Ignore", so a set built
+      // only from them fills up with negatives -- 67 hard negatives against 2
+      // positives, when the evaluation set needs 300 of each. Real contact is
+      // what is missing, and this is the one moment a person has just told us
+      // they are looking at some.
+      //
+      // So: no send, an invitation. Contributing is a separate, explicit
+      // action with its own rights confirmation, which is the honest way to
+      // ask for the clip rather than taking it.
+      if (status === 'IMPORTANT') {
+        setActionMessage(
+          'Confirmed. Real contact is the rarest thing Mimir has to learn from -- ' +
+            'if you own this footage, contributing this clip is worth more than any other.',
+        )
+        revealContributePanel()
+      }
       return
     }
 
