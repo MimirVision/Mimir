@@ -121,6 +121,20 @@ jobs:
             if (-not (Test-Path $path)) { New-Item -ItemType File -Path $path | Out-Null }
           }
 
+      # cargo test compiles tauri's generate_context! macro, which validates
+      # frontendDist ("../dist") at COMPILE time and panics when it is absent:
+      #
+      #   The `frontendDist` configuration is set to `"../dist"` but this path
+      #   doesn't exist
+      #
+      # desktop/dist is gitignored, so a fresh checkout has none. desktop-verify
+      # happens to build the frontend before its Rust tests and therefore passed;
+      # this workflow never did, which is why the sidecar stand-ins alone did not
+      # fix it. The installer build later runs vite again via beforeBuildCommand,
+      # so this is a few seconds spent, not duplicated work.
+      - name: Build the frontend, which the Rust tests compile against
+        run: npm run build
+
       - name: Rust tests
         working-directory: desktop/src-tauri
         run: cargo test
