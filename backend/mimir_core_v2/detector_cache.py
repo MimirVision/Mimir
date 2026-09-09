@@ -12,6 +12,33 @@ from typing import Any
 
 CACHE_SCHEMA_VERSION = "mimir_detector_cache_v1"
 
+# Ceiling for the on-disk cache, in megabytes. MIMIR_DETECTOR_CACHE_MAX_MB
+# overrides it; 0 or less means no limit.
+#
+# There was no ceiling at all. On the machine this was found on the database
+# had reached 262 MB across 339,887 detection rows -- larger than the program
+# it belongs to -- with no prune, no UI showing it, and no mention in any
+# user-facing document. Nothing bounded it but how much footage you scanned.
+#
+# 512 MB is chosen to stop the pathological case rather than to be frugal: the
+# cache is what makes a re-scan fast, so evicting eagerly would trade a real
+# feature for disk nobody was short of. A user who is short of disk can set the
+# variable.
+DEFAULT_CACHE_MAX_MB = 512
+
+# Prune down to this fraction of the ceiling, so a scan that sits just above
+# the line does not pay for a prune on every single run.
+PRUNE_TARGET_FRACTION = 0.8
+
+
+def _cache_limit_bytes() -> int:
+    raw = os.environ.get("MIMIR_DETECTOR_CACHE_MAX_MB", "").strip()
+    try:
+        megabytes = int(raw) if raw else DEFAULT_CACHE_MAX_MB
+    except ValueError:
+        megabytes = DEFAULT_CACHE_MAX_MB
+    return megabytes * 1024 * 1024 if megabytes > 0 else 0
+
 
 def default_cache_dir() -> Path:
     configured = os.environ.get("MIMIR_DETECTOR_CACHE_DIR", "").strip()
@@ -48,6 +75,8 @@ class DetectorCache:
         self.metric_misses = 0
         self.metric_writes = 0
         self.errors = 0
+        self.pruned_rows = 0
+        self.pruned_bytes = 0
 
     def _connect(self) -> sqlite3.Connection | None:
         if not self.enabled:
@@ -89,11 +118,70 @@ class DetectorCache:
             )
             connection.commit()
             self._connection = connection
+            self._prune_if_oversized(connection)
         except (OSError, sqlite3.Error):
             self.errors += 1
             self.enabled = False
             return None
         return self._connection
+
+    def _prune_if_oversized(self, connection: sqlite3.Connection) -> None:
+        """Evict oldest detections when the file has outgrown its ceiling.
+
+        Safe to do at any time: every row is keyed by a content hash of the
+        source, frame, model, policy and provider, so an evicted row is a cache
+        miss and a recomputation, never a wrong answer.
+
+        Eviction is by rowid rather than created_at. Rowid is insertion order,
+        needs no index on a table with a third of a million rows, and INSERT OR
+        REPLACE assigns a fresh one -- so a row that keeps being rewritten
+        keeps moving to the back, which is the behaviour wanted anyway.
+
+        VACUUM is what actually returns the space; deleting rows alone just
+        leaves free pages for SQLite to reuse, which bounds growth but never
+        shrinks the file someone is complaining about. It runs only when the
+        ceiling was breached, so the cost lands rarely and before a scan rather
+        than during one.
+        """
+
+        limit = _cache_limit_bytes()
+        if limit <= 0:
+            return
+
+        database = self.root / "detections.sqlite3"
+        try:
+            size = database.stat().st_size
+        except OSError:
+            return
+        if size <= limit:
+            return
+
+        try:
+            total = connection.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
+            if not total:
+                return
+
+            # Proportional to the overshoot, so one prune is enough even for a
+            # cache far over the line.
+            keep_fraction = min(1.0, (limit * PRUNE_TARGET_FRACTION) / size)
+            drop = int(total * (1.0 - keep_fraction))
+            if drop <= 0:
+                return
+
+            connection.execute(
+                "DELETE FROM detections WHERE rowid IN "
+                "(SELECT rowid FROM detections ORDER BY rowid LIMIT ?)",
+                (drop,),
+            )
+            connection.commit()
+            connection.execute("VACUUM")
+            connection.commit()
+            self.pruned_rows = drop
+            self.pruned_bytes = max(0, size - database.stat().st_size)
+        except (OSError, sqlite3.Error):
+            # A cache that cannot be tidied is still a usable cache. Never let
+            # housekeeping take a scan down.
+            self.errors += 1
 
     def source_sha256(self, source_video: str) -> str:
         path = Path(source_video)
@@ -233,6 +321,9 @@ class DetectorCache:
             "analysis_cache_writes": self.metric_writes,
             "detector_cache_errors": self.errors,
             "detector_cache_database_bytes": database.stat().st_size if database.is_file() else 0,
+            "detector_cache_limit_bytes": _cache_limit_bytes(),
+            "detector_cache_pruned_rows": self.pruned_rows,
+            "detector_cache_pruned_bytes": self.pruned_bytes,
         }
 
     def close(self) -> None:

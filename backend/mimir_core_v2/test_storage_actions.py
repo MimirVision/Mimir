@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -291,6 +292,90 @@ class DeletePartialFailure(unittest.TestCase):
             self.assertFalse(report["ok"])
             self.assertTrue(incident["user_deleted"])
             self.assertFalse(incident["video_exists"])
+
+
+
+class DetectorCacheCeiling(unittest.TestCase):
+    """The cache must stop growing, and must stay correct while doing it."""
+
+    def _seed(self, root: Path, rows: int) -> None:
+        import sqlite3
+
+        root.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(root / "detections.sqlite3")
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS detections (cache_key TEXT PRIMARY KEY, "
+            "payload_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS source_hashes (path_key TEXT PRIMARY KEY, "
+            "size_bytes INTEGER NOT NULL, modified_ns INTEGER NOT NULL, source_sha256 TEXT NOT NULL)"
+        )
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS analysis_metrics (cache_key TEXT PRIMARY KEY, "
+            "payload_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        blob = "x" * 4096
+        con.executemany(
+            "INSERT OR REPLACE INTO detections(cache_key,payload_json) VALUES(?,?)",
+            [(f"key{i}", blob) for i in range(rows)],
+        )
+        con.commit()
+        con.close()
+
+    def test_an_oversized_cache_is_pruned_below_the_ceiling(self):
+        from mimir_core_v2.detector_cache import DetectorCache
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "detector"
+            self._seed(root, 8000)
+            before = (root / "detections.sqlite3").stat().st_size
+
+            with patch.dict(os.environ, {"MIMIR_DETECTOR_CACHE_MAX_MB": "1"}):
+                cache = DetectorCache(root)
+                cache._connect()
+                report = cache.diagnostics()
+                cache.close()
+
+            after = (root / "detections.sqlite3").stat().st_size
+            self.assertLess(after, before, "pruning must actually reclaim space, not just delete rows")
+            self.assertLessEqual(after, report["detector_cache_limit_bytes"])
+            self.assertGreater(report["detector_cache_pruned_rows"], 0)
+            self.assertEqual(report["detector_cache_errors"], 0)
+
+    def test_a_cache_under_the_ceiling_is_left_alone(self):
+        from mimir_core_v2.detector_cache import DetectorCache
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "detector"
+            self._seed(root, 50)
+            before = (root / "detections.sqlite3").stat().st_size
+
+            with patch.dict(os.environ, {"MIMIR_DETECTOR_CACHE_MAX_MB": "512"}):
+                cache = DetectorCache(root)
+                cache._connect()
+                report = cache.diagnostics()
+                cache.close()
+
+            self.assertEqual(report["detector_cache_pruned_rows"], 0)
+            self.assertEqual((root / "detections.sqlite3").stat().st_size, before)
+
+    def test_zero_means_unlimited(self):
+        # Someone with a big disk and a big library must be able to keep it all.
+        from mimir_core_v2.detector_cache import DetectorCache
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "detector"
+            self._seed(root, 4000)
+
+            with patch.dict(os.environ, {"MIMIR_DETECTOR_CACHE_MAX_MB": "0"}):
+                cache = DetectorCache(root)
+                cache._connect()
+                report = cache.diagnostics()
+                cache.close()
+
+            self.assertEqual(report["detector_cache_limit_bytes"], 0)
+            self.assertEqual(report["detector_cache_pruned_rows"], 0)
 
 
 if __name__ == "__main__":

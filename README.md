@@ -92,7 +92,7 @@ encrypted before they leave your machine.
 |---|---|
 | Operating system | Windows 10 or 11, 64-bit |
 | Graphics | A DirectX 12 GPU is optional, but roughly 10× faster |
-| Disk | ~245 MB installed, plus a detector cache that grows as you scan (250 MB is normal for a large library), plus room for the footage you copy over |
+| Disk | ~245 MB installed, plus a detector cache capped at 512 MB, plus room for the footage you copy over |
 | Internet | Only to fetch WebView2 during install, if your PC doesn't have it |
 
 No macOS, Linux, 32-bit or ARM build.
