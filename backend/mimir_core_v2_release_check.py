@@ -138,6 +138,9 @@ COMPILE_TARGETS = [
     "mimir_core_v2/test_motion_baseline.py",
     "mimir_core_v2/test_selection_grid.py",
     "mimir_core_v2/test_model_update.py",
+    # Cloud runtime: the container gates its startup on this.
+    "mimir_core_v2/doctor.py",
+    "mimir_core_v2/test_cloud_runtime.py",
 ]
 
 FORBIDDEN_TRACKED_PREFIXES = (

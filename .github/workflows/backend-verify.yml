@@ -33,3 +33,8 @@ jobs:
         run: python mimir_core_v2_verify.py --level quick
       - name: Run Core v2 unit tests
         run: python -m unittest discover -s mimir_core_v2 -t . -p "test_*.py"
+      # The Linux/CUDA container gates its startup on this module, so an import
+      # error here is an image that will not boot. Deliberately without
+      # --require-gpu: the runner has no GPU and CPU is the correct answer there.
+      - name: Core runtime diagnostic
+        run: python -m mimir_core_v2.doctor --json
