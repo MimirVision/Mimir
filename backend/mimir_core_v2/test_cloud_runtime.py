@@ -125,6 +125,30 @@ class Doctor(unittest.TestCase):
     def test_missing_binary_is_an_answer_not_a_crash(self):
         self.assertEqual(doctor._run(["definitely-not-a-real-binary-xyz"]), "")
 
+    def test_a_missing_model_fails_unless_explicitly_allowed(self):
+        """The flag CI needs must not weaken what a container demands.
+
+        The weights are a .onnx, which the repository forbids tracking, so a CI
+        checkout can never have one -- but a container without a model is an
+        image that cannot infer, and must not start. Both halves are asserted
+        here against the real main(), because the first version of this test
+        built its own parser and therefore proved nothing.
+        """
+
+        def absent():
+            return {"ok": False, "error": "model file not found"}
+
+        with patch.dict(doctor.CHECKS, {"model": absent, "session": absent}):
+            with patch("sys.argv", ["doctor", "--json"]):
+                with patch("builtins.print"):
+                    strict = doctor.main()
+            with patch("sys.argv", ["doctor", "--json", "--allow-missing-model"]):
+                with patch("builtins.print"):
+                    lenient = doctor.main()
+
+        self.assertEqual(strict, 1, "a container must refuse to start without weights")
+        self.assertEqual(lenient, 0, "CI must be able to run this without a model")
+
     def test_gpu_flag_follows_the_chosen_provider(self):
         with patch.dict(os.environ, {"MIMIR_ONNX_PROVIDER": "CPUExecutionProvider"}):
             result = doctor.check_onnxruntime()

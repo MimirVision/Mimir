@@ -194,6 +194,14 @@ def main() -> int:
         action="store_true",
         help="Exit non-zero when the detector would run on CPU. For cloud worker startup.",
     )
+    parser.add_argument(
+        "--allow-missing-model",
+        action="store_true",
+        help=(
+            "Report the model and session checks without failing on them. For CI, where the "
+            "weights are deliberately not in the repository. Never for a container."
+        ),
+    )
     args = parser.parse_args()
 
     report = run_all()
@@ -202,8 +210,17 @@ def main() -> int:
     # The GPU check is advisory on its own -- a Windows box has no nvidia-smi and
     # is perfectly healthy. What matters is whether the detector got a GPU
     # provider, which is the onnxruntime check.
-    essential = ("python", "onnxruntime", "model", "session", "video")
+    essential = ["python", "onnxruntime", "model", "session", "video"]
+    if args.allow_missing_model:
+        # The weights are a .onnx, which the repository forbids tracking, so a
+        # CI checkout has no model and never will. Running here is still worth
+        # it -- it catches an import error in this module, which in a container
+        # is an image that will not boot -- but demanding a model that cannot
+        # be present asserts a container's requirements somewhere that is not a
+        # container.
+        essential = [name for name in essential if name not in ("model", "session")]
     report["ok"] = all(checks.get(name, {}).get("ok") for name in essential)
+    report["model_required"] = not args.allow_missing_model
 
     on_gpu = bool(checks.get("onnxruntime", {}).get("gpu"))
     report["gpu_active"] = on_gpu

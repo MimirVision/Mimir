@@ -37,4 +37,4 @@ jobs:
       # error here is an image that will not boot. Deliberately without
       # --require-gpu: the runner has no GPU and CPU is the correct answer there.
       - name: Core runtime diagnostic
-        run: python -m mimir_core_v2.doctor --json
+        run: python -m mimir_core_v2.doctor --json --allow-missing-model
