@@ -180,3 +180,14 @@ export interface LabelScore {
   quieter: number
   agreement: number | null
 }
+
+/** Evaluation-set size against what MODEL_CARD.md requires. */
+export interface LabelProgress {
+  labelled: number
+  groups_target: number
+  positives: number
+  positives_target: number
+  hard_negatives: number
+  hard_negatives_target: number
+  unclear: number
+}

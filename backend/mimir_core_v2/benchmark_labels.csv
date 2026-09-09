@@ -9,3 +9,21 @@ filename_or_group,expected_severity,category,notes,source_set
 "reddit 4.mp4,IMPORTANT, parked POV car is rear-ended.mp4",IMPORTANT,rear_impact,hard rear-end crash should never be review or ignore,current_crash_door_ding_set
 2026-04-17_19-07-22,REVIEW,close_door_no_contact,user-confirmed adjacent door activity without impact must never become important,known_close_door_no_contact_set
 2026-04-17_20-04-31-back.mp4,IGNORE,distant_pedestrian,,local_scan_set
+2026-04-17_17-05-40-right_repeater.mp4,IGNORE,normal_traffic,,local_scan_set
+2026-05-07_13-39-02-left_repeater.mp4,IGNORE,person_near,,local_scan_set
+2026-04-27_16-35-09-front.mp4,IGNORE,normal_traffic,,local_scan_set
+2026-05-08_15-34-57-left_repeater.mp4,REVIEW,person_near,,local_scan_set
+2026-04-17_19-07-22-right_repeater.mp4,IGNORE,person_near,,local_scan_set
+2025-09-18_15-11-52-left_repeater.mp4,IGNORE,normal_traffic,,local_scan_set
+2026-04-22_11-57-24-right_repeater.mp4,IGNORE,person_near,,local_scan_set
+2026-04-17_21-43-21-front.mp4,IGNORE,normal_traffic,,local_scan_set
+2024-11-04_09-48-30-front.mp4,IGNORE,normal_traffic,,local_scan_set
+2026-05-14_14-56-20-right_repeater.mp4,IGNORE,person_near,,local_scan_set
+2026-04-17_19-59-10-right_repeater.mp4,IGNORE,person_near,,local_scan_set
+2026-07-01_07-09-34-right_repeater.mp4,IGNORE,person_near,,local_scan_set
+2026-04-22_11-56-21-left_repeater.mp4,IGNORE,person_near,,local_scan_set
+2026-05-21_18-34-02-front.mp4,IGNORE,normal_traffic,,local_scan_set
+2026-04-17_16-44-29-left_repeater.mp4,IGNORE,person_near,,local_scan_set
+2026-04-17_20-00-13-right_repeater.mp4,IGNORE,normal_traffic,,local_scan_set
+2026-04-17_16-45-32-left_repeater.mp4,IGNORE,normal_traffic,,local_scan_set
+2026-04-17_17-43-42-left_repeater.mp4,IGNORE,normal_traffic,,local_scan_set

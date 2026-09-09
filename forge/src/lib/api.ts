@@ -9,6 +9,7 @@ import type {
   FeedbackReview,
   LabelQueue,
   LabelScore,
+  LabelProgress,
   LabelSaveResult,
   GateProgress,
   ReportSummary,
@@ -37,6 +38,7 @@ export const api = {
   showCollection: (packageId: string) => invoke<CollectionDetail>('show_collection', { packageId }),
   openInCvat: (taskId: number) => invoke<void>('open_in_cvat', { taskId }),
   listLabelCandidates: (limit: number) => invoke<LabelQueue>('list_label_candidates', { limit }),
+  labelProgress: () => invoke<LabelProgress>('label_progress'),
   scoreLabels: () => invoke<LabelScore>('score_labels'),
   saveLabel: (group: string, severity: string, category: string, notes: string, sourceSet: string) =>
     invoke<LabelSaveResult>('save_label', { group, severity, category, notes, sourceSet }),

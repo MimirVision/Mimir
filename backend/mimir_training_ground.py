@@ -534,6 +534,11 @@ def build_parser() -> argparse.ArgumentParser:
     labels_score.add_argument("--labels-csv", default="")
     labels_score.add_argument("--feedback-inbox", default="")
 
+    labels_progress = labels_commands.add_parser(
+        "progress", help="How far the evaluation set is from the size the model card requires."
+    )
+    labels_progress.add_argument("--labels-csv", default="")
+
     return parser
 
 
@@ -601,6 +606,56 @@ def feedback_label_candidates(feedback_inbox: Path, labels_csv: Path) -> list[di
             "has_video": row.get("has_video") == "yes",
         })
     return rows
+
+
+# Which categories mean something touched the car. The gate counts a locked
+# test set by contact_outcome (positives are "contact"/"impact", hard negatives
+# are "no_contact"); benchmark_labels.csv records a category instead, so the two
+# are bridged here rather than in the UI, where the mapping would drift out of
+# sight of the definition it has to match in mimir_core_v2_evaluate.py.
+CONTACT_CATEGORIES = {"rear_impact", "door_ding", "side_contact", "person_touching"}
+NO_CONTACT_CATEGORIES = {"normal_traffic", "distant_pedestrian", "person_near"}
+
+
+def labels_progress_command(args) -> int:
+    """Count the evaluation set against the sizes MODEL_CARD.md requires.
+
+    An estimate of gate readiness, deliberately not the gate itself: the gate
+    reads locked_test_counts out of evaluation_report.json, which is produced
+    once these labels are assembled into a locked, source-isolated split. This
+    counts the raw labels, which is what someone labelling can actually move.
+    """
+
+    labels_csv = _labels_csv_path(args.labels_csv)
+    rows: list[dict] = []
+    if labels_csv.is_file():
+        with labels_csv.open(encoding="utf-8-sig", newline="") as handle:
+            rows = [row for row in csv.DictReader(handle) if (row.get("filename_or_group") or "").strip()]
+
+    positives = 0
+    hard_negatives = 0
+    unclear = 0
+    for row in rows:
+        category = str(row.get("category") or "").strip().lower()
+        if category in CONTACT_CATEGORIES:
+            positives += 1
+        elif category in NO_CONTACT_CATEGORIES:
+            hard_negatives += 1
+        else:
+            unclear += 1
+
+    payload = {
+        "labelled": len(rows),
+        "groups_target": 750,
+        "positives": positives,
+        "positives_target": 300,
+        "hard_negatives": hard_negatives,
+        "hard_negatives_target": 300,
+        "unclear": unclear,
+        "labels_csv": str(labels_csv),
+    }
+    print(json.dumps(payload, indent=2))
+    return 0
 
 
 def labels_score_command(args) -> int:
@@ -787,6 +842,8 @@ def main(argv: list[str] | None = None) -> int:
                 return labels_list_command(args)
             if args.labels_command == "score":
                 return labels_score_command(args)
+            if args.labels_command == "progress":
+                return labels_progress_command(args)
             return labels_save_command(args)
     except (DatasetPackageError, OSError, ValueError) as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

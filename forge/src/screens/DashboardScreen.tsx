@@ -5,6 +5,7 @@ import { explainSyncFailure } from '../lib/syncErrors'
 import { ErrorNotice } from '../components/ErrorNotice'
 import { Spinner } from '../components/Spinner'
 import type {
+  LabelProgress,
   FeedbackListItem,
   FeedbackReview,
   GateProgress,
@@ -279,6 +280,7 @@ export function DashboardScreen({ ready, onReviewFeedback }: DashboardScreenProp
   const [feedbackItems, setFeedbackItems] = useState<FeedbackListItem[]>([])
   const [feedbackReviews, setFeedbackReviews] = useState<Record<string, FeedbackReview>>({})
   const [recentReports, setRecentReports] = useState<ReportSummary[]>([])
+  const [labelProgress, setLabelProgress] = useState<LabelProgress | null>(null)
 
   const loadStatus = async () => {
     if (!ready) return
@@ -290,6 +292,9 @@ export function DashboardScreen({ ready, onReviewFeedback }: DashboardScreenProp
         api.getFeedbackReviews(),
         api.listRecentReports(),
       ])
+      // Separately, and allowed to fail on its own: an unreadable labels CSV
+      // must not blank the whole dashboard.
+      api.labelProgress().then(setLabelProgress).catch(() => setLabelProgress(null))
       setProgress(result)
       setDatasetRoot(settings.dataset_root)
       setFeedbackItems(feedback.items)
@@ -358,7 +363,9 @@ export function DashboardScreen({ ready, onReviewFeedback }: DashboardScreenProp
       {progress && (
         <div className="mt-6 rounded-lg border border-mimir-border bg-mimir-surface-soft/60 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium text-mimir-text">Pilot gate progress</span>
+            <span className="text-[12px] font-medium text-mimir-text">
+              Pilot gate progress <span className="font-normal text-mimir-text-subtle">— contributed clips</span>
+            </span>
             {progress.pilot_gate_met && (
               <span className="rounded-full bg-mimir-accent-soft px-2 py-0.5 text-[10px] font-medium text-mimir-accent">
                 Gate met
@@ -381,6 +388,34 @@ export function DashboardScreen({ ready, onReviewFeedback }: DashboardScreenProp
           {progress.audit_errors.length > 0 && (
             <div className="mt-2 text-[11px] text-mimir-red">{progress.audit_errors.length} audit error(s).</div>
           )}
+        </div>
+      )}
+
+      {/* The bars above count contributed clips. Labelling moves this one, and
+          for a long time nothing on this screen showed it -- so a labelling
+          session looked like it had achieved nothing. */}
+      {labelProgress && (
+        <div className="mt-4 rounded-xl border border-mimir-border bg-mimir-surface p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-medium text-mimir-text">
+              Evaluation set <span className="font-normal text-mimir-text-subtle">— what you label in Forge</span>
+            </span>
+            <span className="text-[11px] text-mimir-text-subtle">{labelProgress.labelled} labelled</span>
+          </div>
+          <div className="mt-3 space-y-3">
+            <ProgressBar label="Groups" done={labelProgress.labelled} target={labelProgress.groups_target} />
+            <ProgressBar label="Positives" done={labelProgress.positives} target={labelProgress.positives_target} />
+            <ProgressBar
+              label="Hard negatives"
+              done={labelProgress.hard_negatives}
+              target={labelProgress.hard_negatives_target}
+            />
+          </div>
+          <div className="mt-3 text-[11px] text-mimir-text-subtle">
+            Counted from benchmark_labels.csv. The release gate reads a locked, source-isolated
+            split built from these, so this tracks the work rather than the gate itself.
+            {labelProgress.unclear > 0 && ` ${labelProgress.unclear} labelled weird_unclear, which counts toward neither.`}
+          </div>
         </div>
       )}
 

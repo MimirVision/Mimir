@@ -798,6 +798,24 @@ pub async fn list_label_candidates(app: tauri::AppHandle, limit: u32) -> Result<
     .map_err(|error| ForgeError::new(format!("Label list task panicked: {error}")))?
 }
 
+/// How far the evaluation set is from the size the model card requires.
+///
+/// Separate from the dashboard's existing bars on purpose. Those count the
+/// training dataset -- contributed clips with clip-by-clip consent, splits and
+/// blind re-labels. These count benchmark_labels.csv, which is the evaluation
+/// set. Labelling moved the second and never the first, so the dashboard sat at
+/// zero while the work was going in, which is exactly the loop that has to be
+/// closed for anyone to keep labelling.
+#[tauri::command]
+pub async fn label_progress(_app: tauri::AppHandle) -> Result<Value, ForgeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = require_success(run_backend(&["labels", "progress"], &[])?)?;
+        parse_json_stdout(&output)
+    })
+    .await
+    .map_err(|error| ForgeError::new(format!("Label progress task panicked: {error}")))?
+}
+
 /// How well Mimir agrees with the labels so far.
 ///
 /// Cheap enough to run after every save -- it re-reads stored verdicts rather
