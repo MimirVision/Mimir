@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { api } from '../lib/api'
 import { describeError, type DescribedError } from '../lib/errorMessages'
@@ -27,6 +27,11 @@ const SEVERITIES = [
   { value: 'IGNORE', key: '3', hint: 'nothing happened' },
 ] as const
 
+// The category was a <select>, which meant a mouse trip on every single label
+// -- and the evaluation set needs 750 of them. These keys follow the order the
+// backend returns, so the key beside a category on screen is always its key.
+const CATEGORY_KEYS = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i'] as const
+
 export function LabelScreen({ sourceSet }: { sourceSet: string }) {
   const [queue, setQueue] = useState<LabelCandidate[]>([])
   const [categories, setCategories] = useState<string[]>([])
@@ -42,6 +47,11 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
   const [score, setScore] = useState<LabelScore | null>(null)
 
   const current = queue[0]
+
+  // The keydown listener is bound once. Without these it would close over the
+  // first render's commit/skip and silently save stale state.
+  const commitRef = useRef<() => void>(() => {})
+  const skipRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     setSeverity(current?.expected_severity || '')
@@ -68,6 +78,14 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
 
   useEffect(load, [load])
   useEffect(refreshScore, [refreshScore])
+
+  const skip = () => {
+    if (!current || busy) return
+    setQueue(rest => rest.slice(1))
+    setSeverity('')
+    setCategory('')
+    setNotes('')
+  }
 
   const commit = () => {
     if (!current || !severity || !category || busy) {
@@ -96,6 +114,9 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
       .finally(() => setBusy(false))
   }
 
+  commitRef.current = commit
+  skipRef.current = skip
+
   // 1/2/3 pick a verdict; the category still has to be chosen, so nothing is
   // ever recorded by a single keystroke.
   useEffect(() => {
@@ -108,11 +129,30 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
       if (match) {
         event.preventDefault()
         setSeverity(match.value)
+        return
+      }
+
+      const categoryIndex = CATEGORY_KEYS.indexOf(event.key as (typeof CATEGORY_KEYS)[number])
+      if (categoryIndex >= 0 && categoryIndex < categories.length) {
+        event.preventDefault()
+        setCategory(categories[categoryIndex])
+        return
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        commitRef.current()
+        return
+      }
+
+      if (event.key === 'Backspace') {
+        event.preventDefault()
+        skipRef.current()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [categories])
 
   if (loading) {
     return (
@@ -248,21 +288,30 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
                 ))}
               </div>
 
-              <label className="mt-3 block text-xs text-slate-400">
-                Category
-                <select
-                  value={category}
-                  onChange={event => setCategory(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200"
-                >
-                  <option value="">Choose one…</option>
-                  {categories.map(name => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
+              <div className="mt-3">
+                <span className="block text-xs text-slate-400">Category</span>
+                <div className="mt-1 grid grid-cols-2 gap-1">
+                  {categories.map((name, index) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setCategory(name)}
+                      className={`flex items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-left text-[11px] transition ${
+                        category === name
+                          ? 'border-sky-500 bg-sky-500/10 text-slate-100'
+                          : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <span className="truncate">{name}</span>
+                      {index < CATEGORY_KEYS.length && (
+                        <kbd className="rounded bg-slate-800 px-1 text-[10px] text-slate-400">
+                          {CATEGORY_KEYS[index]}
+                        </kbd>
+                      )}
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
 
               <label className="mt-3 block text-xs text-slate-400">
                 Notes (optional)
@@ -274,14 +323,27 @@ export function LabelScreen({ sourceSet }: { sourceSet: string }) {
                 />
               </label>
 
-              <button
-                type="button"
-                onClick={commit}
-                disabled={!severity || !category || busy}
-                className="mt-3 w-full rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500"
-              >
-                {busy ? 'Saving…' : 'Save and next'}
-              </button>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={commit}
+                  disabled={!severity || !category || busy}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500"
+                >
+                  {busy ? 'Saving…' : 'Save and next'}
+                  {!busy && <kbd className="rounded bg-black/25 px-1.5 text-[10px]">Enter</kbd>}
+                </button>
+                <button
+                  type="button"
+                  onClick={skip}
+                  disabled={busy}
+                  title="Skip without recording a verdict"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-400 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Skip
+                  <kbd className="rounded bg-slate-800 px-1 text-[10px]">⌫</kbd>
+                </button>
+              </div>
             </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4 text-xs text-slate-500">

@@ -2693,6 +2693,24 @@ fn run_core_v2_storage_action_sync(
         "Storage action failed.".to_string()
     };
 
+    // Re-grant the asset scope from the session as it now stands.
+    //
+    // allow_session_assets runs once when a session loads and allows each clip
+    // at the path it had then, file by file. Moving an incident to Mimir Trash
+    // physically relocates those clips and rewrites the paths, so every camera
+    // in that incident then pointed at a file the webview had never been given
+    // permission to read -- and the viewer showed "Could not load" for all four
+    // angles of a clip that was sitting safely in the trash folder. Nothing was
+    // lost; it just could not be displayed.
+    //
+    // Cheap enough to redo wholesale: it is a scope call per existing file, and
+    // it covers move_to_library and restore_from_trash for the same reason.
+    if let Ok(text) = fs::read_to_string(&target_session) {
+        if let Ok(session) = serde_json::from_str::<Value>(&text) {
+            let _ = allow_session_assets(&app, &session);
+        }
+    }
+
     Ok(StorageActionResult {
         ok,
         action,
