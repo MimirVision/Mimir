@@ -54,6 +54,37 @@ def _configuration() -> tuple[dict, Path | None]:
     return manifest, None
 
 
+def _preferred_provider(available: list[str]) -> str:
+    """Which execution provider to ask for, when nothing was asked for explicitly.
+
+    MIMIR_ONNX_PROVIDER still wins outright, and is how you force a specific
+    provider or pin CPU for a reproducibility run.
+
+    The default used to be the literal string "DmlExecutionProvider". On
+    Windows that is right and stays right. Anywhere else it names a provider
+    that cannot exist -- DirectML is a Windows API -- so the check below it
+    failed, the list fell through to CPU, and a machine with a perfectly good
+    NVIDIA card ran the detector on its processor without ever saying so. That
+    is not a crash and not a log line; it is just quietly slow.
+
+    Chosen from what ONNX Runtime reports as actually available rather than
+    from the platform name, because those can disagree: onnxruntime-directml
+    and onnxruntime-gpu install different providers into the same import, and
+    which one is present is a property of the wheel, not the OS. Ordered by
+    preference; the first one installed wins.
+    """
+
+    override = os.environ.get("MIMIR_ONNX_PROVIDER", "").strip()
+    if override:
+        return override
+
+    for candidate in ("CUDAExecutionProvider", "DmlExecutionProvider", "ROCMExecutionProvider"):
+        if candidate in available:
+            return candidate
+
+    return "CPUExecutionProvider"
+
+
 def _load_session(model_path: Path) -> Any:
     global _SESSION, _LOAD_ATTEMPTED, _LAST_ERROR, _CPU_THREADS
     if _LOAD_ATTEMPTED:
@@ -63,7 +94,7 @@ def _load_session(model_path: Path) -> Any:
         import onnxruntime as ort  # type: ignore
 
         available = ort.get_available_providers()
-        requested = os.environ.get("MIMIR_ONNX_PROVIDER", "DmlExecutionProvider").strip()
+        requested = _preferred_provider(available)
         # Prefer the requested (GPU) provider when it's actually installed, but always
         # keep CPUExecutionProvider as a second entry so ONNX Runtime falls back to it
         # automatically if the GPU provider is present but fails to initialize on this
