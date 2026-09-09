@@ -11,7 +11,9 @@ doesn't involve.
 
 - **Windows 10 (64-bit) or Windows 11.** The installer only builds a 64-bit
   package; there is no 32-bit or ARM build.
-- **A ~197 MB download and about 325 MB installed.** Allow roughly 550 MB
+- **A ~206 MB download and about 245 MB installed.** Mimir also builds a
+  detector cache as it scans, which reaches around 250 MB on a large library and
+  is not currently pruned. Allow roughly 700 MB
   free while installing, since the installer and the installed files coexist
   briefly. Most of the download is the detector model, which is bundled so
   that scanning never needs the network.
